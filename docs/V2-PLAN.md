@@ -1,0 +1,156 @@
+# Rapid Coach V2 plan
+
+Status: plan only, nothing built yet. The V1 rules still hold: all compute in the browser, no AI calls, free to run, GPL-3.0, one request at a time to every game API.
+
+Build order: **3 → 1 → 2**. Lichess first, because it changes the local data keys that sync then has to mirror; the leaderboard last, because it needs accounts.
+
+---
+
+## 0. Groundwork (needed by all three parts)
+
+- **Source-aware profile.** `P` becomes `{source: "cc"|"li", user, tc}`. `uk()` becomes `<source>:<user>.<k>`. Add a one-time migration on boot that renames the existing `rc.<user>.*` keys to `rc.cc:<user>.*` so V1 users keep their puzzle progress and baseline. Game ids are already prefixed `cc-`, so the IndexedDB store needs no migration. Each game record gets a `source` field.
+- **Merge rules written down once**, used by both sync and import:
+  - analysis: per game id; keep the one with the higher `depth`, otherwise keep the existing one.
+  - puzzle progress: per puzzle id; `seen` and `ok` are OR-ed, `fail` takes the max.
+  - baseline: per source + user + time control; the **earlier** date wins, it never moves forward.
+- **`config.js`** (new, committed): Supabase URL and publishable key. Empty values mean "accounts off", and the app behaves exactly like V1.
+
+---
+
+## 1. Optional Supabase login (magic link)
+
+### How it works
+
+- A "Sign in to sync" link in the header. Without signing in nothing changes: IndexedDB and localStorage stay the source of truth.
+- Signing in sends a magic link email. Use the **PKCE flow** (`flowType: "pkce"`), because the app already uses `location.hash` for its tabs and the default implicit flow puts the tokens in the hash. With PKCE the link comes back as `?code=...` and the router is untouched.
+- Put the 6-digit code (`{{ .Token }}`) in the email template next to the link. People can then type the code on their laptop when they opened the email on their phone, and it still works when a mail scanner has already "clicked" the link.
+- Vendor `supabase-js` (UMD build, pinned version) into `vendor/` with its MIT licence, to keep the no-CDN rule.
+- Sync is "local first, then push/pull": after an analysis finishes, or a puzzle is answered, write locally, then upsert in the background. On sign-in and on page load, pull the rows changed since the last pull (`updated_at > last_pull`) and merge with the rules above. If offline, keep a small "to push" list in localStorage and retry.
+- **Games themselves are not uploaded.** They can always be fetched again from chess.com or Lichess, and they contain the opponents' usernames (other people's personal data). Only what is expensive or personal to the user is synced: analyses, puzzle progress, baselines, linked usernames. A new device fetches the games from the source as V1 does and then attaches the synced analyses by game id, so nothing has to be re-analysed.
+
+### What you set up yourself
+
+1. **Supabase project** at supabase.com (free plan). Region: **EU**, e.g. Frankfurt (`eu-central-1`) or Stockholm (`eu-north-1`). The region can't be changed later.
+2. **Auth → Sign In / Providers**: Email on, "Confirm email" on, passwords not needed (magic link / OTP only). Turn off any provider you won't use.
+3. **Auth → URL Configuration**: Site URL `https://leo17coder.github.io/rapid-coach/`; redirect URLs: that URL plus `http://localhost:8000/`.
+4. **Custom SMTP (required).** Supabase's built-in email sender only delivers to members of your Supabase organisation and is heavily rate-limited, so your friends would not receive links. Free options:
+   - **Brevo**: free plan with a daily send limit, and you can verify a single sender address without owning a domain. Zero cost, but mail sent "from" a Gmail address through a third party may land in spam.
+   - **Resend** or similar: generous free tier, but needs a domain you control.
+   - A cheap domain (around €10 a year) is the one thing that clearly improves deliverability. It's optional, and the only item in this plan that isn't free.
+   Enter the SMTP details under **Auth → SMTP Settings**, then raise the email rate limit under **Auth → Rate Limits** to match your provider.
+5. **Email template** (Auth → Email Templates → Magic Link): plain text in English, with the link and `{{ .Token }}`, and the app's name, so it doesn't look like phishing.
+6. **Keys**: copy the project URL and the **publishable/anon key** into `config.js`. That key is meant to be public and is safe only because every table has Row Level Security. **Never** put the `service_role`/secret key in the repo or the browser.
+7. **Optional bot protection**: Auth → Attack Protection → CAPTCHA with Cloudflare Turnstile (free). Worth turning on if sign-up spam appears.
+8. **Run the SQL migration** (I'll write it as `supabase/migrations/001_init.sql`) in the SQL editor. It creates the tables, RLS policies and the delete-account function below.
+9. **Sign Supabase's DPA** (data processing agreement) from the organisation's legal documents page in the dashboard, and keep a copy. Do the same with the email provider.
+
+### What gets stored
+
+| Table | Columns | Notes |
+| --- | --- | --- |
+| `auth.users` (Supabase) | email, sign-in timestamps | Managed by Supabase |
+| `profiles` | `id` (= auth user id), `display_name`, `created_at` | Display name chosen by the user; never show emails to anyone |
+| `linked_accounts` | `user_id`, `source`, `username`, `tc` | Which chess.com/Lichess names this person reviews |
+| `analyses` | `user_id`, `game_id`, `depth`, `ev smallint[]`, `best text[]`, `updated_at` | Primary key `(user_id, game_id)` |
+| `puzzle_progress` | `user_id`, `puzzle_id`, `seen`, `ok`, `fail`, `updated_at` | One row per puzzle tried |
+| `baselines` | `user_id`, `source`, `username`, `tc`, `stats jsonb`, `date` | Insert-once per key |
+
+Every table: `user_id uuid references auth.users on delete cascade`, RLS on, with policies `user_id = auth.uid()` for select/insert/update/delete.
+
+### Staying in the free tier
+
+Supabase free plan limits as I know them (check the current pricing page; they change): a 500 MB database, generous monthly active users (tens of thousands), a few GB of egress a month, and **projects pause after about a week with no activity**.
+
+- Size: an analysis is about 80 plies × (2-byte eval + 4–5 character move) ≈ 1 KB with row overhead. 1,000 analysed games per person ≈ 1–2 MB, so a few hundred heavy users still fit easily. Not storing games is what keeps it this small.
+- Egress: pull only rows changed since the last pull, and never `select *` on the whole history after the first sync.
+- Pausing: if your group goes quiet for a week, the project pauses and sign-in fails until you un-pause it in the dashboard. Optional fix: a free GitHub Actions cron job (public repo) that calls a cheap endpoint every few days. The app must handle "Supabase unreachable" by carrying on locally.
+- No Edge Functions, no Storage, no Realtime: none are needed.
+
+### GDPR (Denmark)
+
+Sharing with friends over the public internet is not clearly covered by the "household" exemption, so treat GDPR as applying. You are the **data controller**; Supabase and the email provider are **processors**. The Danish authority is Datatilsynet.
+
+- **Privacy page** (`privacy.html`, linked from the footer and the sign-in box), in plain language: who you are and how to contact you; what is stored (table above); why (to sync your own data across devices, and the leaderboard if you opt in); legal basis: performance of the service the user asked for (Art. 6(1)(b)), and **consent** for the leaderboard; processors and where data lives (EU region); retention (until you delete your account; accounts unused for e.g. 24 months are deleted); rights (access, export, correction, deletion, complaint to Datatilsynet).
+- **Self-service deletion**: a "Delete my account" button calling a `security definer` SQL function that deletes the caller's `auth.users` row. `on delete cascade` removes everything else. The local copy stays in that browser, and the page says so.
+- **Export**: a "Download my data" button that writes a JSON file of everything the account has. This also doubles as a backup and import path for people without accounts.
+- **Data minimisation**: no games or opponent names on the server, no IP logging of your own, no analytics, no tracking scripts.
+- **Cookies/ePrivacy**: storing the login session and app data in localStorage is strictly necessary for a service the user requested, so **no cookie banner is needed**, provided you add no analytics or third-party embeds.
+- **Age**: add "for people aged 13 and over" (Denmark's age for information-society services).
+- **Breaches**: if the database is exposed, Datatilsynet must be told within 72 hours. Keep RLS on every table; this is the main risk.
+
+---
+
+## 2. Friends leaderboard
+
+### How it works
+
+- **Opt-in**: a "Share my stats with friends" switch, off by default. Turning it off deletes your stats row.
+- **Adding friends by invite link**, not by searching emails or names: each user has a random invite code; `.../rapid-coach/?invite=AB12CD` creates a pending request; the other person accepts. Either side can remove the friendship at any time.
+- **Columns** (per time control, for the source each friend chooses to share):
+  - blunders per game: blunders in the last 20 analysed games ÷ 20 (also show mistakes)
+  - median time used per game (last 30 games, from `timeUsed()`)
+  - puzzles solved (total, plus the last 7 days)
+  - rating change since baseline: current minus baseline rating, **as a difference only**. chess.com and Lichess ratings aren't comparable, and nor are different time controls.
+  - games analysed, so a "0.4 blunders per game" from 3 games is visibly weak. Show "–" below 10.
+- The stats are **computed in the browser** (from the existing `stats()` and puzzle data) and uploaded as one row. They are therefore self-reported and could be faked by someone editing requests. That's fine for friends; don't present it as more than that.
+- Refresh: upload after each finished analysis batch or solved puzzle, at most once a minute.
+
+### What you set up yourself
+
+Nothing beyond part 1: the migration adds the tables and policies.
+
+### What gets stored
+
+| Table | Columns |
+| --- | --- |
+| `invite_codes` | `user_id`, `code` (random, can be regenerated) |
+| `friendships` | `requester`, `addressee`, `status` (`pending`/`accepted`), `created_at` |
+| `leaderboard_stats` | `user_id`, `source`, `tc`, `games_analysed`, `blunders_per_game`, `mistakes_per_game`, `median_time_used`, `puzzles_solved`, `puzzles_solved_7d`, `rating_now`, `rating_base`, `base_date`, `updated_at` |
+
+RLS: you can read a stats row if it's yours or if an `accepted` friendship exists in either direction (via a small `are_friends(a, b)` SQL function). You can only write your own row. Friendship rows are visible to the two people involved. Accepting a request is an RPC that checks you are the addressee. `display_name` from `profiles` is readable by friends only.
+
+### Free tier
+
+One row per user per time control, read with one query when the Progress tab opens. Negligible.
+
+### GDPR
+
+- Separate **consent** for sharing (the opt-in switch), recorded with a timestamp, withdrawable at any time (switch off = row deleted).
+- Friends see only display name and the numbers above, never email or games.
+- Rating and username are public on chess.com/Lichess anyway, but the derived stats aren't: that's why consent is needed.
+- Add a leaderboard section to the privacy page.
+
+---
+
+## 3. Lichess as a second game source
+
+### How it works
+
+- On the start screen, a source switch: **chess.com | Lichess**, then username and time control.
+- Endpoint: `GET https://lichess.org/api/games/user/{username}` with `Accept: application/x-ndjson` and the parameters `perfType` (`rapid`/`blitz`/`bullet`), `clocks=true`, `opening=true`, `moves=true`, `since=<ms>` for incremental fetches and `max` for the first load (e.g. 1,000). The response is a stream of one JSON game per line; read it with `response.body.getReader()` so games appear as they arrive, like the first chess.com month does today.
+- Mapping into the existing game record: `id: "li-<id>"`, `moves` from the space-separated SAN string, `clocks` from the centisecond `clocks` array ÷ 100, `tc` from `clock.initial` + `clock.increment` (e.g. `"600+0"` → `"600"`, matching chess.com's format), `tclass` from `speed`, `result` from `winner`/`status`, `how` from `status` (`mate`, `resign`, `outoftime`, `draw`, `stalemate`...), `myR` from `players.<colour>.rating`, `eco` from `opening.name`, `link: https://lichess.org/<id>`.
+- Incremental sync: store the newest game's timestamp per user and time control (instead of chess.com's month list) and pass it as `since`.
+- **Rate limit**: Lichess asks for one request at a time and, after a 429, waiting a full minute before trying again. The current `api()` backs off for 2–8 seconds, so Lichess needs its own wait of 60 seconds or more. No API token is needed for public games, and CORS is allowed.
+- The "10-minute rapid" option maps to Lichess `600+0` games.
+- Ignore Lichess's own server analysis (`evals`) for now, so all games get the same depth-12 Stockfish analysis and the same thresholds.
+- Insights and copy that mention chess.com by name become source-neutral. Add "Not affiliated with Lichess" next to the chess.com line.
+
+### What you set up yourself
+
+Nothing. No account, key or setting is required.
+
+### What gets stored
+
+Locally only: the same game records in IndexedDB (with `source: "li"`) and a `last.<tc>` timestamp per user. With an account, the same synced tables as chess.com (analyses, puzzle progress, baselines), keyed by `li-` game ids and `source = "li"`.
+
+### Free tier / GDPR
+
+Nothing runs on a server. As with chess.com, games aren't uploaded, so opponents' Lichess names never reach Supabase.
+
+---
+
+## Open questions for you
+
+1. Brevo with your own address (free, may land in spam) or buy a small domain for sending mail?
+2. Inactive-account deletion after 24 months: OK, or a different period?
+3. Should one account link both a chess.com and a Lichess name, with the leaderboard letting each person pick which one to show? (The plan assumes yes.)
