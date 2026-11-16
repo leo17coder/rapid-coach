@@ -1,0 +1,85 @@
+/* VOICE: a club coach's notebook — calm, exact, a little warm.
+   IDEA: a tournament table: walnut board, scoresheet, chess clock.
+   PICTURE: the board itself, large, with the eval graph as the scoresheet's margin.
+   COLOUR and TYPE: maple + walnut squares, ink black, clock-red accent; Archivo + Archivo Narrow.
+   LAYOUT: tabs on a slim bar; board left, scoresheet right; stacks on phones. */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffffff,#16140f);--ink:light-dark(#1b1915,#efe9df);--mute:light-dark(#6d665c,#a59d90);
+--line:light-dark(#e7e1d7,#2f2b24);--card:light-dark(#faf7f2,#1f1c16);
+--lt:#ead6b1;--dk:#a8784c;--red:#c7362b;--blue:#2d6cdf;--good:#2f8a4e;--warn:#d9902b}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Archivo,system-ui,sans-serif;overflow-x:clip;min-height:100vh;display:flex;flex-direction:column}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:10px;min-height:44px;padding:0 16px;font-weight:600}
+button:hover{border-color:var(--mute)}
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+button.pri{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+button.link{border:0;background:none;color:var(--blue);padding:0 4px;min-height:auto;font-weight:500;text-decoration:underline}
+button:disabled{opacity:.45;cursor:default}
+select,input{background:var(--card);border:1px solid var(--line);border-radius:10px;min-height:44px;padding:0 12px;font-size:16px}
+.num{font-family:"Archivo Narrow",Archivo,sans-serif;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px max(4vw,16px);border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+header[hidden]{display:none}
+.brand{font:700 20px/1 "Archivo Narrow";display:flex;align-items:center;gap:10px;white-space:nowrap}
+.brand i{width:22px;height:22px;border-radius:5px;background:conic-gradient(var(--dk) 0 25%,var(--lt) 0 50%,var(--dk) 0 75%,var(--lt) 0);display:block}
+nav{display:flex;gap:4px;flex:1}
+nav a{padding:10px 14px;border-radius:10px;text-decoration:none;color:var(--mute);font-weight:600;min-height:44px;display:flex;align-items:center}
+nav a[aria-current=page]{color:var(--ink);background:var(--card);box-shadow:inset 0 -3px 0 var(--red)}
+.who{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--mute)}
+.job{font-size:13px;color:var(--mute);display:flex;align-items:center;gap:8px}.job[hidden]{display:none}
+.bar{width:110px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}.bar b{display:block;height:100%;background:var(--red);width:0;transition:width .2s}
+main{max-width:1280px;width:100%;margin:0 auto;padding:clamp(16px,3vw,32px) max(4vw,16px) 48px;flex:1}
+section[hidden]{display:none}
+h1{font:700 clamp(26px,3.4vw,38px)/1.08 "Archivo Narrow";margin:0 0 6px;text-wrap:balance}
+h2{font:700 20px/1.2 "Archivo Narrow";margin:0 0 10px}
+.sub{color:var(--mute);margin:0 0 18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:minmax(0,600px) minmax(0,1fr);gap:clamp(18px,3vw,36px);align-items:start}
+.boardwrap{position:relative;aspect-ratio:1;width:100%;max-width:600px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #0002,0 14px 34px -14px #3b2a1580;touch-action:manipulation;background:var(--lt)}
+.boardwrap svg{display:block;width:100%;height:100%}
+.pc{font-family:"Noto Sans Symbols 2","Segoe UI Symbol","DejaVu Sans",serif;font-size:.86px;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke-linejoin:round;pointer-events:none}
+.pc.w{fill:#fffdf8;stroke:#2a2117;stroke-width:.045px}.pc.b{fill:#1d1813;stroke:#f3e6cf;stroke-width:.02px}
+.coord{font:600 .17px Archivo;pointer-events:none}
+.ctl{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:10px;max-width:600px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.fig{position:relative;height:150px;margin:6px 0 4px}.fig>svg{position:absolute;inset:0;width:100%;height:100%}
+.fig.tall{height:260px}
+.moves{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(0,1fr);max-height:300px;overflow:auto;font-size:15px;border-top:1px solid var(--line);margin-top:10px;position:relative}
+.moves span{padding:4px 6px}.moves .n{color:var(--mute)}
+.moves button{all:unset;cursor:pointer;padding:4px 6px;border-radius:6px;white-space:nowrap}
+.moves button:hover{background:var(--line)}.moves button.on{background:var(--ink);color:var(--bg)}
+.moves button:focus-visible{outline:2px solid var(--blue)}
+.tag{font-weight:700;margin-left:2px}.t-blunder{color:var(--red)}.t-mistake{color:var(--warn)}.t-inacc{color:var(--mute)}
+.km{display:grid;gap:8px;margin-top:8px}
+.km button{all:unset;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--bg)}
+.km button:hover,.km button.on{border-color:var(--ink)}.km button:focus-visible{outline:3px solid var(--blue)}
+.dot{width:10px;height:10px;border-radius:50%}
+.small{font-size:13px;color:var(--mute)}
+.verdict{padding:12px 14px;border-radius:10px;margin:10px 0;font-weight:600}
+.v-ok{background:color-mix(in srgb,var(--good) 16%,transparent)}.v-no{background:color-mix(in srgb,var(--red) 14%,transparent)}.v-info{background:var(--line)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin:18px 0 26px}
+.kpi{border-top:3px solid var(--ink);padding-top:10px}.kpi b{display:block;font:700 clamp(28px,4vw,40px)/1 "Archivo Narrow";font-variant-numeric:tabular-nums}
+.kpi.goal{border-color:var(--red)}.kpi s{text-decoration:none;font-size:13px;color:var(--mute);display:block}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:24px}
+.insights{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin:0 0 28px}
+.ins{border:1px solid var(--line);border-left:5px solid var(--ink);border-radius:12px;padding:14px 16px;background:var(--card)}
+.ins.hi{border-left-color:var(--red)}.ins.ok{border-left-color:var(--good)}
+.ins b{display:block;font:700 18px/1.25 "Archivo Narrow";margin-bottom:4px}.ins p{margin:0;font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:15px}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}th{font-size:13px;color:var(--mute);font-weight:600}
+td.r,th.r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.meter{height:8px;border-radius:4px;background:var(--line);overflow:hidden;min-width:60px}.meter b{display:block;height:100%}
+.empty{padding:30px;text-align:center;color:var(--mute);border:1px dashed var(--line);border-radius:12px}
+/* onboarding */
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:clamp(24px,5vw,64px);align-items:center;min-height:min(70vh,640px)}
+.hero h1{font-size:clamp(34px,5vw,56px);margin-bottom:14px}
+.hero p{font-size:17px;max-width:52ch}
+.hero form{display:grid;gap:10px;max-width:440px;margin-top:22px}
+.hero label{font-size:14px;font-weight:600}
+.hero ul{padding-left:18px;color:var(--mute);margin:18px 0 0}
+.status{min-height:24px;font-size:15px}
+footer{border-top:1px solid var(--line);padding:16px max(4vw,16px);font-size:13px;color:var(--mute);display:flex;gap:6px 18px;flex-wrap:wrap}
+footer a{color:inherit}
+a{color:var(--blue)}
+@media(max-width:900px){.grid,.hero{grid-template-columns:minmax(0,1fr)}.hero{min-height:auto}}
+@media(max-width:640px){header{position:static;gap:8px 12px}nav{order:3;flex-basis:100%}nav a{flex:1;justify-content:center;padding:8px}.who{margin-left:auto}.job{order:4;flex-basis:100%}
+ table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:8px}.stack td{display:flex;justify-content:space-between;gap:12px;border:0;padding:3px 0}.stack td::before{content:attr(data-l);color:var(--mute)}}

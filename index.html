@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rapid Coach</title>
+<meta name="description" content="Free chess coach for your chess.com games: engine review, puzzles from your own blunders, and progress tracking. Runs in your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%23ead6b1'/%3E%3Crect width='1' height='1' fill='%23a8784c'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23a8784c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700&family=Noto+Sans+Symbols+2&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="hdr" hidden>
+  <div class="brand"><i></i>Rapid Coach</div>
+  <nav>
+    <a href="#review" data-t="review">Review</a>
+    <a href="#trainer" data-t="trainer">Trainer</a>
+    <a href="#progress" data-t="progress">Progress</a>
+  </nav>
+  <div class="job" id="job" hidden><span id="jobTxt"></span><div class="bar"><b id="jobBar"></b></div></div>
+  <div class="who"><span id="whoName"></span><button class="link" id="switchBtn">Switch</button></div>
+</header>
+
+<main>
+<!-- ONBOARDING -->
+<section id="v-start" hidden>
+  <div class="hero">
+    <div>
+      <h1>A coach for your own chess.com games</h1>
+      <p>Enter your username. Rapid Coach pulls your games, checks every move with Stockfish, turns your blunders into puzzles, and shows what's really costing you rating points.</p>
+      <form id="startForm">
+        <label for="uName">chess.com username</label>
+        <input id="uName" autocomplete="username" autocapitalize="off" spellcheck="false" required placeholder="e.g. magnuscarlsen">
+        <label for="uTc">Games to coach</label>
+        <select id="uTc">
+          <option value="600">Rapid · 10 min</option>
+          <option value="rapid">Rapid · all time controls</option>
+          <option value="blitz">Blitz</option>
+          <option value="bullet">Bullet</option>
+        </select>
+        <button class="pri" type="submit" id="startBtn">Get my games</button>
+        <div class="status" id="startMsg" role="status"></div>
+      </form>
+      <ul>
+        <li>Free, no account. Everything is stored in this browser.</li>
+        <li>The engine runs on your device, about 30 seconds per game.</li>
+      </ul>
+    </div>
+    <div class="boardwrap" id="heroBoard" aria-hidden="true"></div>
+  </div>
+</section>
+
+<!-- REVIEW -->
+<section id="v-review" hidden>
+  <div class="row" style="margin-bottom:14px">
+    <select id="gamePick" aria-label="Choose a game" style="flex:1;min-width:220px"></select>
+    <select id="gameFilter" aria-label="Filter games">
+      <option value="all">All games</option><option value="loss">Losses</option><option value="win">Wins</option><option value="w">As White</option><option value="b">As Black</option><option value="an">Analysed</option>
+    </select>
+    <button id="prevG" aria-label="Previous game">‹</button><button id="nextG" aria-label="Next game">›</button>
+  </div>
+  <div class="grid">
+    <div>
+      <div class="boardwrap" id="board"></div>
+      <div class="ctl">
+        <button data-nav="start" aria-label="Start">⏮</button><button data-nav="prev" aria-label="Back">◀</button>
+        <button data-nav="next" aria-label="Forward">▶</button><button data-nav="end" aria-label="End">⏭</button>
+        <button id="flipBtn" aria-label="Flip board">⇅</button>
+      </div>
+    </div>
+    <div>
+      <h1 id="gTitle">No games yet</h1>
+      <p class="sub" id="gSub"></p>
+      <div class="panel">
+        <div class="row" style="justify-content:space-between"><h2 style="margin:0">Evaluation</h2><span class="small num" id="evNow"></span></div>
+        <div class="fig" id="evFig"></div>
+        <div id="anState"></div>
+        <h2 style="margin-top:14px">Your key moments</h2>
+        <div class="km" id="km"></div>
+        <div class="moves num" id="moves"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRAINER -->
+<section id="v-trainer" hidden>
+  <div class="grid">
+    <div>
+      <div class="boardwrap" id="tboard"></div>
+      <div class="row" style="margin-top:10px"><button id="tHint">Hint</button><button id="tShow">Show answer</button><button id="tNext" class="pri">Next puzzle</button></div>
+    </div>
+    <div>
+      <h1>Your own blunders, as puzzles</h1>
+      <p class="sub">Every position here is one where you went wrong in a real game. Find the move you missed.</p>
+      <div class="panel">
+        <div id="tPrompt" class="verdict v-info">Loading puzzles…</div>
+        <div id="tFeedback"></div>
+        <div class="row small" id="tMeta"></div>
+      </div>
+      <div class="kpis" id="tStats"></div>
+      <p class="small">Click a piece, then its destination square. A puzzle counts as solved when you find the engine's move, or one that's just as good. Puzzles you miss come back first.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PROGRESS -->
+<section id="v-progress" hidden>
+  <h1 id="pTitle">Progress</h1>
+  <p class="sub" id="pSub"></p>
+  <h2>What to work on</h2>
+  <div class="insights" id="insights"></div>
+  <div class="kpis" id="pKpis"></div>
+  <div class="two">
+    <div><h2>Rating</h2><div class="fig tall" id="ratingFig"></div></div>
+    <div><h2>Time used per game <span class="small" id="timeGoal"></span></h2><div class="fig tall" id="timeFig"></div><p class="small">Each dot is a game with at least 15 of your moves; green won, red lost. Red dashed line: goal. Blue: 10-game average.</p></div>
+  </div>
+  <div class="two" style="margin-top:24px">
+    <div><h2>Blunders and mistakes per game</h2><div class="fig tall" id="errFig"></div><p class="small" id="errNote"></p></div>
+    <div><h2>How your games end <span class="small">(last 12 months)</span></h2><div id="ends"></div></div>
+  </div>
+  <div style="margin-top:28px">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Openings <span class="small">(last 12 months)</span></h2>
+      <select id="opColor" aria-label="Openings colour"><option value="w">As White</option><option value="b">As Black</option></select></div>
+    <table class="stack" style="margin-top:8px"><thead><tr><th>Opening</th><th class="r">Games</th><th class="r">Score</th><th>W / D / L</th></tr></thead><tbody id="opBody"></tbody></table>
+  </div>
+  <div class="row" style="margin-top:24px"><button id="anMore" class="pri">Analyse 20 more games</button><button id="syncBtn">Check for new games</button><button id="resetBase">Reset baseline</button><span class="small" id="anNote"></span></div>
+</section>
+</main>
+
+<footer>
+  <span>Free and open source.</span>
+  <span>Not affiliated with chess.com; uses its public data API.</span>
+  <span>Engine: <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPL-3.0).</span>
+  <a href="https://github.com/leo17coder/rapid-coach">Source code</a>
+</footer>
+
+<script src="vendor/chess.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
