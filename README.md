@@ -8,7 +8,7 @@ A free chess coach for your chess.com and Lichess games. Enter a username and it
 - turns your own blunders into puzzles, and
 - tracks your progress against a starting point, with plain-language advice on what to work on.
 
-No accounts, no server, no AI calls. Everything runs and is stored in the visitor's browser.
+No server compute and no AI calls. Everything runs and is stored in the visitor's browser. An optional account (email sign-in, no password) syncs analyses, puzzle progress and baselines across devices; games themselves are never uploaded.
 
 ## How it works
 
@@ -25,6 +25,7 @@ No accounts, no server, no AI calls. Everything runs and is stored in the visito
 - **Puzzles**: every blunder or mistake made from a position that wasn't already lost becomes a puzzle. The answer is the engine's move, or any move within 8 points of it.
 - **Insights**: fixed rules over the analysed games, such as time used, errors made when already winning, unpunished opponent blunders, missed mates, error phase, opening scores, losses on time, long games and colour gap.
 - **Storage**: IndexedDB for games and analyses, localStorage for the profile, puzzle progress and baseline.
+- **Accounts (optional)**: Supabase (free plan, EU region). Changes are saved locally first and uploaded in the background. Setup: `supabase/README.md`. Privacy: `privacy.html`.
 
 ## Run locally
 
@@ -46,11 +47,12 @@ python3 -m http.server 8000
 GPL-3.0 (see `LICENSE`), because the app ships Stockfish, which is GPL-3.0.
 Stockfish: https://github.com/official-stockfish/Stockfish · stockfish.js: https://github.com/nmrugg/stockfish.js (licence in `vendor/STOCKFISH-LICENSE.txt`).
 chess.js © Jeff Hlywa, BSD-2-Clause (`vendor/CHESSJS-LICENSE.txt`).
+supabase-js © Supabase, MIT (`vendor/SUPABASE-JS-LICENSE.txt`).
 
 Not affiliated with or endorsed by chess.com or Lichess.
 
 ## Roadmap (V2)
 
-- Optional accounts (Supabase) to sync across devices
+- ~~Optional accounts (Supabase) to sync across devices~~ (built; needs the Supabase setup above)
 - Friends leaderboard: blunders per game, time used, puzzles solved
 - ~~Lichess support~~ (done)

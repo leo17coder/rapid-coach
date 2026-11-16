@@ -19,7 +19,7 @@
     <a href="#progress" data-t="progress">Progress</a>
   </nav>
   <div class="job" id="job" hidden><span id="jobTxt"></span><div class="bar"><b id="jobBar"></b></div></div>
-  <div class="who"><span id="whoName"></span><button class="link" id="switchBtn">Switch</button></div>
+  <div class="who"><span id="whoName"></span><button class="link" id="switchBtn">Switch</button><button class="link acctBtn acct-only" type="button" hidden>Sign in to sync</button></div>
 </header>
 
 <main>
@@ -48,7 +48,8 @@
         <div class="status" id="startMsg" role="status"></div>
       </form>
       <ul>
-        <li>Free, no account. Everything is stored in this browser.</li>
+        <li>Free, no account needed. Everything is stored in this browser.</li>
+        <li class="acct-only" hidden>Use more than one device? <button class="link acctBtn" type="button">Sign in to sync</button></li>
         <li>The engine runs on your device, about 30 seconds per game.</li>
       </ul>
     </div>
@@ -139,8 +140,40 @@
   <span>Not affiliated with chess.com or Lichess; uses their public data APIs.</span>
   <span>Engine: <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPL-3.0).</span>
   <a href="https://github.com/leo17coder/rapid-coach">Source code</a>
+  <a href="privacy.html">Privacy</a>
 </footer>
 
+<dialog id="acct" aria-labelledby="acctTitle">
+  <div class="acct-head"><h2 id="acctTitle">Sync across devices</h2><button class="link" id="acctClose" type="button">Close</button></div>
+  <div data-acct="email">
+    <p>Sign in with your email to keep your analyses, puzzle progress and baseline on every device you use. There's no password: you get an email with a link and a code. Without an account, everything keeps working in this browser.</p>
+    <form id="acctEmailForm">
+      <label for="acctEmail">Email</label>
+      <input id="acctEmail" type="email" autocomplete="email" required>
+      <button class="pri" id="acctSend">Email me a sign-in link</button>
+    </form>
+    <p class="small">For ages 13 and up. What's stored and how to delete it: <a href="privacy.html">privacy</a>.</p>
+  </div>
+  <div data-acct="code" hidden>
+    <p>We sent an email to <b id="acctSent"></b>. Open the link in it on this device, or enter the code from the email here.</p>
+    <form id="acctCodeForm">
+      <label for="acctCode">Code from the email</label>
+      <input id="acctCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10">
+      <button class="pri" id="acctVerify">Sign in</button>
+    </form>
+    <button class="link" id="acctBack" type="button">Use a different email</button>
+  </div>
+  <div data-acct="in" hidden>
+    <p>Signed in as <b id="acctWho"></b>. Your analyses, puzzle progress and baselines sync to this account. Games are fetched from chess.com or Lichess on each device.</p>
+    <p class="small" id="acctState"></p>
+    <div class="acct-row"><button id="acctExport" type="button">Download my data</button><button id="acctOut" type="button">Sign out</button></div>
+    <button class="danger" id="acctDelete" type="button">Delete account</button>
+    <p class="small" id="acctDelNote" hidden>This deletes your account and everything synced to it, and can't be undone. Data in this browser stays.</p>
+  </div>
+  <div class="status" id="acctMsg" role="status"></div>
+</dialog>
+
+<script src="config.js"></script>
 <script src="vendor/chess.js"></script>
 <script src="app.js"></script>
 </body>

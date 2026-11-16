@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy · Rapid Coach</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%23ead6b1'/%3E%3Crect width='1' height='1' fill='%23a8784c'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23a8784c'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+.doc{max-width:68ch;margin:0 auto;padding:32px max(16px,4vw) 48px}
+.doc h1{font:700 clamp(30px,5vw,44px)/1.1 "Archivo Narrow",Archivo,sans-serif;margin:0 0 8px}
+.doc h2{font:700 22px/1.25 "Archivo Narrow",Archivo,sans-serif;margin:32px 0 8px}
+.doc li{margin-bottom:6px}
+.doc table{width:100%;border-collapse:collapse;font-size:15px}
+.doc th,.doc td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.doc .tbl{overflow-x:auto}
+</style>
+</head>
+<body>
+<main class="doc">
+<p><a href="./">← Back to Rapid Coach</a></p>
+<h1>Privacy</h1>
+<p class="small">Last updated 16 November 2026</p>
+
+<h2>The short version</h2>
+<ul>
+  <li><b>Without an account</b>, nothing about you leaves your browser except the requests that fetch your public games from chess.com or Lichess. Your games, analyses and progress are stored only in this browser.</li>
+  <li><b>With an account</b> (optional), your engine analyses, puzzle progress, baselines and the chess usernames you review are stored so they can sync across your devices. Your games are not uploaded.</li>
+  <li>No ads, no analytics, no tracking, no cookies for tracking. Nothing is sold or shared.</li>
+  <li>You can download or delete your account data yourself at any time.</li>
+</ul>
+
+<h2>Who is responsible</h2>
+<p>Rapid Coach is a free, non-commercial project run by its maintainer (GitHub: <a href="https://github.com/leo17coder">leo17coder</a>), based in Denmark, who is the data controller for the optional accounts. Contact: open an issue at <a href="https://github.com/leo17coder/rapid-coach/issues">github.com/leo17coder/rapid-coach/issues</a>.</p>
+
+<h2>What is stored with an account</h2>
+<div class="tbl"><table>
+  <thead><tr><th>Data</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>Your email address and sign-in times</td><td>To send sign-in emails and keep you signed in</td></tr>
+    <tr><td>The chess.com or Lichess usernames and time controls you review</td><td>So a new device opens the right games</td></tr>
+    <tr><td>Engine analyses of your games (evaluations and best moves)</td><td>So games aren't analysed again on every device</td></tr>
+    <tr><td>Puzzle progress (which puzzles you've seen, solved or missed)</td><td>To continue training on any device</td></tr>
+    <tr><td>Your baselines (rating, time used, errors per game, score, date)</td><td>To measure progress from the same starting point everywhere</td></tr>
+  </tbody>
+</table></div>
+<p>Not stored: your games, your opponents' names, your IP address (beyond the short-lived logs any web host keeps), or anything about how you use the site.</p>
+
+<h2>Legal basis</h2>
+<p>Accounts are processed to provide the sync service you asked for (GDPR Article 6(1)(b)). You can use Rapid Coach fully without one.</p>
+
+<h2>Who processes the data</h2>
+<ul>
+  <li><b>Supabase</b> stores the account data in the EU and runs sign-in. It acts as a processor under a data processing agreement.</li>
+  <li><b>An email provider</b> sends the sign-in emails, as a processor.</li>
+  <li><b>GitHub Pages</b> hosts the website itself.</li>
+  <li><b>chess.com and Lichess</b>: your browser fetches your public games directly from them. Their own privacy policies apply.</li>
+</ul>
+
+<h2>How long it's kept</h2>
+<p>Until you delete your account. Accounts that haven't been used for a long time may be deleted; this page will say how long before that happens.</p>
+
+<h2>Your rights</h2>
+<ul>
+  <li><b>Access and portability</b>: Account → <i>Download my data</i> gives you everything stored, as a JSON file.</li>
+  <li><b>Deletion</b>: Account → <i>Delete account</i> removes your account and all synced data immediately. Data in your browser stays until you clear it.</li>
+  <li><b>Correction, objection, restriction</b>: contact the maintainer as above.</li>
+  <li><b>Complaints</b>: you can complain to the Danish Data Protection Agency, <a href="https://www.datatilsynet.dk">Datatilsynet</a>.</li>
+</ul>
+
+<h2>Storage in your browser</h2>
+<p>Rapid Coach saves your games, analyses, settings and (if you sign in) your sign-in session in your browser's local storage and IndexedDB. This is needed for the features you use, so there's no cookie banner. Clearing your browser's site data removes it.</p>
+
+<h2>Age</h2>
+<p>Accounts are for people aged 13 and over.</p>
+
+<p class="small">Rapid Coach is not affiliated with chess.com or Lichess.</p>
+</main>
+</body>
+</html>

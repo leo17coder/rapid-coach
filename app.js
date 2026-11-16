@@ -25,13 +25,19 @@ const srcOf=g=>g.source||(String(g.id).startsWith("li-")?"li":"cc");
 let P=LS.get("profile",null);           // {source:"cc"|"li", user, tc}
 if(P&&!P.source){P.source="cc";LS.set("profile",P)}
 let ALL=[],GAMES=[],CUR=null,PLY=0,GEN=0;
-const uk=k=>P.source+":"+P.user+"."+k;
+const acct=()=>P.source+":"+P.user;            // also the account id used when syncing
+const uk=k=>acct()+"."+k;
 
 /* ---------- storage (IndexedDB, falls back to memory) ---------- */
 const DB={db:null,
- open(){return new Promise(res=>{try{const r=indexedDB.open("rapid-coach",1);r.onupgradeneeded=()=>r.result.createObjectStore("games",{keyPath:"id"});r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>res()}catch(e){res()}})},
+ open(){return new Promise(res=>{try{const r=indexedDB.open("rapid-coach",2);r.onupgradeneeded=()=>{const d=r.result;for(const n of ["games","pending"])if(!d.objectStoreNames.contains(n))d.createObjectStore(n,{keyPath:"id"})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>res()}catch(e){res()}})},
  all(){return new Promise(res=>{if(!this.db)return res([]);try{const q=this.db.transaction("games").objectStore("games").getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>res([])}catch(e){res([])}})},
- put(gs){if(!this.db||!gs.length)return;try{const s=this.db.transaction("games","readwrite").objectStore("games");gs.forEach(g=>{const {_f,_m,...plain}=g;s.put(plain)})}catch(e){}}};
+ put(gs){if(!this.db||!gs.length)return;try{const s=this.db.transaction("games","readwrite").objectStore("games");gs.forEach(g=>{const {_f,_m,...plain}=g;s.put(plain)})}catch(e){}},
+ /* pending: {id: gameId, an} pulled from the account before the game itself was fetched on this device */
+ pend(){return new Promise(res=>{if(!this.db)return res([]);try{const q=this.db.transaction("pending").objectStore("pending").getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>res([])}catch(e){res([])}})},
+ pendPut(xs){if(!this.db||!xs.length)return;try{const s=this.db.transaction("pending","readwrite").objectStore("pending");xs.forEach(x=>s.put(x))}catch(e){}},
+ pendDel(ids){if(!this.db||!ids.length)return;try{const s=this.db.transaction("pending","readwrite").objectStore("pending");ids.forEach(i=>s.delete(i))}catch(e){}}};
+const PEND=new Map();
 
 /* ---------- engine (Stockfish in a Web Worker) ---------- */
 const Engine={w:null,q:[],cur:null,ready:null,
@@ -111,7 +117,9 @@ async function syncLi(onFirst){const gen=GEN,u=P.user,tc=P.tc,key=uk("last."+tc)
  if(gen!==GEN)return added;flush();if(newest>since)LS.set(key,newest);job("sync",null);return added}
 
 /* ---------- game helpers ---------- */
-function refreshGames(){GAMES=ALL.filter(g=>g.user===P.user&&srcOf(g)===P.source&&matchTc({rules:g.rules||"chess",time_control:g.tc,time_class:g.tclass},P.tc)).sort((a,b)=>a.ts-b.ts);fillPicker();buildPuzzles()}
+function refreshGames(){GAMES=ALL.filter(g=>g.user===P.user&&srcOf(g)===P.source&&matchTc({rules:g.rules||"chess",time_control:g.tc,time_class:g.tclass},P.tc)).sort((a,b)=>a.ts-b.ts);
+ if(PEND.size){const got=GAMES.filter(g=>!g.an&&PEND.has(g.id));got.forEach(g=>{g.an=PEND.get(g.id);PEND.delete(g.id)});if(got.length){DB.put(got);DB.pendDel(got.map(g=>g.id))}}
+ fillPicker();buildPuzzles()}
 const famOf=e=>{const w=(e||"Unknown").split(" ");const o=[];for(const x of w){if(/\d|\.\.\./.test(x)&&o.length>=2){o.push(x);break}o.push(x)}return o.slice(0,5).join(" ")};
 function replay(g){if(g._f)return g;const c=new Chess(),f=[c.fen()],mv=[];for(const s of g.moves){const m=c.move(s);if(!m)break;mv.push(m);f.push(c.fen())}g._f=f;g._m=mv;return g}
 function errorsOf(g){const an=g.an,out=[];if(!an)return out;for(let i=0;i<an.ev.length-1;i++){const white=i%2===0,b=an.ev[i],a=an.ev[i+1];if(a==null||b==null)continue;const s=white?1:-1,drop=wp(s*b)-wp(s*a),k=drop>=30?"blunder":drop>=20?"mistake":drop>=10?"inacc":null;
@@ -198,7 +206,7 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
  try{while(AQ.list.length&&gen===GEN){const g=replay(AQ.list.shift());if(g.an)continue;const ev=[],best=[];
   for(let i=0;i<g._f.length;i++){if(gen!==GEN)break;const c=new Chess(g._f[i]);if(c.game_over()){ev.push(c.in_checkmate()?(c.turn()==="w"?-10000:10000):0);best.push(null)}else{const r=await Engine.eval(g._f[i],DEPTH);ev.push(r.cp);best.push(r.best)}
    job("an",`Analysing game ${AQ.done+1} of ${AQ.done+AQ.list.length+1}`,(i+1)/g._f.length)}
-  if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);AQ.done++;maybeBaseline();
+  if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);AQ.done++;maybeBaseline();
   if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle())}}
  catch(e){$("#anState").innerHTML='<div class="verdict v-no">The engine could not start in this browser.</div>'}
  AQ=null;job("an",null);if(P&&gen===GEN)maybeBaseline();if(route.cur==="progress")renderProgress();if(CUR&&!CUR.an)renderAnState()}
@@ -214,7 +222,7 @@ function loadPuzzle(p){PI=p;HINT=0;DONE=false;$("#tFeedback").innerHTML="";$("#t
  const g=p.g,e=p.e,c=new Chess(g._f[e.i]),m=g._m[e.i-1];TB.flip=c.turn()==="b";TB.set(g._f[e.i],{last:m?{from:m.from,to:m.to}:null});
  $("#tPrompt").textContent=`${c.turn()==="w"?"White":"Black"} to move. Find the best move.`;
  $("#tMeta").innerHTML=`<span>From your game on ${esc(g.date)} vs ${esc(g.opp)} · ${esc(famOf(g.eco))} · move ${Math.floor(e.i/2)+1}</span>`;renderTStats()}
-const saveTS=()=>LS.set(uk("trainer"),TS);
+const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id)};
 async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;
  TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={});st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
  if(!ok){$("#tFeedback").innerHTML='<div class="small">Checking your move…</div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
@@ -236,7 +244,7 @@ function renderTStats(){const st=id=>TS[id]||{};const solved=PZ.filter(p=>st(p.i
 function stats(){const G=GAMES,recent=G.slice(-30),an=G.filter(g=>g.an),lastAn=an.slice(-20);
  const tu=recent.map(timeUsed).filter(x=>x!=null),errs=lastAn.map(g=>serious(g).length);
  return {rating:G.length?G[G.length-1].myR:null,time:median(tu),errs:errs.length?errs.reduce((a,b)=>a+b,0)/errs.length:null,score:score(recent),nAn:an.length}}
-function maybeBaseline(){if(LS.get(uk("base."+P.tc),null))return;const s=stats();if(s.nAn>=10)LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10)})}
+function maybeBaseline(){if(LS.get(uk("base."+P.tc),null))return;const s=stats();if(s.nAn>=10){LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10)});Sync.mark("base",acct()+"|"+P.tc)}}
 function insights(){const G=GAMES,yr=G.filter(g=>g.ts>Date.now()-365*864e5),an=G.filter(g=>g.an).slice(-50),out=[];const B=baseSecs();
  if(!an.length&&!yr.length)return out;
  const errs=[];an.forEach(g=>{replay(g);const all=errorsOf(g);all.filter(e=>e.mine&&e.kind!=="inacc").forEach(e=>errs.push({g,e,prev:all.find(o=>o.i===e.i-1&&!o.mine&&o.kind!=="inacc")}))});
@@ -294,7 +302,7 @@ function renderOps(){const col=$("#opColor").value,m={};GAMES.filter(g=>g.color=
   return `<tr><td data-l="Opening">${esc(f)}</td><td class="r" data-l="Games">${a.length}</td><td class="r" data-l="Score" style="color:${s<45?"var(--red)":s>55?"var(--good)":"inherit"};font-weight:700">${Math.round(s)}%</td><td data-l="W / D / L"><span class="num">${w} / ${d} / ${l}</span></td></tr>`}).join(""):'<tr><td colspan="4" class="small">No opening with 5+ games in the last year.</td></tr>'}
 $("#opColor").onchange=renderOps;
 $("#anMore").onclick=()=>{analyseRecent(20);$("#anNote").textContent="Queued — see progress at the top."};
-$("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10)});renderProgress()};
+$("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10),manual:new Date().toISOString()});Sync.mark("base",acct()+"|"+P.tc);renderProgress()};
 $("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sync();$("#anNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#anNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#syncBtn").disabled=false;renderProgress()};
 
 /* ---------- onboarding ---------- */
@@ -309,6 +317,105 @@ $("#startForm").onsubmit=async e=>{e.preventDefault();const u=$("#uName").value.
  P={source:s,user:u,tc};LS.set("profile",P);await enter(true)};
 $("#switchBtn").onclick=()=>{GEN++;Engine.q.length=0;LS.set("profile",null);P=null;location.hash="";boot()};
 
+/* ---------- account + sync (optional; Supabase) ----------
+   Off unless config.js has a URL and key. The browser stays the source of truth: changes are saved
+   locally first, queued in an outbox (rc.sb.out) and uploaded in the background; pulls fetch only rows
+   changed since the last pull. Games are never uploaded, only analyses, puzzle progress, baselines and
+   which accounts are reviewed. supabase-js is loaded only for people who sign in. */
+const CFG=window.RC_CONFIG||{},SB_ON=!!(CFG.supabaseUrl&&CFG.supabaseKey);
+const ACCT_RE=/^(cc|li):[a-z0-9_-]{1,40}$/,TCS=["600","rapid","blitz","bullet"];
+const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
+ load(){return this._load||(this._load=new Promise((res,rej)=>{const s=document.createElement("script");s.src="vendor/supabase-2.118.0.js";
+  s.onload=()=>{this.sb=supabase.createClient(CFG.supabaseUrl,CFG.supabaseKey,{auth:{flowType:"pkce",persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+   this.sb.auth.onAuthStateChange((ev,ses)=>setTimeout(()=>this.onAuth(ses),0));res(this.sb)};
+  s.onerror=()=>{this._load=null;rej(new Error("load"))};document.head.appendChild(s)}))},
+ hasSession(){try{const ref=new URL(CFG.supabaseUrl).hostname.split(".")[0];return !!localStorage.getItem("sb-"+ref+"-auth-token")}catch(e){return false}},
+ async start(){if(!SB_ON)return;document.querySelectorAll(".acct-only").forEach(e=>e.hidden=false);const q=new URLSearchParams(location.search);
+  if(q.has("error_description")){acctOpen();acctMsg(q.get("error_description")+" Ask for a new link, or enter the code from the email.");}
+  if(!q.has("code")&&!this.hasSession()){if(q.has("error_description"))history.replaceState(null,"",location.pathname+location.hash);return}
+  try{await this.load();const {error}=await this.sb.auth.initialize();
+   if(error&&q.has("code")){acctOpen();acctMsg("That link didn't work here, usually because it was opened in a different browser. Enter the code from the email instead, or ask for a new link.")}}
+  catch(e){acctMsg("Couldn't reach the sync service. Your data is still saved in this browser.")}
+  if(q.has("code")||q.has("error_description"))history.replaceState(null,"",location.pathname+location.hash);
+  document.addEventListener("visibilitychange",()=>{if(!this.me)return;if(document.hidden)this.flush();else if(Date.now()-this.pulled>5*60e3)this.run()})},
+ onAuth(ses){const u=ses&&ses.user;
+  if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};acctUI();this.run()}
+  else if(!u&&this.me){this.me=null;acctUI()}},
+ /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}} */
+ mark(kind,key){if(!SB_ON)return;const o=LS.get("sb.out",{});(o[kind]=o[kind]||{})[key]=1;LS.set("sb.out",o);if(this.me){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),2000)}},
+ async run(){if(!this.me||this.busy)return;this.busy=true;this.err="";acctUI();
+  try{await this.pull();const k="sb.init."+this.me.id;if(!LS.get(k,0)){this.markAll();LS.set(k,1)}this.busy=false;await this.flush()}
+  catch(e){this.err="Sync failed. It will retry later; nothing is lost.";this.busy=false}acctUI()},
+ markAll(){ALL.forEach(g=>{if(g.an)this.mark("an",g.id)});
+  for(const k of Object.keys(localStorage)){let m=k.match(/^rc\.((?:cc|li):[^.]+)\.trainer$/);if(m)Object.keys(LS.get(m[1]+".trainer",{})).forEach(id=>this.mark("pz",m[1]+"|"+id));
+   m=k.match(/^rc\.((?:cc|li):[^.]+)\.base\.(\w+)$/);if(m)this.mark("base",m[1]+"|"+m[2])}
+  if(P)this.mark("la",acct()+"|"+P.tc)},
+ async flush(){if(!this.me)return;if(this.busy){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),5000);return}const o=LS.get("sb.out",{});if(!Object.keys(o).some(k=>Object.keys(o[k]).length))return;
+  this.busy=true;LS.set("sb.out",{});const uid=this.me.id,ok=a=>ACCT_RE.test(a),keys=k=>Object.keys(o[k]||{}),sp=x=>{const i=x.indexOf("|");return [x.slice(0,i),x.slice(i+1)]};
+  const byId=new Map(ALL.map(g=>[g.id,g])),clamp=v=>Math.max(-32000,Math.min(32000,Math.round(v||0)));
+  const rows={
+   analyses:keys("an").map(id=>byId.get(id)).filter(g=>g&&g.an).map(g=>({user_id:uid,game_id:g.id,depth:g.an.depth,ev:g.an.ev.map(clamp),best:g.an.best})),
+   puzzle_progress:keys("pz").map(sp).filter(([a])=>ok(a)).map(([a,id])=>{const st=LS.get(a+".trainer",{})[id]||{};return {user_id:uid,account:a,puzzle_id:id,seen:!!st.seen,ok:!!st.ok,fail:st.fail||0}}),
+   baselines:keys("base").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({a,tc,b:LS.get(a+".base."+tc,null)})).filter(x=>x.b).map(x=>({user_id:uid,account:x.a,tc:x.tc,stats:x.b})),
+   linked_accounts:keys("la").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({user_id:uid,account:a,tc}))};
+  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc"};
+  try{for(const t in rows)for(let i=0;i<rows[t].length;i+=200){const {error}=await this.sb.from(t).upsert(rows[t].slice(i,i+200),{onConflict:pk[t]});if(error)throw error}
+   this.err=""}
+  catch(e){const n=LS.get("sb.out",{});for(const k in o)n[k]={...o[k],...(n[k]||{})};LS.set("sb.out",n);this.err="Couldn't upload changes. Retrying in a minute.";clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),60e3)}
+  this.busy=false;acctUI()},
+ async rows(t,cols,since){const out=[];for(let i=0;;i+=1000){let q=this.sb.from(t).select(cols+",updated_at").order("updated_at").range(i,i+999);if(since)q=q.gt("updated_at",since);
+  const {data,error}=await q;if(error)throw error;out.push(...data);if(data.length<1000)return out}},
+ async pull(){const wk="sb.pull."+this.me.id,w=LS.get(wk,{}),hi=(r,k)=>{r.forEach(x=>{if(!w[k]||x.updated_at>w[k])w[k]=x.updated_at})};
+  // analyses: attach to games we have; keep the rest until those games are fetched
+  const an=await this.rows("analyses","game_id,depth,ev,best",w.an),byId=new Map(ALL.map(g=>[g.id,g])),got=[],pend=[];
+  for(const r of an){const a={ev:r.ev,best:r.best,depth:r.depth},g=byId.get(r.game_id);if(g){if(!g.an||g.an.depth<a.depth){g.an=a;got.push(g)}}else{PEND.set(r.game_id,a);pend.push({id:r.game_id,an:a})}}
+  DB.put(got);DB.pendPut(pend);hi(an,"an");
+  // puzzle progress: seen/ok are OR-ed, fail takes the larger count
+  const pz=await this.rows("puzzle_progress","account,puzzle_id,seen,ok,fail",w.pz),tr={};
+  for(const r of pz){const t=tr[r.account]||(tr[r.account]=LS.get(r.account+".trainer",{})),c=t[r.puzzle_id]||(t[r.puzzle_id]={});if(r.seen)c.seen=1;if(r.ok)c.ok=1;if(r.fail>(c.fail||0))c.fail=r.fail}
+  for(const a in tr)LS.set(a+".trainer",tr[a]);if(P&&tr[acct()])TS=tr[acct()];hi(pz,"pz");
+  // baselines: a manual reset beats an automatic one (latest reset wins); otherwise the earlier date wins
+  const bs=await this.rows("baselines","account,tc,stats",w.base);
+  for(const r of bs){const k=r.account+".base."+r.tc,l=LS.get(k,null),rm=r.stats;let use=rm;
+   if(l){if(l.manual||rm.manual)use=(l.manual||"")>=(rm.manual||"")?l:rm;else use=(l.date||"")<=(rm.date||"")?l:rm}
+   if(use===rm)LS.set(k,rm);else this.mark("base",r.account+"|"+r.tc)}
+  hi(bs,"base");
+  // linked accounts: on a device with no profile yet, open the most recently used one
+  const la=await this.rows("linked_accounts","account,tc",w.la);hi(la,"la");LS.set(wk,w);this.pulled=Date.now();
+  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats()}
+  else if(la.length){const r=la[la.length-1],i=r.account.indexOf(":");P={source:r.account.slice(0,i),user:r.account.slice(i+1),tc:r.tc};LS.set("profile",P);enter(false)}},
+ async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines"])out[t]=await this.rows(t,"*");return out},
+ async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;LS.set("sb.out",{});acctUI()},
+ async deleteAccount(){const {error}=await this.sb.rpc("delete_my_account");if(error)throw error;const id=this.me.id;await this.signOut();try{localStorage.removeItem("rc.sb.init."+id);localStorage.removeItem("rc.sb.pull."+id)}catch(e){}}};
+
+/* account panel */
+let acctEmail="",acctDel=false;
+function acctMsg(t){$("#acctMsg").textContent=t||""}
+function acctOpen(){acctDel=false;acctUI();const d=$("#acct");if(!d.open)d.showModal()}
+function acctUI(){if(!SB_ON)return;const me=Sync.me,step=me?"in":acctEmail?"code":"email";
+ document.querySelectorAll("[data-acct]").forEach(e=>e.hidden=e.dataset.acct!==step);
+ document.querySelectorAll(".acctBtn").forEach(b=>b.textContent=me?"Account":"Sign in to sync");
+ if(acctEmail)$("#acctSent").textContent=acctEmail;
+ if(me){$("#acctWho").textContent=me.email;const o=LS.get("sb.out",{}),n=Object.values(o).reduce((a,x)=>a+Object.keys(x).length,0);
+  $("#acctState").textContent=Sync.err||(Sync.busy?"Syncing…":n?`${n} change${n>1?"s":""} waiting to upload.`:Sync.pulled?"Everything is synced.":"");
+  $("#acctDelete").textContent=acctDel?"Yes, delete my account and synced data":"Delete account";$("#acctDelNote").hidden=!acctDel}}
+document.querySelectorAll(".acctBtn").forEach(b=>b.onclick=acctOpen);
+$("#acctClose").onclick=()=>$("#acct").close();
+$("#acctEmailForm").onsubmit=async e=>{e.preventDefault();const em=$("#acctEmail").value.trim();if(!em)return;$("#acctSend").disabled=true;acctMsg("Sending…");
+ try{await Sync.load();const {error}=await Sync.sb.auth.signInWithOtp({email:em,options:{emailRedirectTo:location.origin+location.pathname,shouldCreateUser:true}});if(error)throw error;
+  acctEmail=em;acctMsg("");acctUI();$("#acctCode").focus()}
+ catch(x){acctMsg(x&&x.message&&x.message!=="load"?x.message:"Couldn't send the email. Check your connection and try again.")}$("#acctSend").disabled=false};
+$("#acctCodeForm").onsubmit=async e=>{e.preventDefault();const code=$("#acctCode").value.replace(/\D/g,"");if(code.length<6)return acctMsg("Enter the code from the email.");
+ $("#acctVerify").disabled=true;acctMsg("Checking…");
+ try{const {data,error}=await Sync.sb.auth.verifyOtp({email:acctEmail,token:code,type:"email"});if(error)throw error;acctEmail="";acctMsg("");Sync.onAuth(data.session)}
+ catch(x){acctMsg("That code didn't work. It may have expired: ask for a new email.")}$("#acctVerify").disabled=false};
+$("#acctBack").onclick=()=>{acctEmail="";acctMsg("");acctUI()};
+$("#acctOut").onclick=async()=>{await Sync.signOut();acctMsg("Signed out. Your data stays in this browser.")};
+$("#acctExport").onclick=async()=>{acctMsg("Preparing your data…");try{const d=await Sync.exportAll(),a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(d,null,1)],{type:"application/json"}));
+ a.download="rapid-coach-data.json";document.body.appendChild(a);a.click();a.remove();acctMsg("")}catch(x){acctMsg("Couldn't download your data. Try again in a minute.")}};
+$("#acctDelete").onclick=async()=>{if(!acctDel){acctDel=true;acctUI();return}acctMsg("Deleting…");
+ try{await Sync.deleteAccount();acctDel=false;acctMsg("Your account and its synced data are deleted. Data in this browser is kept.")}catch(x){acctMsg("Couldn't delete the account. Try again in a minute.")}};
+
 /* ---------- routing ---------- */
 function route(){if(!P){show1("start");return}const t=["review","trainer","progress"].includes(location.hash.slice(1))?location.hash.slice(1):"review";route.cur=t;show1(t);
  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.t===t)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
@@ -317,7 +424,7 @@ function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
@@ -325,5 +432,5 @@ async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});$
  catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=`Couldn't load your games from ${SRC[P.source].name}. Try again in a minute.`;$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
  if(!fresh&&!AQ)analyseRecent(5)}
 async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
-(async()=>{await DB.open();ALL=await DB.all();boot()})();
+(async()=>{await DB.open();ALL=await DB.all();(await DB.pend()).forEach(x=>PEND.set(x.id,x.an));Sync.start();boot()})();
 }
