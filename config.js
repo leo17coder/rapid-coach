@@ -3,5 +3,5 @@
    supabase/migrations/001_sync.sql is what protects the data. Never put the service_role / secret key here. */
 window.RC_CONFIG={
   supabaseUrl:"https://ednyucirnrdcsveqlokb.supabase.co",
-  supabaseKey:""
+  supabaseKey:"sb_publishable_hDcv8-hOi6TvLhFUZ5afTw_lKHswbkk"
 };
