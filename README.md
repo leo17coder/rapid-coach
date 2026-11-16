@@ -14,7 +14,7 @@ No server compute and no AI calls. Everything runs and is stored in the visitor'
 
 | Part | What it does |
 | --- | --- |
-| `index.html`, `style.css` | The page and its three tabs: Review, Trainer, Progress |
+| `index.html`, `style.css` | The app shell (sidebar on desktop, bottom tabs on phones) and its screens: Home, Review, Trainer, Openings, Progress, Friends; the design tokens and components |
 | `app.js` | Fetching games, analysis queue, puzzles, rule-based insights |
 | `vendor/stockfish-19-lite-single.*` | Stockfish 19 (lite NNUE) compiled to WebAssembly, run in a Web Worker |
 | `vendor/chess.js` | Move legality and PGN replay |

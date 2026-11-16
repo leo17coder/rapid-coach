@@ -9,27 +9,28 @@
 <link rel="preload" href="vendor/fonts/nunito-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/fredoka-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;if(u.theme&&u.theme!=="system")d.dataset.theme=u.theme;if(u.board)d.dataset.board=u.board}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-17a">
+<link rel="stylesheet" href="style.css?v=2026-11-17b">
 </head>
 <body>
-<header id="hdr" hidden>
-  <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#a8325e"/><rect x="5" y="20" width="7" height="7" rx="1.5" fill="#f3ecd8"/><rect x="12" y="20" width="7" height="7" rx="1.5" fill="#7fa48e"/><path d="M20.5 4 12 16.5h5.2L15 26l9.5-13.2h-5.3L21.5 4z" fill="#fff"/></svg>Rapid Coach</div>
-  <nav>
-    <a href="#home" data-t="home">Home</a>
-    <a href="#review" data-t="review">Review</a>
-    <a href="#trainer" data-t="trainer">Trainer</a>
-    <a href="#progress" data-t="progress">Progress</a>
-    <a href="#friends" data-t="friends" class="acct-only" hidden>Friends</a>
-  </nav>
-  <div class="job" id="job" hidden><span id="jobTxt"></span><div class="bar"><b id="jobBar"></b></div></div>
-  <div class="who"><span id="whoName"></span><button class="link" id="switchBtn">Switch</button><button class="link acctBtn acct-only" type="button" hidden>Sign in to sync</button><button class="ghost icon-btn" id="setBtn" type="button" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-settings"/></svg></button></div>
-</header>
+<aside class="side" id="hdr" hidden>
+  <div class="side-top">
+    <a class="brand" href="#home" aria-label="Rapid Coach home"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#a8325e"/><rect x="5" y="20" width="7" height="7" rx="1.5" fill="#f3ecd8"/><rect x="12" y="20" width="7" height="7" rx="1.5" fill="#7fa48e"/><path d="M20.5 4 12 16.5h5.2L15 26l9.5-13.2h-5.3L21.5 4z" fill="#fff"/></svg><span>Rapid Coach</span></a>
+    <div class="job" id="job" role="status" hidden><span class="job-spin" aria-hidden="true"></span><span class="job-txt" id="jobTxt"></span><span class="bar"><b id="jobBar"></b></span></div>
+  </div>
+  <nav aria-label="Main"><a href="#home" data-t="home"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-house"/></svg><span>Home</span></a><a href="#review" data-t="review"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg><span>Review</span></a><a href="#trainer" data-t="trainer"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-puzzle"/></svg><span>Trainer</span></a><a href="#openings" data-t="openings"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg><span>Openings</span></a><a href="#progress" data-t="progress"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chart-line"/></svg><span>Progress</span></a><a href="#friends" data-t="friends" class="acct-only" hidden><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-users"/></svg><span>Friends</span></a></nav>
+  <div class="side-foot">
+    <div class="who"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-circle-user-round"/></svg><span id="whoName"></span></div>
+    <button class="ghost side-btn" id="switchBtn" type="button" aria-label="Switch account"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-repeat"/></svg><span class="lbl">Switch account</span></button>
+    <button class="ghost side-btn acctBtn acct-only" type="button" hidden aria-label="Account"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-log-in"/></svg><span class="lbl">Sign in to sync</span></button>
+    <button class="ghost side-btn" id="setBtn" type="button" aria-label="Settings"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-settings"/></svg><span class="lbl">Settings</span></button>
+  </div>
+</aside>
 
 <main>
 <!-- ONBOARDING -->
 <section id="v-start" hidden>
   <div class="invite" id="inviteBanner" role="status" hidden>
-    <div><b>A friend invited you to Rapid Coach.</b> Enter your chess.com or Lichess username to get started, then sign in to accept the invite and compare your training.</div>
+    <span class="invite-ic"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-users"/></svg></span><div><b>A friend invited you to Rapid Coach.</b> Enter your chess.com or Lichess username to get started, then sign in to accept the invite and compare your training.</div>
     <button class="pri" id="invSign" type="button">Sign in to accept</button>
   </div>
   <div class="hero">
@@ -51,11 +52,11 @@
           <option value="blitz">Blitz</option>
           <option value="bullet">Bullet</option>
         </select>
-        <button class="pri" type="submit" id="startBtn">Get my games</button>
+        <button class="pri lg" type="submit" id="startBtn">Get my games<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-right"/></svg></button>
         <div class="status" id="startMsg" role="status"></div>
       </form>
       <ul class="trust">
-        <li>Free</li><li>Open source</li><li>Runs in your browser</li><li>No account needed</li><li>No AI, just Stockfish and clear rules</li>
+        <li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>Free</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>Open source</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>Runs in your browser</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>No account needed</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>No AI, just Stockfish</li>
       </ul>
       <ul>
         <li class="acct-only" hidden>Use more than one device? <button class="link acctBtn" type="button">Sign in to sync</button></li>
@@ -67,11 +68,11 @@
     </div>
   </div>
   <div class="features">
-    <div><h2>Game review</h2><p>Every move of your games checked by Stockfish, with the moments where each game turned.</p></div>
-    <div><h2>Puzzles from your blunders</h2><p>Positions where you went wrong in real games. Find the move you missed.</p></div>
-    <div><h2>Opening trainer</h2><p>Drill the lines you actually reach, with your opponents' real replies and spaced repetition.</p></div>
-    <div><h2>Move explanations</h2><p>See what your move allows and why the better move works, as lines you can step through.</p></div>
-    <div><h2>Daily streaks</h2><p>A small daily goal, XP for training, badges and records. Never for wins, and you can hide it all.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg>Game review</h2><p>Every move of your games checked by Stockfish, with the moments where each game turned.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-puzzle"/></svg>Puzzles from your blunders</h2><p>Positions where you went wrong in real games. Find the move you missed.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg>Opening trainer</h2><p>Drill the lines you actually reach, with your opponents' real replies and spaced repetition.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-circle-help"/></svg>Move explanations</h2><p>See what your move allows and why the better move works, as lines you can step through.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-flame"/></svg>Daily streaks</h2><p>A small daily goal, XP for training, badges and records. Never for wins, and you can hide it all.</p></div>
   </div>
 </section>
 
@@ -129,33 +130,33 @@
 
 <!-- REVIEW -->
 <section id="v-review" hidden>
-  <div class="row" style="margin-bottom:14px">
-    <select id="gamePick" aria-label="Choose a game" style="flex:1;min-width:220px"></select>
+  <div class="review-bar">
+    <select id="gamePick" aria-label="Choose a game"></select>
     <select id="gameFilter" aria-label="Filter games">
       <option value="all">All games</option><option value="loss">Losses</option><option value="win">Wins</option><option value="w">As White</option><option value="b">As Black</option><option value="an">Analysed</option>
     </select>
-    <button id="prevG" aria-label="Previous game">‹</button><button id="nextG" aria-label="Next game">›</button>
+    <button class="icon-btn" id="prevG" type="button" aria-label="Previous game"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button><button class="icon-btn" id="nextG" type="button" aria-label="Next game"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button>
   </div>
-  <div class="grid">
-    <div>
+  <div class="grid review">
+    <div class="board-col">
       <div class="board-row"><div class="evalbar" id="evBar" hidden></div><div class="boardwrap" id="board"></div></div>
       <div class="ctl">
-        <button data-nav="start" aria-label="Start"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-left"/></svg></button><button data-nav="prev" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button>
-        <button data-nav="next" aria-label="Forward"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button><button data-nav="end" aria-label="End"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-right"/></svg></button>
-        <button id="flipBtn" aria-label="Flip board">⇅</button>
+        <button data-nav="start" type="button" aria-label="Start"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-left"/></svg></button><button data-nav="prev" type="button" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button>
+        <button data-nav="next" type="button" aria-label="Forward"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button><button data-nav="end" type="button" aria-label="End"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-right"/></svg></button>
+        <button id="flipBtn" type="button" aria-label="Flip board"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-up-down"/></svg></button>
       </div>
     </div>
-    <div>
-      <h1 id="gTitle">No games yet</h1>
-      <p class="sub" id="gSub"></p>
-      <div class="panel">
-        <div class="row" style="justify-content:space-between"><h2 style="margin:0">Evaluation</h2><span class="small num" id="evNow"></span></div>
+    <div class="sheet">
+      <div class="sheet-head"><h1 id="gTitle">No games yet</h1><p class="sub" id="gSub"></p></div>
+      <div class="sheet-eval">
+        <div class="row" style="justify-content:space-between"><h2>Evaluation</h2><span class="small num" id="evNow"></span></div>
         <div class="fig" id="evFig"></div>
         <div id="anState"></div>
-        <h2 style="margin-top:14px">Your key moments</h2>
-        <div class="km" id="km"></div>
-        <div class="moves num" id="moves"></div>
       </div>
+      <h2>Key moments</h2>
+      <div class="km" id="km"></div>
+      <h2 class="moves-h">Moves</h2>
+      <div class="moves num" id="moves" aria-label="Move list"></div>
     </div>
   </div>
 </section>
@@ -163,21 +164,22 @@
 <!-- TRAINER -->
 <section id="v-trainer" hidden>
   <div class="grid">
-    <div>
+    <div class="board-col">
+      <div class="sess" id="tSess" aria-live="polite"></div>
       <div class="board-row"><div class="evalbar" id="tEv" hidden></div><div class="boardwrap" id="tboard"></div></div>
-      <div class="row" style="margin-top:10px"><button id="tHint">Hint</button><button id="tShow">Show answer</button><button id="tNext" class="pri">Next puzzle</button></div>
+      <div class="ctl ctl-3"><button id="tHint" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-lightbulb"/></svg>Hint</button><button id="tShow" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-eye"/></svg>Show answer</button><button id="tNext" class="pri" type="button">Next<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-skip-forward"/></svg></button></div>
     </div>
     <div>
-      <h1>Your own blunders, as puzzles</h1>
-      <p class="sub">Every position here is one where you went wrong in a real game. Find the move you missed.</p>
-      <div class="panel">
+      <h1>Puzzles from your games</h1>
+      <p class="sub">Each one is a moment you went wrong. Find the move you missed.</p>
+      <div class="coach-card">
         <div id="tPrompt" class="verdict v-info"><span class="skel" style="width:60%" aria-label="Loading puzzles"></span></div>
         <div id="tFeedback"></div>
         <div class="why" id="tWhy" aria-live="polite"></div>
-        <div class="row small" id="tMeta"></div>
+        <div class="small" id="tMeta"></div>
       </div>
       <div class="kpis" id="tStats"></div>
-      <p class="small">Click a piece, then its destination square. A puzzle counts as solved when you find the engine's move, or one that's just as good. Puzzles you miss come back first.</p>
+      <p class="small">Drag or click a piece to move. The engine's move counts, and so does any move that's just as good. Missed puzzles come back first.</p>
     </div>
   </div>
 </section>
@@ -191,7 +193,7 @@
   <div class="kpis" id="pKpis"></div>
   <div class="two">
     <div><h2>Rating</h2><div class="fig tall" id="ratingFig"></div></div>
-    <div><h2>Time used per game <span class="small" id="timeGoal"></span></h2><div class="fig tall" id="timeFig"></div><p class="small">Each dot is a game with at least 15 of your moves; green won, red lost. Red dashed line: goal. Blue: 10-game average.</p></div>
+    <div><h2>Time used per game <span class="small" id="timeGoal"></span></h2><div class="fig tall" id="timeFig"></div><p class="small chart-key"><span><span class="k k-win"></span>won</span><span><span class="k k-loss"></span>lost</span><span><span class="k k-avg"></span>10-game average</span><span><span class="k k-goal"></span>goal</span></p></div>
   </div>
   <div class="two" style="margin-top:24px">
     <div><h2>Blunders and mistakes per game</h2><div class="fig tall" id="errFig"></div><p class="small" id="errNote"></p></div>
@@ -207,19 +209,20 @@
 
 <!-- OPENING TRAINER (reached from Progress → Openings → Practise) -->
 <section id="v-openings" hidden>
-  <p class="small"><a href="#progress">← Progress</a></p>
+  <p class="small"><a class="back" href="#progress"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg>Progress</a></p>
   <div id="oEmpty" hidden><h1>Opening trainer</h1><p class="sub">Play a few more games: an opening needs at least 3 of your games to practise.</p></div>
   <div class="grid" id="oMain">
-    <div>
+    <div class="board-col">
+      <div class="sess" id="oSess" aria-live="polite"></div>
       <div class="board-row"><div class="evalbar" id="oEv" hidden></div><div class="boardwrap" id="oboard"></div></div>
-      <div class="row" style="margin-top:10px"><button id="oRestart" type="button">Restart line</button><button id="oNext" class="pri" type="button">Next line</button></div>
+      <div class="ctl ctl-2"><button id="oRestart" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-rotate-ccw"/></svg>Restart line</button><button id="oNext" class="pri" type="button">Next line<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-skip-forward"/></svg></button></div>
     </div>
     <div>
       <label class="small" for="oPick">Opening</label>
       <select id="oPick" style="width:100%;margin:4px 0 14px"></select>
       <h1 id="oTitle">Opening trainer</h1>
-      <p class="sub">Play your side of the lines from your own games. Your opponents' moves come up as often as they did against you.</p>
-      <div class="panel">
+      <p class="sub">Play your side of the lines you really reach. Opponents reply the way yours did.</p>
+      <div class="coach-card">
         <div id="oPrompt" class="verdict v-info"><span class="skel" style="width:50%" aria-label="Loading"></span></div>
         <div id="oFeedback"></div>
         <div class="why" id="oWhy" aria-live="polite"></div>
@@ -306,7 +309,7 @@
 </dialog>
 
 <dialog id="acct" aria-labelledby="acctTitle">
-  <div class="acct-head"><h2 id="acctTitle">Sync across devices</h2><button class="link" id="acctClose" type="button">Close</button></div>
+  <div class="acct-head"><h2 id="acctTitle">Sync across devices</h2><button class="ghost icon-btn" id="acctClose" type="button" aria-label="Close"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-x"/></svg></button></div>
   <div data-acct="email">
     <p>Sign in with your email to keep your analyses, puzzle progress and baseline on every device you use. There's no password: you get an email with a link and a code. Without an account, everything keeps working in this browser.</p>
     <form id="acctEmailForm">
@@ -335,8 +338,8 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-17a"></script>
+<script src="config.js?v=2026-11-17b"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-17a"></script>
+<script src="app.js?v=2026-11-17b"></script>
 </body>
 </html>
