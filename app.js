@@ -1,4 +1,4 @@
-/* Rapid Coach — free chess coach for chess.com games. GPL-3.0. */
+/* Rapid Coach — free chess coach for chess.com and Lichess games. GPL-3.0. */
 {
 /* ---------- utils ---------- */
 const $=s=>document.querySelector(s);
@@ -14,10 +14,18 @@ const evTxt=cp=>Math.abs(cp)>=9000?(cp>0?"+M":"−M"):(cp>0?"+":cp<0?"−":"")+(
 const mvLabel=i=>Math.floor(i/2)+1+(i%2?"…":".");
 const TCL={"600":"10-minute rapid",rapid:"rapid",blitz:"blitz",bullet:"bullet"};
 
+const SRC={cc:{name:"chess.com"},li:{name:"Lichess"}};
+const srcOf=g=>g.source||(String(g.id).startsWith("li-")?"li":"cc");
+
 /* ---------- state ---------- */
-let P=LS.get("profile",null);           // {user, tc}
+/* V1 keys were rc.<user>.<k>; V2 keys are rc.<source>:<user>.<k>. Rename once. */
+(()=>{try{if(localStorage.getItem("rc.v2"))return;const ks=[];for(let i=0;i<localStorage.length;i++)ks.push(localStorage.key(i));
+ for(const k of ks){const m=k.match(/^rc\.([^.:]+)\.(.+)$/);if(!m)continue;localStorage.setItem("rc.cc:"+m[1]+"."+m[2],localStorage.getItem(k));localStorage.removeItem(k)}
+ localStorage.setItem("rc.v2","1")}catch(e){}})();
+let P=LS.get("profile",null);           // {source:"cc"|"li", user, tc}
+if(P&&!P.source){P.source="cc";LS.set("profile",P)}
 let ALL=[],GAMES=[],CUR=null,PLY=0,GEN=0;
-const uk=k=>P.user+"."+k;
+const uk=k=>P.source+":"+P.user+"."+k;
 
 /* ---------- storage (IndexedDB, falls back to memory) ---------- */
 const DB={db:null,
@@ -40,7 +48,7 @@ const DEPTH=12;
 const JOBS={};
 function job(k,txt,frac){if(txt==null)delete JOBS[k];else JOBS[k]={txt,frac};const ks=Object.keys(JOBS);$("#job").hidden=!ks.length;if(ks.length){const j=JOBS[ks[ks.length-1]];$("#jobTxt").textContent=ks.map(k=>JOBS[k].txt).join(" · ");$("#jobBar").style.width=(j.frac*100)+"%"}}
 
-/* ---------- PGN + chess.com API ---------- */
+/* ---------- game sources: chess.com and Lichess ---------- */
 function parseMoves(pgn){let body=pgn.replace(/\r/g,"").replace(/^\s*\[[^\]]*\]\s*$/gm,"");const clocks=[];
  body=body.replace(/\{[^}]*\}/g,m=>{const c=m.match(/%clk (\d+):(\d+):(\d+(?:\.\d+)?)/);return c?" @"+(+c[1]*3600+ +c[2]*60+Math.floor(+c[3]))+" ":" "});
  while(/\([^()]*\)/.test(body))body=body.replace(/\([^()]*\)/g," ");
@@ -54,11 +62,13 @@ function fromApi(x,user){if(!x.pgn||!x.white||!x.black)return null;const w=x.whi
  const result=me.result==="win"?"win":DRAWS.has(me.result)?"draw":"loss";
  const eco=x.eco?decodeURIComponent(x.eco.split("/").pop()).replace(/-/g," "):((x.pgn.match(/\[ECO "([^"]+)"/)||[])[1]||"Unknown");
  const ts=(x.end_time||0)*1000;
- return {id:"cc-"+(x.uuid||x.url),user,ts,date:new Date(ts).toISOString().slice(0,10),color:w?"w":"b",opp:op.username,myR:me.rating,oppR:op.rating,result,
+ return {id:"cc-"+(x.uuid||x.url),source:"cc",user,ts,date:new Date(ts).toISOString().slice(0,10),color:w?"w":"b",opp:op.username,myR:me.rating,oppR:op.rating,result,
   how:result==="win"?op.result:me.result,eco,moves,clocks,tc:x.time_control,tclass:x.time_class,rules:x.rules,link:x.url||""}}
-async function api(url){for(let a=0;a<4;a++){let r;try{r=await fetch(url)}catch(e){if(a===3)throw new Error("network");await sleep(1500);continue}
-  if(r.status===404||r.status===410)throw new Error("notfound");if(r.status===429){await sleep(2000*(a+1));continue}if(!r.ok)throw new Error("http "+r.status);return r.json()}throw new Error("busy")}
-async function sync(onFirst){const gen=GEN,u=P.user,tc=P.tc,base=`https://api.chess.com/pub/player/${encodeURIComponent(u)}/games`;
+/* o: {h: headers, raw: return the Response, sig: AbortSignal, wait: ms to wait after a 429, onWait} */
+async function api(url,o){o=o||{};for(let a=0;a<4;a++){let r;try{r=await fetch(url,{headers:o.h||{},signal:o.sig})}catch(e){if(e.name==="AbortError")throw e;if(a===3)throw new Error("network");await sleep(1500);continue}
+  if(r.status===404||r.status===410)throw new Error("notfound");if(r.status===429){if(o.onWait)o.onWait();await sleep(o.wait||2000*(a+1));continue}if(!r.ok)throw new Error("http "+r.status);return o.raw?r:r.json()}throw new Error("busy")}
+const sync=onFirst=>P.source==="li"?syncLi(onFirst):syncCc(onFirst);
+async function syncCc(onFirst){const gen=GEN,u=P.user,tc=P.tc,base=`https://api.chess.com/pub/player/${encodeURIComponent(u)}/games`;
  job("sync","Looking up games",0);
  const arc=await api(base+"/archives");const months=(arc.archives||[]).slice().reverse();const done=LS.get(uk("months."+tc),{});
  const todo=months.filter((m,i)=>i<2||!done[m]);const have=new Set(ALL.map(g=>g.id));let added=0;
@@ -70,8 +80,38 @@ async function sync(onFirst){const gen=GEN,u=P.user,tc=P.tc,base=`https://api.ch
   if(i===0&&onFirst)onFirst()}
  job("sync",null);return added}
 
+/* Lichess: one NDJSON stream per sync. Lichess asks for one request at a time and a full minute's pause after a 429. */
+const LI="https://lichess.org",LI_MAX=2000,LI_WAIT=61000;
+const LI_PERF={"600":"rapid",rapid:"rapid",blitz:"blitz",bullet:"bullet"};
+const LI_HOW={mate:"checkmated",resign:"resigned",outoftime:"timeout",timeout:"abandoned",stalemate:"stalemate",draw:"agreed",insufficientMaterialClaim:"insufficient",cheat:"cheat"};
+const liOpts=x=>({wait:LI_WAIT,onWait:()=>job("sync","Lichess asked us to slow down. Waiting a minute",0),...x});
+function fromLichess(x,user){if(!x||!x.moves||!x.players||x.variant!=="standard"||!LI_HOW[x.status])return null;
+ const pid=p=>p&&p.user?p.user.id:"",pname=p=>p.user?p.user.name:p.aiLevel?"Stockfish level "+p.aiLevel:"Anonymous";
+ const w=pid(x.players.white)===user;if(!w&&pid(x.players.black)!==user)return null;const me=w?x.players.white:x.players.black,op=w?x.players.black:x.players.white;
+ const moves=x.moves.trim().split(/\s+/).filter(Boolean);if(!moves.length)return null;
+ const result=x.winner?(x.winner===(w?"white":"black")?"win":"loss"):"draw",ini=x.clock?x.clock.initial:600,inc=x.clock?x.clock.increment:0,ts=x.lastMoveAt||x.createdAt||0;
+ return {id:"li-"+x.id,source:"li",user,ts,date:new Date(ts).toISOString().slice(0,10),color:w?"w":"b",opp:pname(op),myR:me.rating,oppR:op.rating,result,how:LI_HOW[x.status],
+  eco:x.opening&&x.opening.name?x.opening.name.replace(/[:,]/g,"").replace(/\s+/g," "):"Unknown",moves,clocks:Array.isArray(x.clocks)?x.clocks.map(c=>Math.floor(c/100)):[],
+  tc:inc?ini+"+"+inc:String(ini),tclass:x.speed,rules:"chess",link:LI+"/"+x.id+(w?"":"/black")}}
+async function syncLi(onFirst){const gen=GEN,u=P.user,tc=P.tc,key=uk("last."+tc),since=LS.get(key,0);
+ job("sync","Looking up games",0);let total=LI_MAX;
+ if(!since){try{const p=await api(`${LI}/api/user/${encodeURIComponent(u)}`,liOpts()),pf=p.perfs&&p.perfs[LI_PERF[tc]];if(pf&&pf.games)total=Math.min(pf.games,LI_MAX)}catch(e){}}
+ if(gen!==GEN)return 0;
+ const q=new URLSearchParams({perfType:LI_PERF[tc],clocks:"true",opening:"true",moves:"true"});if(since)q.set("since",since+1);else q.set("max",LI_MAX);
+ const ctl=new AbortController(),r=await api(`${LI}/api/games/user/${encodeURIComponent(u)}?${q}`,liOpts({h:{Accept:"application/x-ndjson"},raw:true,sig:ctl.signal}));
+ const have=new Set(ALL.map(g=>g.id)),rd=r.body.getReader(),dec=new TextDecoder();let added=0,seen=0,newest=since,buf="",batch=[],first=true;
+ const flush=()=>{if(!batch.length)return;ALL.push(...batch);DB.put(batch);added+=batch.length;batch=[];refreshGames();if(first&&onFirst){first=false;onFirst()}};
+ const take=line=>{line=line.trim();if(!line)return;let x;try{x=JSON.parse(line)}catch(e){return}seen++;if(x.createdAt>newest)newest=x.createdAt;
+  const g=fromLichess(x,u);if(g&&!have.has(g.id)&&matchTc({rules:g.rules,time_control:g.tc,time_class:g.tclass},tc)){have.add(g.id);batch.push(g)}};
+ try{for(;;){if(gen!==GEN){ctl.abort();return added}const {done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+  let nl;while((nl=buf.indexOf("\n"))>=0){take(buf.slice(0,nl));buf=buf.slice(nl+1)}
+  if(batch.length>=(first?10:50))flush();job("sync",`Fetching Lichess games (${seen}${since?"":" of about "+total})`,since?.5:Math.min(1,seen/total))}
+  take(buf)}
+ catch(e){if(gen!==GEN)return added;flush();throw new Error("network")}
+ if(gen!==GEN)return added;flush();if(newest>since)LS.set(key,newest);job("sync",null);return added}
+
 /* ---------- game helpers ---------- */
-function refreshGames(){GAMES=ALL.filter(g=>g.user===P.user&&matchTc({rules:g.rules||"chess",time_control:g.tc,time_class:g.tclass},P.tc)).sort((a,b)=>a.ts-b.ts);fillPicker();buildPuzzles()}
+function refreshGames(){GAMES=ALL.filter(g=>g.user===P.user&&srcOf(g)===P.source&&matchTc({rules:g.rules||"chess",time_control:g.tc,time_class:g.tclass},P.tc)).sort((a,b)=>a.ts-b.ts);fillPicker();buildPuzzles()}
 const famOf=e=>{const w=(e||"Unknown").split(" ");const o=[];for(const x of w){if(/\d|\.\.\./.test(x)&&o.length>=2){o.push(x);break}o.push(x)}return o.slice(0,5).join(" ")};
 function replay(g){if(g._f)return g;const c=new Chess(),f=[c.fen()],mv=[];for(const s of g.moves){const m=c.move(s);if(!m)break;mv.push(m);f.push(c.fen())}g._f=f;g._m=mv;return g}
 function errorsOf(g){const an=g.an,out=[];if(!an)return out;for(let i=0;i<an.ev.length-1;i++){const white=i%2===0,b=an.ev[i],a=an.ev[i+1];if(a==null||b==null)continue;const s=white?1:-1,drop=wp(s*b)-wp(s*a),k=drop>=30?"blunder":drop>=20?"mistake":drop>=10?"inacc":null;
@@ -112,7 +152,7 @@ function fillPicker(){const list=filtered().slice(0,500),sel=$("#gamePick");
 function openGame(g,ply){CUR=replay(g);RB.flip=g.color==="b";PLY=ply==null?0:ply;
  const res=g.result==="win"?"Won":g.result==="loss"?"Lost":"Drew",how={checkmated:"checkmate",resigned:"resignation",timeout:"on time",abandoned:"abandoned"}[g.how];
  $("#gTitle").textContent=`${res} with ${g.color==="w"?"White":"Black"}${how?` (${how})`:""}`;
- $("#gSub").innerHTML=`${esc(g.date)} · ${esc(famOf(g.eco))} · you ${g.myR} vs ${esc(g.opp)} ${g.oppR} · ${Math.ceil(g.moves.length/2)} moves${g.link?` · <a href="${esc(g.link)}" target="_blank" rel="noopener">on chess.com</a>`:""}`;
+ $("#gSub").innerHTML=`${esc(g.date)} · ${esc(famOf(g.eco))} · you ${g.myR} vs ${esc(g.opp)} ${g.oppR} · ${Math.ceil(g.moves.length/2)} moves${g.link?` · <a href="${esc(g.link)}" target="_blank" rel="noopener">on ${SRC[srcOf(g)].name}</a>`:""}`;
  renderMoves();renderKM();renderAnState();show();$("#gamePick").value=g.id}
 function show(){const g=CUR;if(!g)return;const m=g._m[PLY-1],o={last:m?{from:m.from,to:m.to}:null,arrows:[]};
  if(g.an&&PLY<g.moves.length&&g.an.best[PLY]){const er=errorsOf(g).find(e=>e.i===PLY);if(er&&er.kind!=="inacc"){const nx=g._m[PLY],b=g.an.best[PLY];o.arrows.push({from:nx.from,to:nx.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"})}}
@@ -161,7 +201,7 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
   if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);AQ.done++;maybeBaseline();
   if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle())}}
  catch(e){$("#anState").innerHTML='<div class="verdict v-no">The engine could not start in this browser.</div>'}
- AQ=null;job("an",null);maybeBaseline();if(route.cur==="progress")renderProgress();if(CUR&&!CUR.an)renderAnState()}
+ AQ=null;job("an",null);if(P&&gen===GEN)maybeBaseline();if(route.cur==="progress")renderProgress();if(CUR&&!CUR.an)renderAnState()}
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
 
 /* ---------- TRAINER ---------- */
@@ -255,14 +295,18 @@ function renderOps(){const col=$("#opColor").value,m={};GAMES.filter(g=>g.color=
 $("#opColor").onchange=renderOps;
 $("#anMore").onclick=()=>{analyseRecent(20);$("#anNote").textContent="Queued — see progress at the top."};
 $("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10)});renderProgress()};
-$("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sync();$("#anNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#anNote").textContent="Couldn't reach chess.com. Try again in a minute."}$("#syncBtn").disabled=false;renderProgress()};
+$("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sync();$("#anNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#anNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#syncBtn").disabled=false;renderProgress()};
 
 /* ---------- onboarding ---------- */
 const HB=new Board($("#heroBoard"));HB.set("r1bq1rk1/pp3ppp/2n1pn2/3p4/1bPP4/2N1PN2/PP1B1PPP/R2QKB1R w KQ - 0 8",{arrows:[{from:"c4",to:"d5",c:"green"},{from:"f1",to:"d3",c:"red"}]});
-$("#startForm").onsubmit=async e=>{e.preventDefault();const u=$("#uName").value.trim().toLowerCase(),tc=$("#uTc").value;if(!u)return;
- $("#startBtn").disabled=true;$("#startMsg").textContent="Looking you up on chess.com…";
- try{await api(`https://api.chess.com/pub/player/${encodeURIComponent(u)}`)}catch(x){$("#startMsg").textContent=x.message==="notfound"?`No chess.com player called “${u}”.`:"Couldn't reach chess.com. Check your connection and try again.";$("#startBtn").disabled=false;return}
- P={user:u,tc};LS.set("profile",P);await enter(true)};
+const srcPick=()=>(document.querySelector('input[name="uSrc"]:checked')||{}).value||"cc";
+function srcLabel(){const s=srcPick();$("#uNameLbl").textContent=SRC[s].name+" username";$("#uName").placeholder=s==="li"?"e.g. thibault":"e.g. magnuscarlsen"}
+document.querySelectorAll('input[name="uSrc"]').forEach(r=>r.onchange=()=>{srcLabel();LS.set("lastSrc",srcPick())});
+$("#startForm").onsubmit=async e=>{e.preventDefault();const u=$("#uName").value.trim().toLowerCase(),tc=$("#uTc").value,s=srcPick(),nm=SRC[s].name;if(!u)return;
+ $("#startBtn").disabled=true;$("#startMsg").textContent=`Looking you up on ${nm}…`;
+ try{const p=s==="li"?await api(`${LI}/api/user/${encodeURIComponent(u)}`,liOpts()):await api(`https://api.chess.com/pub/player/${encodeURIComponent(u)}`);if(p&&p.disabled)throw new Error("notfound")}
+ catch(x){$("#startMsg").textContent=x.message==="notfound"?`No ${nm} player called “${u}”.`:`Couldn't reach ${nm}. Check your connection and try again.`;$("#startBtn").disabled=false;return}
+ P={source:s,user:u,tc};LS.set("profile",P);await enter(true)};
 $("#switchBtn").onclick=()=>{GEN++;Engine.q.length=0;LS.set("profile",null);P=null;location.hash="";boot()};
 
 /* ---------- routing ---------- */
@@ -273,13 +317,13 @@ function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});$("#whoName").textContent=P.user+" · "+TCL[P.tc];refreshGames();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
- try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
+ try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
   first();analyseRecent(fresh?20:Math.max(n,0)?Math.min(n,20):0)}
- catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent="Couldn't load your games from chess.com. Try again in a minute.";$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
+ catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=`Couldn't load your games from ${SRC[P.source].name}. Try again in a minute.`;$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
  if(!fresh&&!AQ)analyseRecent(5)}
-async function boot(){$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
+async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
 (async()=>{await DB.open();ALL=await DB.all();boot()})();
 }

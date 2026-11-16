@@ -1,6 +1,6 @@
 # Rapid Coach V2 plan
 
-Status: plan only, nothing built yet. The V1 rules still hold: all compute in the browser, no AI calls, free to run, GPL-3.0, one request at a time to every game API.
+Status: part 3 (Lichess) and the groundwork's source-aware keys are built. Parts 1 and 2 are not started. The V1 rules still hold: all compute in the browser, no AI calls, free to run, GPL-3.0, one request at a time to every game API.
 
 Build order: **3 → 1 → 2**. Lichess first, because it changes the local data keys that sync then has to mirror; the leaderboard last, because it needs accounts.
 

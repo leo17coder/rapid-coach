@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rapid Coach</title>
-<meta name="description" content="Free chess coach for your chess.com games: engine review, puzzles from your own blunders, and progress tracking. Runs in your browser.">
+<meta name="description" content="Free chess coach for your chess.com and Lichess games: engine review, puzzles from your own blunders, and progress tracking. Runs in your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%23ead6b1'/%3E%3Crect width='1' height='1' fill='%23a8784c'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23a8784c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700&family=Noto+Sans+Symbols+2&display=swap" rel="stylesheet">
@@ -27,10 +27,15 @@
 <section id="v-start" hidden>
   <div class="hero">
     <div>
-      <h1>A coach for your own chess.com games</h1>
+      <h1>A coach for your own chess.com and Lichess games</h1>
       <p>Enter your username. Rapid Coach pulls your games, checks every move with Stockfish, turns your blunders into puzzles, and shows what's really costing you rating points.</p>
       <form id="startForm">
-        <label for="uName">chess.com username</label>
+        <fieldset class="seg">
+          <legend>Where you play</legend>
+          <label><input type="radio" name="uSrc" id="uSrcCc" value="cc" checked><span>chess.com</span></label>
+          <label><input type="radio" name="uSrc" id="uSrcLi" value="li"><span>Lichess</span></label>
+        </fieldset>
+        <label for="uName" id="uNameLbl">chess.com username</label>
         <input id="uName" autocomplete="username" autocapitalize="off" spellcheck="false" required placeholder="e.g. magnuscarlsen">
         <label for="uTc">Games to coach</label>
         <select id="uTc">
@@ -131,7 +136,7 @@
 
 <footer>
   <span>Free and open source.</span>
-  <span>Not affiliated with chess.com; uses its public data API.</span>
+  <span>Not affiliated with chess.com or Lichess; uses their public data APIs.</span>
   <span>Engine: <a href="https://github.com/official-stockfish/Stockfish">Stockfish</a> via <a href="https://github.com/nmrugg/stockfish.js">stockfish.js</a> (GPL-3.0).</span>
   <a href="https://github.com/leo17coder/rapid-coach">Source code</a>
 </footer>

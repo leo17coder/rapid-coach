@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Rapid Coach: a free chess coach for chess.com games, shared with friends and deployed on GitHub Pages at https://leo17coder.github.io/rapid-coach/ (from `main`, repo root). Static site with **no build step, no package manager, no tests, no linter**: `index.html` + `style.css` + `app.js`, with third-party code vendored in `vendor/`.
+Rapid Coach: a free chess coach for chess.com and Lichess games, shared with friends and deployed on GitHub Pages at https://leo17coder.github.io/rapid-coach/ (from `main`, repo root). Static site with **no build step, no package manager, no tests, no linter**: `index.html` + `style.css` + `app.js`, with third-party code vendored in `vendor/`.
 
 ## Run locally
 
@@ -19,25 +19,25 @@ To check a change, load the page (Playwright/Chromium is available in cloud sess
 ## Decisions to keep
 
 - **Everything runs in the visitor's browser**: engine analysis, puzzles, insights. No server compute and no AI/LLM calls. Insights are fixed, hand-written rules in `insights()` in `app.js`.
-- **chess.com public API only** (`https://api.chess.com/pub/...`), fetched **one request at a time** (serially, never `Promise.all`) to respect their rate limit. `api()` retries on network errors and backs off on 429.
+- **Public game APIs only**: chess.com (`https://api.chess.com/pub/...`) and Lichess (`https://lichess.org/api/...`), fetched **one request at a time** (serially, never `Promise.all`). `api()` retries on network errors and backs off on 429; Lichess calls pass `liOpts()`, which waits a full minute after a 429 as Lichess requires.
 - **Must stay free to run**: GitHub Pages plus free tiers only.
-- **GPL-3.0** because Stockfish is shipped. Keep `LICENSE` and `vendor/*-LICENSE.txt`. The app is not affiliated with chess.com; keep that statement.
+- **GPL-3.0** because Stockfish is shipped. Keep `LICENSE` and `vendor/*-LICENSE.txt`. The app is not affiliated with chess.com or Lichess; keep that statement.
 - No CDN dependencies at runtime: vendor any new library into `vendor/` with its licence file.
 
 ## Architecture (`app.js`)
 
 All code sits in one top-level `{ ... }` block (block-scoped, no modules, no globals leaked). `chess.js` is loaded first as a global `Chess` and is the **old 0.x API** (`game_over()`, `in_checkmate()`, `move({from,to,promotion})`), not the 1.x camelCase API. Code style is dense, one-liner-heavy; match it when editing.
 
-**State and cancellation.** Module-level `let`s: `P` (profile `{user, tc}`), `ALL` (every stored game), `GAMES` (`ALL` filtered to the current user and time control, oldest first), `CUR`/`PLY` (game open in Review). `GEN` is a generation counter bumped by `enter()` on every profile switch; long-running async loops (`sync`, the analysis `queue`) capture `GEN` at start and stop when it changes. Any new async work must follow this pattern.
+**State and cancellation.** Module-level `let`s: `P` (profile `{source: "cc"|"li", user, tc}`), `ALL` (every stored game), `GAMES` (`ALL` filtered to the current source, user and time control, oldest first), `CUR`/`PLY` (game open in Review). `GEN` is a generation counter bumped by `enter()` on every profile switch; long-running async loops (`sync`, the analysis `queue`) capture `GEN` at start and stop when it changes. Any new async work must follow this pattern, and must not touch `P` after the generation changed (it may be `null` after Switch).
 
 **Storage.**
 - IndexedDB `rapid-coach` v1, single store `games` (keyPath `id`) via `DB`. Game objects are stored without the cached replay fields `_f` (FENs per ply) and `_m` (chess.js move objects), which `replay(g)` rebuilds lazily.
-- `localStorage` through `LS`, every key prefixed `rc.`. `profile` is global; per-user keys go through `uk(k)` → `<user>.<k>`: `months.<tc>` (archive months already fully fetched), `trainer` (puzzle progress `{puzzleId: {seen, ok, fail}}`), `base.<tc>` (baseline stats snapshot).
+- `localStorage` through `LS`, every key prefixed `rc.`. `profile`, `lastSrc` and `v2` are global; per-user keys go through `uk(k)` → `<source>:<user>.<k>`: `months.<tc>` (chess.com archive months already fully fetched), `last.<tc>` (Lichess: newest `createdAt` seen, sent as `since`), `trainer` (puzzle progress `{puzzleId: {seen, ok, fail}}`), `base.<tc>` (baseline stats snapshot). V1 keys had no source prefix; a one-time migration at startup renames them to `cc:` and sets `rc.v2`.
 
-**Game record** (`fromApi`): `{id:"cc-<uuid>", user, ts, date, color:"w"|"b", opp, myR, oppR, result:"win"|"draw"|"loss", how, eco, moves:[SAN], clocks:[secs remaining per ply], tc, tclass, rules, link}`. After analysis it gains `an: {ev:[cp per position, white's point of view, mate = ±10000], best:[UCI best move per ply], depth}`.
+**Game record** (`fromApi` for chess.com, `fromLichess` for Lichess, same shape): `{id:"cc-<uuid>"|"li-<id>", source, user, ts, date, color:"w"|"b", opp, myR, oppR, result:"win"|"draw"|"loss", how, eco, moves:[SAN], clocks:[secs remaining per ply], tc, tclass, rules, link}`. `tc` uses chess.com's format (`"600"`, `"180+2"`) for both sources, and `how` uses chess.com's result codes (`timeout`, `resigned`, `checkmated`...), which `fromLichess` maps to via `LI_HOW`. V1 records have no `source` field; use `srcOf(g)`. After analysis it gains `an: {ev:[cp per position, white's point of view, mate = ±10000], best:[UCI best move per ply], depth}`.
 
 **Pipeline.**
-1. `sync()` lists `/games/archives`, always refetches the two most recent months, skips older months marked in `months.<tc>`, keeps only games matching the time control (`matchTc`: `"600"` means exactly 10+0, otherwise chess.com `time_class`).
+1. `sync()` dispatches on `P.source`. `syncCc()` lists `/games/archives`, always refetches the two most recent months and skips older months marked in `months.<tc>`. `syncLi()` reads one NDJSON stream (`perfType`, `clocks`, `opening`; `max=2000` first, then `since`) and adds games in batches as lines arrive. Both keep only games matching the time control (`matchTc`: `"600"` means exactly 10+0, otherwise `time_class`/`speed`).
 2. `queue()` is the single serial analysis queue: for every position of each game it calls `Engine.eval(fen, DEPTH=12)`; `Engine` is one Stockfish worker with its own FIFO of UCI jobs. Finished games are written back to IndexedDB, then UI, puzzles and baseline are refreshed.
 3. `errorsOf(g)` classifies moves by the drop in the mover's win percentage `wp(cp)`: ≥10 inaccuracy, ≥20 mistake, ≥30 blunder. `serious()` = the player's own mistakes and blunders.
 4. Puzzles (`buildPuzzles`) are **derived, not stored**: every serious error from a position with `wp ≥ 30` and a known best move; id `<gameId>:<ply>`. A move is accepted if it equals the engine move or is within 8 win-% points of the position's eval.
@@ -47,4 +47,4 @@ All code sits in one top-level `{ ... }` block (block-scoped, no modules, no glo
 
 ## Roadmap
 
-V2 (planned, see `docs/V2-PLAN.md`): optional Supabase login (magic link) to sync across devices while still working without an account, a friends leaderboard, and Lichess as a second game source.
+V2 (see `docs/V2-PLAN.md`): Lichess as a second game source is done. Still to build: optional Supabase login (magic link) to sync across devices while still working without an account, then a friends leaderboard.

@@ -1,8 +1,8 @@
 # Rapid Coach
 
-A free chess coach for your chess.com games. Enter a username and it:
+A free chess coach for your chess.com and Lichess games. Enter a username and it:
 
-- pulls your games from chess.com's public data API,
+- pulls your games from chess.com's or Lichess's public API,
 - checks every move with Stockfish (running in your browser),
 - shows your key moments, with the better move, the evaluation swing and the time you spent,
 - turns your own blunders into puzzles, and
@@ -19,7 +19,8 @@ No accounts, no server, no AI calls. Everything runs and is stored in the visito
 | `vendor/stockfish-19-lite-single.*` | Stockfish 19 (lite NNUE) compiled to WebAssembly, run in a Web Worker |
 | `vendor/chess.js` | Move legality and PGN replay |
 
-- **Games**: `https://api.chess.com/pub/player/<user>/games/archives`, then each monthly archive, one request at a time (chess.com doesn't rate-limit requests made one at a time). Past months are cached and not fetched again.
+- **Games (chess.com)**: `https://api.chess.com/pub/player/<user>/games/archives`, then each monthly archive, one request at a time (chess.com doesn't rate-limit requests made one at a time). Past months are cached and not fetched again.
+- **Games (Lichess)**: one streamed request to `https://lichess.org/api/games/user/<user>` (newest 2,000 games on the first load, then only games since the last one). After a 429 the app waits a full minute, as Lichess asks.
 - **Analysis**: every position is analysed to depth 12. A move counts as an inaccuracy, mistake or blunder when the mover's winning chances drop by 10, 20 or 30 percentage points.
 - **Puzzles**: every blunder or mistake made from a position that wasn't already lost becomes a puzzle. The answer is the engine's move, or any move within 8 points of it.
 - **Insights**: fixed rules over the analysed games, such as time used, errors made when already winning, unpunished opponent blunders, missed mates, error phase, opening scores, losses on time, long games and colour gap.
@@ -46,10 +47,10 @@ GPL-3.0 (see `LICENSE`), because the app ships Stockfish, which is GPL-3.0.
 Stockfish: https://github.com/official-stockfish/Stockfish · stockfish.js: https://github.com/nmrugg/stockfish.js (licence in `vendor/STOCKFISH-LICENSE.txt`).
 chess.js © Jeff Hlywa, BSD-2-Clause (`vendor/CHESSJS-LICENSE.txt`).
 
-Not affiliated with or endorsed by chess.com.
+Not affiliated with or endorsed by chess.com or Lichess.
 
 ## Roadmap (V2)
 
 - Optional accounts (Supabase) to sync across devices
 - Friends leaderboard: blunders per game, time used, puzzles solved
-- Lichess support
+- ~~Lichess support~~ (done)
