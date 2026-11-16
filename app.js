@@ -32,7 +32,7 @@ const uk=k=>acct()+"."+k;
 const DB={db:null,
  open(){return new Promise(res=>{try{const r=indexedDB.open("rapid-coach",2);r.onupgradeneeded=()=>{const d=r.result;for(const n of ["games","pending"])if(!d.objectStoreNames.contains(n))d.createObjectStore(n,{keyPath:"id"})};r.onsuccess=()=>{this.db=r.result;res()};r.onerror=()=>res()}catch(e){res()}})},
  all(){return new Promise(res=>{if(!this.db)return res([]);try{const q=this.db.transaction("games").objectStore("games").getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>res([])}catch(e){res([])}})},
- put(gs){if(!this.db||!gs.length)return;try{const s=this.db.transaction("games","readwrite").objectStore("games");gs.forEach(g=>{const {_f,_m,...plain}=g;s.put(plain)})}catch(e){}},
+ put(gs){if(!this.db||!gs.length)return;try{const s=this.db.transaction("games","readwrite").objectStore("games");gs.forEach(g=>{const plain={};for(const k in g)if(k[0]!=="_")plain[k]=g[k];s.put(plain)})}catch(e){}},
  /* pending: {id: gameId, an} pulled from the account before the game itself was fetched on this device */
  pend(){return new Promise(res=>{if(!this.db)return res([]);try{const q=this.db.transaction("pending").objectStore("pending").getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>res([])}catch(e){res([])}})},
  pendPut(xs){if(!this.db||!xs.length)return;try{const s=this.db.transaction("pending","readwrite").objectStore("pending");xs.forEach(x=>s.put(x))}catch(e){}},
@@ -164,7 +164,7 @@ function openGame(g,ply){CUR=replay(g);RB.flip=g.color==="b";PLY=ply==null?0:ply
  $("#gTitle").textContent=`${res} with ${g.color==="w"?"White":"Black"}${how?` (${how})`:""}`;
  $("#gSub").innerHTML=`${esc(g.date)} · ${esc(famOf(g.eco))} · you ${g.myR} vs ${esc(g.opp)} ${g.oppR} · ${Math.ceil(g.moves.length/2)} moves${g.link?` · <a href="${esc(g.link)}" target="_blank" rel="noopener">on ${SRC[srcOf(g)].name}</a>`:""}`;
  renderMoves();renderKM();renderAnState();show();$("#gamePick").value=g.id}
-function show(){const g=CUR;if(!g)return;const m=g._m[PLY-1],o={last:m?{from:m.from,to:m.to}:null,arrows:[]};
+function show(){const g=CUR;if(!g)return;if(g.an&&GS&&!GS.rev[g.id]){(g._seen||(g._seen=new Set())).add(PLY);if(g._seen.size>=8){GS.rev[g.id]=1;gAdd(g.result==="loss"?{rv:1,rvl:1}:{rv:1})}}const m=g._m[PLY-1],o={last:m?{from:m.from,to:m.to}:null,arrows:[]};
  if(g.an&&PLY<g.moves.length&&g.an.best[PLY]){const er=errorsOf(g).find(e=>e.i===PLY);if(er&&er.kind!=="inacc"){const nx=g._m[PLY],b=g.an.best[PLY];o.arrows.push({from:nx.from,to:nx.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"})}}
  RB.set(g._f[PLY],o);document.querySelectorAll("#moves button,#km button").forEach(b=>b.classList.toggle("on",+b.dataset.p===PLY));
  const on=document.querySelector("#moves button.on"),mv=$("#moves");if(on){const t=on.offsetTop;if(t<mv.scrollTop||t>mv.scrollTop+mv.clientHeight-30)mv.scrollTop=t-mv.clientHeight/2}
@@ -209,9 +209,9 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
   for(let i=0;i<g._f.length;i++){if(gen!==GEN)break;const c=new Chess(g._f[i]);if(c.game_over()){ev.push(c.in_checkmate()?(c.turn()==="w"?-10000:10000):0);best.push(null)}else{const r=await Engine.eval(g._f[i],DEPTH);ev.push(r.cp);best.push(r.best)}
    job("an",`Analysing game ${AQ.done+1} of ${AQ.done+AQ.list.length+1}`,(i+1)/g._f.length)}
   if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);Fr.soon();AQ.done++;maybeBaseline();
-  if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle())}}
+  if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.cur==="home")renderHome()}}
  catch(e){$("#anState").innerHTML='<div class="verdict v-no">The engine could not start in this browser.</div>'}
- AQ=null;job("an",null);if(P&&gen===GEN)maybeBaseline();if(route.cur==="progress")renderProgress();if(CUR&&!CUR.an)renderAnState()}
+ AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck()}if(route.cur==="progress")renderProgress();if(route.cur==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
 
 /* ---------- TRAINER ---------- */
@@ -260,8 +260,10 @@ Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.
  if(A&&!o.ok){const r=A.L[1];S.push(`After ${A.L[0].san}${r?`, ${opp} plays ${r.san}`:""}${la?` and ${la.y}`:sw(ev0,A.cp)?`: ${sw(ev0,A.cp)}`:""}.`)}
  if(A&&o.ok)S.push(`${A.L[0].san} works: ${la?la.t:`it keeps the evaluation at ${evTxt(A.cp)}`}.`);
  if(B)S.push(`${B.L[0].san} is better: ${lb?lb.t:`the evaluation stays ${evTxt(B.cp)}`}.`);
- this.lines=[A&&{title:o.ok?"Why it works":"Your move",c:o.ok?"green":"red",x:A,lab:la},B&&{title:"Better",c:"green",x:B,lab:lb}].filter(Boolean);this.cur=null;
- this.el.innerHTML=`<p class="why-say">${S.map(esc).join(" ")}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${l.title}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
+ this.render(S.join(" "),[A&&{title:o.ok?"Why it works":"Your move",c:o.ok?"green":"red",x:A,lab:la},B&&{title:"Better",c:"green",x:B,lab:lb}].filter(Boolean))};
+/* draw a sentence and lines ({title, c: "red"|"green", x: {fen, L}, lab: {t}}); also used by the start screen's demo */
+Why.prototype.render=function(say,lines){this.lines=lines;this.cur=null;
+ this.el.innerHTML=`<p class="why-say">${esc(say)}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${l.title}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
   `<p class="why-moves">${wMoves(l.x.fen,l.x.L.slice(0,WHY_SHOW)).map((m,k)=>`${m.num?`<span class="num">${m.num}</span> `:""}<button class="why-mv" type="button" data-k="${k+1}">${esc(m.san)}</button>`).join(" ")}</p>`+
   `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">◀ Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward ▶</button><button class="link" type="button" data-a="reset">Back to the position</button></div></div>`).join("");
  this.el.querySelectorAll(".why-line").forEach(d=>{const i=+d.dataset.i;d.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>this.step(i,+b.dataset.k));
@@ -285,10 +287,10 @@ function loadPuzzle(p){PI=p;HINT=0;DONE=false;TW.clear();$("#tFeedback").innerHT
 const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id);Fr.soon()};
 async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;TW.clear();
  const back=()=>TB.set(c.fen(),{last:{from,to}});
- TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={});st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
+ TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={}),was=!!st.ok;st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
  if(!ok){$("#tFeedback").innerHTML='<div class="small">Checking your move…</div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
  if(PI!==p)return;
- if(ok){DONE=true;st.ok=1;saveTS();const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div><button class="link" id="tWhyBtn" type="button">Why?</button>`;
+ if(ok){DONE=true;st.ok=1;const award=!was&&!st.x;if(award)st.x=1;saveTS();if(award)gAdd(st.fail?{pz:1}:{pz:1,p1:1});const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div><button class="link" id="tWhyBtn" type="button">Why?</button>`;
   $("#tWhyBtn").onclick=()=>{$("#tWhyBtn").remove();TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:back})}}
  else{st.fail=(st.fail||0)+1;st.ok=0;saveTS();$("#tFeedback").innerHTML=`<div class="verdict v-no">${esc(mv.san)} isn't it. Look again at checks, captures and threats — for both sides.</div><button id="tRetry">Try again</button>`;$("#tRetry").onclick=()=>loadPuzzle(p);
   TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),best:p.e.best,restore:back})}
@@ -336,9 +338,9 @@ const opCore=()=>OT?[...OT.T.values()].filter(n=>n.mine&&(n.n>=2||n.weak)):[];
 function opNeed(k,d){const n=OT.T.get(k);if(!n||d<0)return 0;let v=n.mine&&(n.n>=2||n.weak)&&isDue(k)?1:0;if(d>0&&!v)for(const x of Object.values(n.mv)){v=Math.max(v,opNeed(x.ck,d-1));if(v)break}return v}
 async function opEval(fen,d){const k=posKey(fen)+"|"+d;if(OEV.has(k))return OEV.get(k);const r=await Engine.eval(fen,d);OEV.set(k,r);return r}
 function opGrade(k,ok){const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0}),now=Date.now();
- if(ok){if(!x.due||x.due<=now){x.s=(x.s||0)+1;x.due=now+OP_IV[Math.min(x.s,OP_IV.length-1)]*864e5}x.ok=(x.ok||0)+1}
+ let xp=null;if(ok){if(!x.due||x.due<=now){x.s=(x.s||0)+1;x.due=now+OP_IV[Math.min(x.s,OP_IV.length-1)]*864e5;xp=x.s===OP_LEARNED?{op:1,ol:1}:{op:1}}x.ok=(x.ok||0)+1}
  else{x.s=0;x.due=now+10*6e4;x.miss=(x.miss||0)+1}     // a miss comes back within the session
- x.at=now;saveOPS(k);const st=LS.get(uk("opstart"),{});if(!st[OT.key]){st[OT.key]=now;LS.set(uk("opstart"),st);Sync.mark("ops",acct()+"|"+OT.key)}}
+ x.at=now;saveOPS(k);const st=LS.get(uk("opstart"),{});if(!st[OT.key]){st[OT.key]=now;LS.set(uk("opstart"),st);Sync.mark("ops",acct()+"|"+OT.key)}if(xp)gAdd(xp)}
 /* opponent move: weighted by how often my opponents played it, nudged towards lines with positions due for review;
    where my games are thin (< 3 games), add the Lichess explorer's moves at my rating (worth 2 games in total) */
 async function opPickOpp(fen,n){const own=n?Object.values(n.mv):[],tot=own.reduce((a,x)=>a+x.n,0),W=new Map();
@@ -431,6 +433,141 @@ function renderExplorer(){const on=!!LiAuth.token();$("#oExNote").textContent=Li
  $("#oExBtn").textContent=on?"Disconnect Lichess":"Connect Lichess"}
 $("#oExBtn").onclick=async()=>{if(LiAuth.token()){await LiAuth.disconnect();LiAuth.msg="Lichess disconnected.";renderExplorer()}else{try{await LiAuth.connect()}catch(e){LiAuth.msg="Couldn't start the Lichess connection in this browser.";renderExplorer()}}};
 
+/* ---------- GAMIFICATION (rule-based, from local data; synced as one row per account) ----------
+   GS = uk("game") = {days: {"YYYY-MM-DD": {pz, p1, op, ol, rv, rvl, g, n, e}}, badges: {id: ms}, rec: {bw, ls, bb}, set: {int, hide, at}, rev: {gameId: 1}, at}
+   days counts (local date): pz puzzles solved (first solve only), p1 of them on the first try, op opening positions right on review,
+   ol positions that became learned, rv games reviewed (rvl losses), g daily goal met, n/e trained late at night / early.
+   XP, streak, freezes, level, weekly challenge and best week are derived from days, so merging devices = per-field max/union. XP is for training only. */
+const GX={pz:10,p1:5,op:3,ol:15,rv:10,g:25},GU={pz:1,op:1,rv:3},GOAL={light:5,normal:10,serious:20},WK_BONUS=100,FZ_MAX=2;
+const LEVELS=[["Pawn",0],["Knight",500],["Bishop",1500],["Rook",3500],["Queen",7000],["King",12000]],ROMAN=["I","II","III","IV","V","VI","VII","VIII","IX","X"];
+const CH=[{t:"Solve 30 puzzles",n:30,k:"pz"},{t:"Get 40 opening positions right",n:40,k:"op"},{t:"Review 3 of your losses",n:3,k:"rvl"},{t:"Meet your daily goal on 5 days",n:5,k:"g"},{t:"Solve 10 puzzles on the first try",n:10,k:"p1"}];
+const dkey=t=>{const d=new Date(t==null?Date.now():t);return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const dAdd=(k,n)=>{const d=new Date(k+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
+const wkOf=k=>dAdd(k,-((new Date(k+"T12:00:00Z").getUTCDay()+6)%7)),chOf=wk=>CH[Math.floor(Date.parse(wk+"T12:00:00Z")/(7*864e5))%CH.length];
+let GS=null,SEEN0=null;
+const gNew=()=>({days:{},badges:{},rec:{},set:{int:"normal",hide:false,at:0},rev:{},at:0});
+const gLoad=()=>{GS=Object.assign(gNew(),LS.get(uk("game"),{}))},gSave=()=>{GS.at=Date.now();LS.set(uk("game"),GS);Sync.mark("gm",acct());Fr.soon()};
+const dayXP=d=>{let x=0;for(const k in GX)x+=(d[k]||0)*GX[k];return x},dayU=d=>{let u=0;for(const k in GU)u+=(d[k]||0)*GU[k];return u},gGoal=()=>GOAL[GS.set.int]||GOAL.normal;
+function wkSum(wk){const w={pz:0,p1:0,op:0,ol:0,rv:0,rvl:0,g:0,xp:0};for(let i=0;i<7;i++){const d=GS.days[dAdd(wk,i)];if(!d)continue;for(const k in w)if(k!=="xp")w[k]+=d[k]||0;w.xp+=dayXP(d)}
+ const c=chOf(wk);w.ch=c;w.chv=Math.min(c.n,w[c.k]);w.done=w.chv>=c.n;if(w.done)w.xp+=WK_BONUS;return w}
+const gWeeks=()=>[...new Set(Object.keys(GS.days).map(wkOf))].sort();
+const gXP=()=>gWeeks().reduce((a,wk)=>a+wkSum(wk).xp,0);
+/* streak: consecutive days with the goal met; a freeze (one per 7 streak days, max 2) covers a missed day. Today counts once met. */
+function gStreak(){const ks=Object.keys(GS.days).filter(k=>GS.days[k].g).sort(),today=dkey();let s=0,best=0,fz=0;const used=[];
+ if(ks.length)for(let d=ks[0];d<today;d=dAdd(d,1)){if((GS.days[d]||{}).g){s++;if(s%7===0)fz=Math.min(FZ_MAX,fz+1)}else if(s>0&&fz>0){fz--;used.push(d)}else s=0;best=Math.max(best,s)}
+ if((GS.days[today]||{}).g){s++;if(s%7===0)fz=Math.min(FZ_MAX,fz+1)}return {cur:s,best:Math.max(best,s),fz,used}}
+function gLevel(xp){let i=0;while(i+1<LEVELS.length&&xp>=LEVELS[i+1][1])i++;
+ if(i<LEVELS.length-1)return {name:LEVELS[i][0],next:LEVELS[i+1][0],from:LEVELS[i][1],to:LEVELS[i+1][1]};
+ const k=xp<20000?-1:Math.floor((xp-20000)/8000),nm=j=>j<0?"King":"King "+(ROMAN[j]||j+1),from=k<0?12000:20000+k*8000;return {name:nm(k),next:nm(k+1),from,to:k<0?20000:from+8000}}
+/* badges: [id, name, how, test(context)] */
+const BADGES=[["pz1","First puzzle","Solve a puzzle",c=>c.pz>=1],["pz25","Puzzle regular","Solve 25 puzzles",c=>c.pz>=25],["pz100","Puzzle machine","Solve 100 puzzles",c=>c.pz>=100],["pz500","Puzzle master","Solve 500 puzzles",c=>c.pz>=500],
+ ["ol10","Repertoire started","Learn 10 opening positions",c=>c.ol>=10],["ol50","Book knowledge","Learn 50 opening positions",c=>c.ol>=50],["ol200","Theory buff","Learn 200 opening positions",c=>c.ol>=200],
+ ["s3","Three in a row","Meet your daily goal 3 days running",c=>c.best>=3],["s7","Full week","Keep a 7-day streak",c=>c.best>=7],["s30","Monthly habit","Keep a 30-day streak",c=>c.best>=30],["s100","Unstoppable","Keep a 100-day streak",c=>c.best>=100],
+ ["rv10","Self-reviewer","Review 10 of your games",c=>c.rv>=10],["rv50","Game historian","Review 50 of your games",c=>c.rv>=50],
+ ["imp_bl","Fewer blunders","Cut blunders and mistakes per game by 25% from your baseline",c=>c.blDown>=.25],
+ ["imp_clk","Clock manager","Use at least half your clock per game after starting below that",c=>c.clk],
+ ["imp_op","Opening fixed","Score 10+ points more in an opening since you started practising it",c=>c.opUp>=10],
+ ["fun_night","Night owl","Train after 11 pm",c=>c.n],["fun_early","Early bird","Train before 7 am",c=>c.e],["fun_wknd","Weekend warrior","Meet your goal on a Saturday and the Sunday after",c=>c.wknd],
+ ["fun_p1","Sharpshooter","Solve 10 puzzles on the first try in one day",c=>c.p1day>=10],["fun_wk","Challenge accepted","Complete a weekly challenge",c=>c.wkDone]];
+function gCtx(){const c={pz:0,ol:0,rv:0,p1day:0,n:0,e:0,wknd:0},D=GS.days;for(const k in D){const d=D[k];c.pz+=d.pz||0;c.ol+=d.ol||0;c.rv+=d.rv||0;c.p1day=Math.max(c.p1day,d.p1||0);if(d.n)c.n=1;if(d.e)c.e=1;
+  if(d.g&&new Date(k+"T12:00:00Z").getUTCDay()===6&&(D[dAdd(k,1)]||{}).g)c.wknd=1}
+ const st=gStreak(),s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs();c.best=st.best;c.cur=st.cur;c.wkDone=gWeeks().some(w=>wkSum(w).done);
+ c.blDown=b&&b.errs>0&&s.errs!=null&&s.nAn>=b.nAn+10?(b.errs-s.errs)/b.errs:0;c.clk=!!(b&&b.time!=null&&s.time!=null&&b.time<B*.5&&s.time>=B*.5);
+ c.opUp=Math.max(0,...Object.entries(LS.get(uk("opstart"),{})).map(([k,t])=>{const e=opEffect(k,t);return e?e.a-e.b:0}));return c}
+const toastQ=[];let toastOn=false;
+function gToast(msg){if(!GS||GS.set.hide)return;toastQ.push(msg);if(toastOn)return;const nx=()=>{const m=toastQ.shift();if(!m){toastOn=false;$("#toast").hidden=true;return}toastOn=true;const t=$("#toast");t.textContent=m;t.hidden=false;t.classList.remove("pop");void t.offsetWidth;t.classList.add("pop");setTimeout(nx,3200)};nx()}
+/* after any change: level-ups, new badges, beaten records (first values are recorded silently) */
+function gCheck(xp0){if(!P||!GS)return;const xp=gXP(),l0=gLevel(xp0==null?xp:xp0).name,l1=gLevel(xp).name;if(l1!==l0)gToast(`Level up: you're now a ${l1}!`);
+ const c=gCtx();let ch=false;for(const [id,nm] of BADGES.map(x=>[x[0],x[1],x[3]]).filter(x=>x[2](c))){if(!GS.badges[id]){GS.badges[id]=Date.now();ch=true;gToast(`Badge earned: ${nm}`)}}
+ const R=GS.rec,bw=Math.max(0,...gWeeks().filter(w=>w<wkOf(dkey())).map(w=>wkSum(w).xp),wkSum(wkOf(dkey())).xp),s=stats();
+ const beat=(k,v,better,txt)=>{if(v==null)return;if(R[k]==null){R[k]=v;ch=true}else if(better(v,R[k])){R[k]=v;ch=true;gToast(txt)}};
+ beat("bw",bw||null,(a,b)=>a>b,`New record: your best week, ${bw} XP!`);beat("ls",c.best||null,(a,b)=>a>b,`New record: your longest streak, ${c.best} days!`);
+ if(s.nAn>=20&&s.errs!=null)beat("bb",+s.errs.toFixed(2),(a,b)=>a<b-.04,`New record: your lowest blunder rate, ${s.errs.toFixed(1)} per game!`);
+ if(ch)gSave()}
+/* record training: o = {pz: 1, p1: 1, ...} */
+function gAdd(o){if(!P||!GS)return;const xp0=gXP(),t=dkey(),d=GS.days[t]||(GS.days[t]={}),h=new Date().getHours();for(const k in o)d[k]=(d[k]||0)+o[k];
+ if(h>=23||h<4)d.n=1;else if(h<7)d.e=1;if(!d.g&&dayU(d)>=gGoal()){d.g=1;gToast(`Daily goal met! +${GX.g} XP`)}
+ const w=wkSum(wkOf(t));if(w.done&&!(GS.wkt===wkOf(t))){GS.wkt=wkOf(t);gToast(`Weekly challenge complete: ${w.ch.t}! +${WK_BONUS} XP`)}
+ gSave();gCheck(xp0);if(route.cur==="home")renderHome()}
+/* merge two states (sync): day counts max, badges earliest, records best, settings newest, reviewed union */
+function gMerge(a,b){const o=gNew();o.days=JSON.parse(JSON.stringify(a.days||{}));for(const k in b.days||{}){const d=o.days[k]||(o.days[k]={});for(const f in b.days[k])d[f]=Math.max(d[f]||0,b.days[k][f]||0)}
+ o.badges={...(a.badges||{})};for(const k in b.badges||{})o.badges[k]=Math.min(o.badges[k]||Infinity,b.badges[k]);
+ const ra=a.rec||{},rb=b.rec||{},mx=(x,y)=>x==null?y:y==null?x:Math.max(x,y),mn=(x,y)=>x==null?y:y==null?x:Math.min(x,y);o.rec={bw:mx(ra.bw,rb.bw),ls:mx(ra.ls,rb.ls),bb:mn(ra.bb,rb.bb)};
+ o.set=((b.set||{}).at||0)>((a.set||{}).at||0)?{...o.set,...b.set}:{...o.set,...(a.set||{})};o.rev={...(a.rev||{}),...(b.rev||{})};o.wkt=a.wkt||b.wkt;o.at=Math.max(a.at||0,b.at||0);return o}
+const gRow=()=>({weekly_xp:GS?wkSum(wkOf(dkey())).xp:0,xp_week:wkOf(dkey()),streak:GS?gStreak().cur:0});
+/* "You passed X this week!": friends ahead of me last time I looked, behind me now */
+function lbPassed(rows){const wk=wkOf(dkey()),xp=r=>r.xp_week===wk?r.weekly_xp||0:0,me=rows.find(r=>r.is_me);if(!me)return [];const mine=xp(me),ahead=rows.filter(r=>!r.is_me&&xp(r)>mine).map(r=>r.display_name||"?");
+ const prev=LS.get(uk("lbseen"),null),out=prev&&prev.wk===wk?prev.ahead.filter(n=>!ahead.includes(n)&&rows.some(r=>(r.display_name||"?")===n)):[];LS.set(uk("lbseen"),{wk,ahead});return out}
+
+/* ---------- HOME ---------- */
+const HTB=new Board($("#hThumb"));let HOMEtok=0,HSW=null;
+function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen),un=GAMES.filter(g=>!g.an).length,now=Date.now();
+ const due=Object.values(OPS).filter(x=>x.due&&x.due<=now).length,loss=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an),pl=(n,w)=>n+" "+w+(n===1?"":"s");
+ if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:`Retry ${pl(n,"puzzle")} you missed`,p:"Positions where you went wrong before. Getting them right is the fastest way to fix a habit.",xp:n*GX.pz,go:"#trainer"})}
+ if(due){const n=Math.min(due,10);C.push({imp:26+due*2,t:`Review ${pl(n,"opening position")}`,p:"They're due today. Missed ones come back sooner.",xp:n*GX.op,go:"#openings"})}
+ if(loss&&!GS.rev[loss.id]){const e=errorsOf(replay(loss)).filter(x=>x.mine).sort((a,b)=>b.drop-a.drop)[0];
+  C.push({imp:28,t:`Review your loss vs ${loss.opp}`,p:e?`The game turned on move ${mvLabel(e.i)} ${loss.moves[e.i]} (${evTxt(e.before)} → ${evTxt(e.after)}).`:"Step through it and see where it turned.",xp:GX.rv,act:()=>{openGame(loss,e?e.i:0);location.hash="review"}})}
+ if(fresh.length){const n=Math.min(fresh.length,5);C.push({imp:20,t:`Solve ${pl(n,"new puzzle")} from your games`,p:"Every one is a position you got wrong in a real game.",xp:n*GX.pz,go:"#trainer"})}
+ if(un){const n=Math.min(un,20);C.push({imp:15+n,t:`Analyse ${pl(n,"new game")}`,p:"Analysis finds your mistakes and turns them into puzzles.",xp:null,act:()=>{analyseRecent(20);renderHome()}})}
+ const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
+ const weak=Object.entries(m).filter(([k,a])=>a.length>=5&&!ost[k]&&score(a)<45).sort((a,b)=>score(a[1])-score(b[1]))[0];
+ if(weak)C.push({imp:18,t:`Start practising the ${weak[0].slice(2)} as ${weak[0][0]==="w"?"White":"Black"}`,p:`You score ${Math.round(score(weak[1]))}% in it over ${weak[1].length} games this year.`,xp:5*GX.op,act:()=>{OPSEL=weak[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
+ // fallbacks so there are always a few things to do
+ const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:`Review your game vs ${last.opp}`,p:"Step through it: wins have lessons too.",xp:GX.rv,act:()=>{openGame(last,0);location.hash="review"}});
+ const top=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length)[0];
+ if(C.length<3&&top&&!C.some(c=>/practising/.test(c.t)))C.push({imp:6,t:`Drill your ${top[0].slice(2)} as ${top[0][0]==="w"?"White":"Black"}`,p:`Your most played opening: ${top[1].length} games this year.`,xp:5*GX.op,act:()=>{OPSEL=top[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
+ return C.sort((a,b)=>b.imp-a.imp).slice(0,5)}
+function ringSVG(d,goal){const R=42,L=2*Math.PI*R;let off=0,s=`<svg viewBox="0 0 100 100" class="ring" role="img" aria-label="Daily goal ${Math.min(dayU(d),goal)} of ${goal}"><circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--line)" stroke-width="10"/>`;
+ for(const [k,col] of [["pz","var(--red)"],["op","var(--good)"],["rv","var(--blue)"]]){const f=Math.min((d[k]||0)*GU[k],Math.max(0,goal-off))/goal;if(f<=0)continue;
+  s+=`<circle cx="50" cy="50" r="${R}" fill="none" stroke="${col}" stroke-width="10" stroke-dasharray="${f*L} ${L}" stroke-dashoffset="${-off/goal*L}" transform="rotate(-90 50 50)"/>`;off+=f*goal}
+ return s+`<text x="50" y="47" text-anchor="middle" class="ring-n">${Math.min(dayU(d),goal)}/${goal}</text><text x="50" y="63" text-anchor="middle" class="ring-l">${d.g?"goal met":"today"}</text></svg>`}
+function renderHome(){if(!P||!GS)return;const tok=++HOMEtok,hide=GS.set.hide,today=GS.days[dkey()]||{},goal=gGoal(),st=gStreak(),xp=gXP(),lv=gLevel(xp),w=wkSum(wkOf(dkey()));
+ $("#hHello").textContent=GAMES.length?`Welcome back, ${P.user}.`:`Welcome, ${P.user}.`;
+ // plan
+ const C=planCards();
+ $("#hPlan").innerHTML=C.length?C.map((c,i)=>`<li class="plan-card"><div><b>${esc(c.t)}</b><p>${esc(c.p)}</p></div><div class="plan-go">${!hide&&c.xp?`<span class="xp">+${c.xp} XP</span>`:""}<button class="pri" type="button" data-plan="${i}">${c.go?"Go":c.xp==null?"Start":"Open"}</button></div></li>`).join("")
+  :'<li class="small">Nothing urgent. Play a few games and check back.</li>';
+ $("#hPlan").querySelectorAll("[data-plan]").forEach(b=>b.onclick=()=>{const c=C[+b.dataset.plan];if(c.go)location.hash=c.go.slice(1);else c.act()});
+ // gamification
+ $("#hGame").hidden=hide;$("#hBadgesSec").hidden=hide;
+ if(!hide){$("#hRing").innerHTML=ringSVG(today,goal);
+  $("#hRingTxt").innerHTML=`<b>Daily goal</b><span class="small">Puzzles ${today.pz||0} · opening positions ${today.op||0} · games reviewed ${today.rv||0}. A puzzle or position counts 1, a reviewed game 3.</span>`;
+  $("#hStreak").innerHTML=`<b class="num">${st.cur}</b> day streak<span class="small">${st.fz?`${st.fz} streak freeze${st.fz>1?"s":""} ready`:"Earn a freeze every 7 days"} · best ${Math.max(st.best,GS.rec.ls||0)}</span>`;
+  $("#hLevel").innerHTML=`<div class="lv-row"><b>${esc(lv.name)}</b><span class="small num">${xp} XP · ${lv.to-xp} to ${esc(lv.next)}</span></div><div class="meter"><b style="width:${Math.round((xp-lv.from)/(lv.to-lv.from)*100)}%;background:var(--ink)"></b></div>`;
+  $("#hChallenge").innerHTML=`<div class="lv-row"><b>This week: ${esc(w.ch.t)}</b><span class="small num">${w.chv}/${w.ch.n} · +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(w.chv/w.ch.n*100)}%;background:var(--good)"></b></div>`;
+  $("#hBadges").innerHTML=BADGES.map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}" title="${esc(how)}"><span class="bdg" aria-hidden="true">${id.startsWith("imp")?"▲":id.startsWith("fun")?"★":id[0]==="s"?"✦":"●"}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?"Earned "+dkey(GS.badges[id]):esc(how)}</span></li>`).join("");
+  const R=GS.rec;$("#hRecords").innerHTML=`<li><b class="num">${R.bw||0}</b> XP · best week</li><li><b class="num">${Math.max(R.ls||0,st.best)}</b> days · longest streak</li><li><b class="num">${R.bb==null?"—":R.bb.toFixed(1)}</b> · lowest blunders + mistakes per game</li>`}
+ $("#hInt").value=GS.set.int||"normal";$("#hHide").checked=!!hide;
+ // since last visit
+ const nw=SEEN0?GAMES.filter(g=>g.ts>SEEN0):GAMES.slice(-5),W=nw.filter(g=>g.result==="win").length,D=nw.filter(g=>g.result==="draw").length;
+ $("#hSinceT").textContent=SEEN0?`Since your last visit (${dkey(SEEN0)})`:"Your latest games";
+ let big=null;const rows=nw.slice().reverse().slice(0,6).map(g=>{const e=g.an?errorsOf(replay(g)).filter(x=>x.mine&&x.kind!=="inacc").sort((a,b)=>b.drop-a.drop)[0]:null;if(e&&(!big||e.drop>big.e.drop))big={g,e};
+  return `<li><span class="res ${g.result}">${g.result==="win"?"W":g.result==="loss"?"L":"D"}</span> vs ${esc(g.opp)} <span class="small">${esc(famOf(g.eco))}</span><br><span class="small">${!g.an?"Not analysed yet":e?`Worst moment: ${mvLabel(e.i)} ${esc(g.moves[e.i])} (${evTxt(e.before)} → ${evTxt(e.after)})`:"No serious mistakes"}</span></li>`});
+ $("#hSince").innerHTML=nw.length?`<p class="small">${nw.length} game${nw.length>1?"s":""}: ${W} won, ${D} drawn, ${nw.length-W-D} lost · ${GAMES.filter(g=>g.an).length} of ${GAMES.length} analysed${AQ?" (analysing now)":""}</p><ul class="since">${rows.join("")}</ul>`:`<p class="small">No new games yet. ${GAMES.filter(g=>g.an).length} of ${GAMES.length} games analysed.</p>`;
+ $("#hSwing").hidden=!big;HSW=big;if(big){const g=big.g,e=big.e,m=g._m[e.i];HTB.flip=g.color==="b";HTB.set(g._f[e.i],{arrows:[{from:m.from,to:m.to,c:"red"}].concat(e.best?[{from:e.best.slice(0,2),to:e.best.slice(2,4),c:"green"}]:[])});
+  $("#hSwingTxt").textContent=`Biggest swing: ${mvLabel(e.i)} ${g.moves[e.i]} vs ${g.opp}, ${evTxt(e.before)} → ${evTxt(e.after)}. Open it in Review.`}
+ // at a glance
+ const s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs(),arr=(v,bv,goodUp,f)=>bv==null||v==null||/^[0.]+%?$/.test(f(Math.abs(v-bv)))?"":`<span class="${(v>bv)===goodUp?"up-good":"up-bad"}">${v>bv?"▲":"▼"} ${f(Math.abs(v-bv))}</span>`;
+ const tGood=b&&b.time!=null&&s.time!=null?Math.abs(s.time-B*.7)<Math.abs(b.time-B*.7):true;
+ $("#hGlance").innerHTML=[["Rating",s.rating??"—",arr(s.rating,b&&b.rating,true,Math.round)],["Blunders + mistakes / game",s.errs==null?"—":s.errs.toFixed(1),arr(s.errs,b&&b.errs,false,x=>x.toFixed(1))],
+  ["Median time used",mmss(s.time),b&&b.time!=null&&s.time!=null&&Math.abs(s.time-b.time)>=1?`<span class="${tGood?"up-good":"up-bad"}">${s.time>b.time?"▲":"▼"} ${mmss(Math.abs(s.time-b.time))}</span>`:""],
+  ["Score, last 30",s.score==null?"—":Math.round(s.score)+"%",arr(s.score,b&&b.score,true,x=>Math.round(x)+"%")]].map(([l,v,a])=>`<div class="kpi"><b class="num">${v}</b>${l}<s>${a||"&nbsp;"}</s></div>`).join("")+
+  `<p class="small" style="grid-column:1/-1">${b?`Arrows compare with your baseline from ${b.date}.`:"Arrows appear once your baseline is set (after 10 analysed games)."}</p>`;
+ const ins=insights(),eff=Object.entries(LS.get(uk("opstart"),{})).map(([k,t])=>opEffect(k,t)).filter(Boolean).sort((a,b)=>(b.a-b.b)-(a.a-a.b))[0];
+ $("#hInsight").innerHTML=(ins[0]?`<div class="ins ${ins[0].c}"><b>${esc(ins[0].t)}</b><p>${esc(ins[0].p)}</p></div>`:"")+(eff&&!(ins[0]&&/practising/.test(ins[0].t))?`<p class="small">Since practising the ${esc(eff.fam)}: ${Math.round(eff.a)}% (was ${Math.round(eff.b)}%).</p>`:"");
+ $("#hSign").hidden=!SB_ON||!!Sync.me;
+ // mini leaderboard
+ $("#hLb").hidden=true;if(SB_ON&&Sync.me)(async()=>{try{const pr=await Fr.profile();if(!pr.share||tok!==HOMEtok)return;const {data,error}=await Sync.sb.rpc("friends_leaderboard",{p_tc:P.tc});if(error||tok!==HOMEtok)return;
+  const wk=wkOf(dkey()),xpOf=r=>r.xp_week===wk?r.weekly_xp||0:0,rows=(data||[]).slice().sort((a,b)=>xpOf(b)-xpOf(a)),me=rows.findIndex(r=>r.is_me),top=rows.slice(0,3);if(me>2)top.push(rows[me]);
+  const pass=lbPassed(data||[]);if(!rows.length)return;$("#hLb").hidden=false;
+  $("#hLbBody").innerHTML=(pass.length?`<p class="verdict v-ok">You passed ${esc(pass.join(" and "))} this week!</p>`:"")+`<ol class="mini-lb">${top.map(r=>`<li class="${r.is_me?"me":""}"><span>${rows.indexOf(r)+1}. ${esc(r.display_name||"(no name)")}${r.is_me?" (you)":""}</span><span class="num">${xpOf(r)} XP · ${r.streak||0}-day streak</span></li>`).join("")}</ol>`}catch(e){}})()}
+$("#hInt").onchange=()=>{GS.set={...GS.set,int:$("#hInt").value,at:Date.now()};const d=GS.days[dkey()];if(d&&!d.g&&dayU(d)>=gGoal())d.g=1;gSave();renderHome()};
+$("#hHide").onchange=()=>{GS.set={...GS.set,hide:$("#hHide").checked,at:Date.now()};gSave();renderHome()};
+$("#hSwing").onclick=()=>{if(HSW){openGame(HSW.g,HSW.e.i);location.hash="review"}};
+$("#hSync").onclick=async()=>{$("#hSync").disabled=true;$("#hNote").textContent="Checking…";try{const n=await sync();$("#hNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#hNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#hSync").disabled=false;renderHome()};
+$("#hAn").onclick=()=>{analyseRecent(20);$("#hNote").textContent="Analysing up to 20 more games; see the bar at the top.";renderHome()};
+$("#hSwitch").onclick=()=>$("#switchBtn").click();$("#hSign").onclick=()=>acctOpen();
+
 /* ---------- PROGRESS + rule-based insights ---------- */
 function stats(){const G=GAMES,recent=G.slice(-30),an=G.filter(g=>g.an),lastAn=an.slice(-20);
  const tu=recent.map(timeUsed).filter(x=>x!=null),errs=lastAn.map(g=>serious(g).length);
@@ -500,7 +637,17 @@ $("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:
 $("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sync();$("#anNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#anNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#syncBtn").disabled=false;renderProgress()};
 
 /* ---------- onboarding ---------- */
-const HB=new Board($("#heroBoard"));HB.set("r1bq1rk1/pp3ppp/2n1pn2/3p4/1bPP4/2N1PN2/PP1B1PPP/R2QKB1R w KQ - 0 8",{arrows:[{from:"c4",to:"d5",c:"green"},{from:"f1",to:"d3",c:"red"}]});
+const HB=new Board($("#heroBoard")),HW=new Why($("#heroWhy"),HB),DEMO_FEN="rn1qkbnr/pp2pppp/2p5/5b2/3PN3/8/PPP2PPP/R1BQKBNR w KQkq - 1 5";
+const demoLine=(fen,sans)=>{const c=new Chess(fen),L=[];for(const s of sans){const m=c.move(s);if(!m)break;L.push({san:m.san,from:m.from,to:m.to,cap:!!m.captured,fen:c.fen()})}return {fen,L}};
+let demoT=null,demoK=0,demoOff=false;
+function demoStart(){if(!HW.lines){HW.render("After Nd6+, Black plays Qxd6 and you've lost a knight. Ng3 is better: the evaluation stays +0.3.",
+ [{title:"Your move",c:"red",x:demoLine(DEMO_FEN,["Nd6+","Qxd6","Qf3","Qd7"]),lab:{t:"loses a knight"}},{title:"Better",c:"green",x:demoLine(DEMO_FEN,["Ng3","Bg6","Nf3","e6","h4","h6","h5","Bh7"]),lab:null}]);
+ HW.o={restore:()=>HB.set(DEMO_FEN)};HB.set(DEMO_FEN);$("#heroWhy").addEventListener("click",()=>{demoOff=true;demoStop()},{once:true})}   // any click there hands control to the visitor
+ if(demoT||demoOff||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+ demoT=setInterval(()=>{const seq=[[0,1],[0,2],[0,0],[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,0]],[i,k]=seq[demoK++%seq.length];if(k)HW.step(i,k);else HW.reset()},1600)}
+function demoStop(){clearInterval(demoT);demoT=null}
+function inviteBanner(on){$("#inviteBanner").hidden=!on}
+$("#invSign").onclick=()=>acctOpen();
 const srcPick=()=>(document.querySelector('input[name="uSrc"]:checked')||{}).value||"cc";
 function srcLabel(){const s=srcPick();$("#uNameLbl").textContent=SRC[s].name+" username";$("#uName").placeholder=s==="li"?"e.g. thibault":"e.g. magnuscarlsen"}
 document.querySelectorAll('input[name="uSrc"]').forEach(r=>r.onchange=()=>{srcLabel();LS.set("lastSrc",srcPick())});
@@ -526,7 +673,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
  hasSession(){try{const ref=new URL(CFG.supabaseUrl).hostname.split(".")[0];return !!localStorage.getItem("sb-"+ref+"-auth-token")}catch(e){return false}},
  async start(){if(!SB_ON)return;document.querySelectorAll(".acct-only").forEach(e=>e.hidden=false);const q=new URLSearchParams(location.search);
   if(q.has("invite")){LS.set("invite",q.get("invite").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,40));history.replaceState(null,"",location.pathname+location.hash);
-   if(!this.hasSession()){acctOpen();acctMsg("A friend invited you. Sign in to accept, then you can compare your games.")}}
+   if(!this.hasSession()){if(P){acctOpen();acctMsg("A friend invited you. Sign in to accept, then you can compare your games.")}else inviteBanner(true)}}
   if(q.has("error_description")){acctOpen();acctMsg(q.get("error_description")+" Ask for a new link, or enter the code from the email.");}
   if(!q.has("code")&&!this.hasSession()){if(q.has("error_description"))history.replaceState(null,"",location.pathname+location.hash);return}
   try{await this.load();const {error}=await this.sb.auth.initialize();
@@ -537,7 +684,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
  onAuth(ses){const u=ses&&ses.user;
   if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};Fr.prof=null;acctUI();this.run();Fr.onSignIn()}
   else if(!u&&this.me){this.me=null;Fr.prof=null;acctUI();if(route.cur==="friends")Fr.render()}},
- /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}, op:{"acct|posKey":1}, ops:{"acct|w|<family>":1}} */
+ /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}, op:{"acct|posKey":1}, ops:{"acct|w|<family>":1}, gm:{acct:1}} */
  mark(kind,key){if(!SB_ON)return;const o=LS.get("sb.out",{});(o[kind]=o[kind]||{})[key]=1;LS.set("sb.out",o);if(this.me){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),2000)}},
  async run(){if(!this.me||this.busy)return;this.busy=true;this.err="";acctUI();
   try{await this.pull();const k="sb.init."+this.me.id;if(!LS.get(k,0)){this.markAll();LS.set(k,1)}this.busy=false;await this.flush()}
@@ -546,6 +693,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   for(const k of Object.keys(localStorage)){let m=k.match(/^rc\.((?:cc|li):[^.]+)\.trainer$/);if(m)Object.keys(LS.get(m[1]+".trainer",{})).forEach(id=>this.mark("pz",m[1]+"|"+id));
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.base\.(\w+)$/);if(m)this.mark("base",m[1]+"|"+m[2]);
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.openings$/);if(m)Object.keys(LS.get(m[1]+".openings",{})).forEach(p=>this.mark("op",m[1]+"|"+p));
+   m=k.match(/^rc\.((?:cc|li):[^.]+)\.game$/);if(m)this.mark("gm",m[1]);
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.opstart$/);if(m)Object.keys(LS.get(m[1]+".opstart",{})).forEach(o=>this.mark("ops",m[1]+"|"+o))}
   if(P)this.mark("la",acct()+"|"+P.tc)},
  async flush(){if(!this.me)return;if(this.busy){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),5000);return}const o=LS.get("sb.out",{});if(!Object.keys(o).some(k=>Object.keys(o[k]).length))return;
@@ -557,11 +705,13 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
    baselines:keys("base").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({a,tc,b:LS.get(a+".base."+tc,null)})).filter(x=>x.b).map(x=>({user_id:uid,account:x.a,tc:x.tc,stats:x.b})),
    linked_accounts:keys("la").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({user_id:uid,account:a,tc})),
    opening_progress:keys("op").map(sp).filter(([a])=>ok(a)).map(([a,pos])=>({a,pos,x:LS.get(a+".openings",{})[pos]})).filter(r=>r.x).map(({a,pos,x})=>({user_id:uid,account:a,pos,streak:x.s||0,due:x.due?new Date(x.due).toISOString():null,correct:x.ok||0,misses:x.miss||0,pinned:x.pin||null,changed_at:x.at||0})),
+   gamification:keys("gm").filter(ok).map(a=>({a,g:LS.get(a+".game",null)})).filter(r=>r.g).map(({a,g})=>({user_id:uid,account:a,days:g.days||{},badges:g.badges||{},records:g.rec||{},settings:g.set||{},reviewed:g.rev||{},changed_at:g.at||0})),
    opening_practice:keys("ops").map(sp).filter(([a])=>ok(a)).map(([a,o])=>({a,o,t:LS.get(a+".opstart",{})[o]})).filter(r=>r.t).map(({a,o,t})=>({user_id:uid,account:a,opening:o,started_at:new Date(t).toISOString()}))};
-  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc",opening_progress:"user_id,account,pos",opening_practice:"user_id,account,opening"};
-  try{for(const t in rows)for(let i=0;i<rows[t].length;i+=200){const {error}=await this.sb.from(t).upsert(rows[t].slice(i,i+200),{onConflict:pk[t]});if(error)throw error}
-   this.err=""}
-  catch(e){const n=LS.get("sb.out",{});for(const k in o)n[k]={...o[k],...(n[k]||{})};LS.set("sb.out",n);this.err="Couldn't upload changes. Retrying in a minute.";clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),60e3)}
+  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc",opening_progress:"user_id,account,pos",opening_practice:"user_id,account,opening",gamification:"user_id,account"};
+  // table by table: a failing table keeps only its own changes queued
+  const kind={analyses:"an",puzzle_progress:"pz",baselines:"base",linked_accounts:"la",opening_progress:"op",opening_practice:"ops",gamification:"gm"},bad=[];
+  for(const t in rows){try{for(let i=0;i<rows[t].length;i+=200){const {error}=await this.sb.from(t).upsert(rows[t].slice(i,i+200),{onConflict:pk[t]});if(error)throw error}}catch(e){bad.push(kind[t])}}
+  if(bad.length){const n=LS.get("sb.out",{});for(const k of bad)if(o[k])n[k]={...o[k],...(n[k]||{})};LS.set("sb.out",n);this.err="Couldn't upload some changes. Retrying in a minute.";clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),60e3)}else this.err="";
   this.busy=false;acctUI()},
  async rows(t,cols,since){const out=[];for(let i=0;;i+=1000){let q=this.sb.from(t).select(cols+",updated_at").order("updated_at").range(i,i+999);if(since)q=q.gt("updated_at",since);
   const {data,error}=await q;if(error)throw error;out.push(...data);if(data.length<1000)return out}},
@@ -588,11 +738,17 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   const opr=await this.rows("opening_practice","account,opening,started_at",w.ops),os={};
   for(const r of opr){const m=os[r.account]||(os[r.account]=LS.get(r.account+".opstart",{})),t=Date.parse(r.started_at);if(!m[r.opening]||t<m[r.opening])m[r.opening]=t;else if(m[r.opening]<t)this.mark("ops",r.account+"|"+r.opening)}
   for(const a in os)LS.set(a+".opstart",os[a]);hi(opr,"ops");if(P)OPS=LS.get(uk("openings"),{});
+  // gamification: merge per field (see gMerge); push back if this device had something the server lacked
+  const gm=await this.rows("gamification","account,days,badges,records,settings,reviewed,changed_at",w.gm);
+  const gk=g=>JSON.stringify([g.days,g.badges,g.rec,g.rev]);
+  for(const r of gm){const l=LS.get(r.account+".game",null),rem={days:r.days,badges:r.badges,rec:r.records,set:r.settings,rev:r.reviewed,at:+r.changed_at||0},m=gMerge(l||gNew(),rem);
+   LS.set(r.account+".game",m);if(gk(m)!==gk(gMerge(gNew(),rem)))this.mark("gm",r.account)}
+  hi(gm,"gm");if(P&&gm.length){gLoad();gCheck()}
   // linked accounts: on a device with no profile yet, open the most recently used one
   const la=await this.rows("linked_accounts","account,tc",w.la);hi(la,"la");LS.set(wk,w);this.pulled=Date.now();
-  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats();Fr.soon()}
+  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats();if(route.cur==="home")renderHome();Fr.soon()}
   else if(la.length){const r=la[la.length-1],i=r.account.indexOf(":");P={source:r.account.slice(0,i),user:r.account.slice(i+1),tc:r.tc};LS.set("profile",P);enter(false)}},
- async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","opening_progress","opening_practice","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
+ async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","opening_progress","opening_practice","gamification","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
   const f=await this.sb.rpc("my_friends");if(f.error)throw f.error;out.friends=f.data;return out},
  async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;Fr.prof=null;LS.set("sb.out",{});acctUI();if(route.cur==="friends")Fr.render()},
  async deleteAccount(){const {error}=await this.sb.rpc("delete_my_account");if(error)throw error;const id=this.me.id;await this.signOut();try{localStorage.removeItem("rc.sb.init."+id);localStorage.removeItem("rc.sb.pull."+id)}catch(e){}}};
@@ -635,13 +791,13 @@ const Fr={prof:null,_t:null,
   if(!data){const r=await sb.from("profiles").insert({share:false}).select(cols).single();if(r.error)throw r.error;data=r.data}return this.prof=data},
  async onSignIn(){try{await this.profile();const code=LS.get("invite",null);if(code){LS.set("invite",null);await this.accept(code)}this.soon(1000)}catch(e){}if(route.cur==="friends")this.render()},
  async accept(code){let t;try{const {data,error}=await Sync.sb.rpc("add_friend",{code});if(error)throw error;t=`You and ${data||"your friend"} are now friends.`}catch(e){t=this.err(e)}
-  if($("#acct").open)$("#acct").close();if(P){if(location.hash!=="#friends")location.hash="friends";this.msg(t)}else $("#startMsg").textContent=t+" Enter your username to start."},
+  if($("#acct").open)$("#acct").close();inviteBanner(false);if(P){if(location.hash!=="#friends")location.hash="friends";this.msg(t)}else $("#startMsg").textContent=t+" Enter your username to start."},
  soon(ms){if(!SB_ON)return;clearTimeout(this._t);this._t=setTimeout(()=>this.publish(),ms==null?20000:ms)},
  row(){const an=GAMES.filter(g=>g.an),last=an.slice(-20),n=last.length,r=x=>x==null?null:Math.round(x);let bl=0,mi=0;
   last.forEach(g=>errorsOf(g).forEach(e=>{if(e.mine){if(e.kind==="blunder")bl++;else if(e.kind==="mistake")mi++}}));
   const s=stats(),b=LS.get(uk("base."+P.tc),null);
   return {user_id:Sync.me.id,account:acct(),tc:P.tc,games_analysed:an.length,blunders_per_game:n?bl/n:null,mistakes_per_game:n?mi/n:null,median_time_used:r(s.time),
-   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,openings_learned:opLearned(),rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
+   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,openings_learned:opLearned(),...gRow(),rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
  async publish(){if(!Sync.me||!P||!GAMES.length||!ACCT_RE.test(acct()))return;
   try{const pr=await this.profile();if(!pr.share)return;const {error}=await Sync.sb.from("leaderboard_stats").upsert(this.row(),{onConflict:"user_id,account,tc"});if(error)throw error;
    if(route.cur==="friends")await this.board()}catch(e){this.soon(120000)}},
@@ -650,12 +806,12 @@ const Fr={prof:null,_t:null,
    await this.board();await this.friends()}catch(e){this.msg(this.err(e))}},
  async board(){$("#fBoardTitle").textContent="Leaderboard · "+TCL[P.tc];const {data,error}=await Sync.sb.rpc("friends_leaderboard",{p_tc:P.tc});if(error)throw error;
   const few=r=>r.games_analysed<10,num=(v,d)=>v==null?"–":v.toFixed(d),bpg=r=>r.blunders_per_game==null?99:r.blunders_per_game;
-  const rows=(data||[]).slice().sort((a,b)=>(few(a)-few(b))||(bpg(a)-bpg(b)));
+  const rows=(data||[]).slice().sort((a,b)=>(few(a)-few(b))||(bpg(a)-bpg(b))),pass=lbPassed(data||[]);if(pass.length)this.msg(`You passed ${pass.join(" and ")} this week!`);
   $("#fBody").innerHTML=rows.length?rows.map(r=>{const d=r.rating_now!=null&&r.rating_base!=null?r.rating_now-r.rating_base:null;
    return `<tr class="${r.is_me?"me":""}"><td>${esc(r.display_name||"(no name)")}${r.is_me?" (you)":""}<span class="src">${esc((SRC[r.source]||{}).name||"")}</span></td>`+
     `<td class="r">${few(r)?"–":num(r.blunders_per_game,2)}</td><td class="r">${few(r)?"–":num(r.mistakes_per_game,2)}</td><td class="r">${mmss(r.median_time_used)}</td>`+
-    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.openings_learned||0}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
-   :`<tr><td colspan="8" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
+    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.openings_learned||0}</td><td class="r">${r.xp_week===wkOf(dkey())?r.weekly_xp||0:0}</td><td class="r">${r.streak||0}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
+   :`<tr><td colspan="10" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
  async friends(){const {data,error}=await Sync.sb.rpc("my_friends");if(error)throw error;const L=$("#fList");
   L.innerHTML=(data||[]).length?data.map(f=>`<li><span>${esc(f.display_name||"(no name yet)")}${f.sharing?"":'<span class="small">not sharing</span>'}</span><button class="link" type="button" data-rm="${esc(f.friend_id)}">Remove</button></li>`).join("")
    :'<li class="small">No friends yet. Send them your invite link.</li>';
@@ -671,14 +827,14 @@ $("#fCopy").onclick=()=>{const v=$("#fLink").value,done=()=>Fr.msg("Link copied.
 $("#fNewLink").onclick=async()=>{try{const {data,error}=await Sync.sb.rpc("new_invite_code");if(error)throw error;Fr.prof.invite_code=data;$("#fLink").value=location.origin+location.pathname+"?invite="+data;Fr.msg("New link made. The old one no longer works.")}catch(e){Fr.msg(Fr.err(e))}};
 
 /* ---------- routing ---------- */
-function route(){if(!P){show1("start");return}const t=["review","trainer","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"review";route.cur=t;show1(t);
+function route(){if(!P){show1("start");return}const t=["home","review","trainer","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"home";route.cur=t;show1(t);
  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.t===t)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings()}
-function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);$("#hdr").hidden=t==="start"}
+ if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome()}
+function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);$("#hdr").hidden=t==="start";if(t==="start")demoStart();else demoStop()}
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}

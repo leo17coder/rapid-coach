@@ -168,3 +168,14 @@ From Progress → Openings → **Practise**, a drill view (`#openings`) for one 
 - **Lichess opening explorer**: now at `explorer.lichess.org` and requires a Lichess OAuth token. The app uses Lichess's PKCE flow for unregistered public clients ("Connect Lichess"); the token stays in the browser. Used only where your own games have fewer than 3 games at an opponent's turn; one request at a time, cached locally, and the trainer works without it.
 - **Effect**: score in the opening before vs since your first drill (needs 5+ games on each side), as a Progress insight.
 
+## 5. Move explanations (built)
+
+A shared Why panel in the Trainer and the opening drill shows Stockfish's lines for your move and the better move, with rule-based labels, steppable on the board.
+
+## 6. Home tab and gamification (built)
+
+- `#home` is the default tab for returning users: plan for today, since last visit, progress at a glance, quick actions, mini leaderboard.
+- Rule-based gamification from local training data: daily goal (light 5 / normal 10 / serious 20 units: puzzle or opening position 1, reviewed game 3), streak with freezes (one per 7 days, max 2, used automatically), XP for training only (puzzle 10, first try +5, opening position 3, learned +15, game reviewed 10, daily goal 25, weekly challenge 100), levels Pawn 0, Knight 500, Bishop 1,500, Rook 3,500, Queen 7,000, King 12,000, King I 20,000 and +8,000 per further level; 21 badges; personal records with a short celebration; everything hideable, no notifications.
+- Synced via `004_gamification.sql` (one row per account; merging is per-field max/union); weekly XP and streak on the friends leaderboard, with "You passed X this week!".
+- Start screen: feature blocks, trust points, demo board stepping through a sample explanation, invite banner.
+

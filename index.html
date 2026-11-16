@@ -8,12 +8,13 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%23ead6b1'/%3E%3Crect width='1' height='1' fill='%23a8784c'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23a8784c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700&family=Noto+Sans+Symbols+2&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2026-11-16d">
+<link rel="stylesheet" href="style.css?v=2026-11-16e">
 </head>
 <body>
 <header id="hdr" hidden>
   <div class="brand"><i></i>Rapid Coach</div>
   <nav>
+    <a href="#home" data-t="home">Home</a>
     <a href="#review" data-t="review">Review</a>
     <a href="#trainer" data-t="trainer">Trainer</a>
     <a href="#progress" data-t="progress">Progress</a>
@@ -26,10 +27,14 @@
 <main>
 <!-- ONBOARDING -->
 <section id="v-start" hidden>
+  <div class="invite" id="inviteBanner" role="status" hidden>
+    <div><b>A friend invited you to Rapid Coach.</b> Enter your chess.com or Lichess username to get started, then sign in to accept the invite and compare your training.</div>
+    <button class="pri" id="invSign" type="button">Sign in to accept</button>
+  </div>
   <div class="hero">
     <div>
       <h1>A coach for your own chess.com and Lichess games</h1>
-      <p>Enter your username. Rapid Coach pulls your games, checks every move with Stockfish, turns your blunders into puzzles, and shows what's really costing you rating points.</p>
+      <p>Enter your username. Rapid Coach pulls your games, checks every move with Stockfish, turns your blunders into puzzles, drills the openings you actually play, and explains why a move is wrong.</p>
       <form id="startForm">
         <fieldset class="seg">
           <legend>Where you play</legend>
@@ -48,13 +53,76 @@
         <button class="pri" type="submit" id="startBtn">Get my games</button>
         <div class="status" id="startMsg" role="status"></div>
       </form>
+      <ul class="trust">
+        <li>Free</li><li>Open source</li><li>Runs in your browser</li><li>No account needed</li><li>No AI, just Stockfish and clear rules</li>
+      </ul>
       <ul>
-        <li>Free, no account needed. Everything is stored in this browser.</li>
         <li class="acct-only" hidden>Use more than one device? <button class="link acctBtn" type="button">Sign in to sync</button></li>
-        <li>The engine runs on your device, about 30 seconds per game.</li>
       </ul>
     </div>
-    <div class="boardwrap" id="heroBoard" aria-hidden="true"></div>
+    <div>
+      <div class="boardwrap" id="heroBoard" aria-label="Example: why 5.Nd6+ was a blunder"></div>
+      <div class="why hero-why" id="heroWhy"></div>
+    </div>
+  </div>
+  <div class="features">
+    <div><h2>Game review</h2><p>Every move of your games checked by Stockfish, with the moments where each game turned.</p></div>
+    <div><h2>Puzzles from your blunders</h2><p>Positions where you went wrong in real games. Find the move you missed.</p></div>
+    <div><h2>Opening trainer</h2><p>Drill the lines you actually reach, with your opponents' real replies and spaced repetition.</p></div>
+    <div><h2>Move explanations</h2><p>See what your move allows and why the better move works, as lines you can step through.</p></div>
+    <div><h2>Daily streaks</h2><p>A small daily goal, XP for training, badges and records. Never for wins, and you can hide it all.</p></div>
+  </div>
+</section>
+
+<!-- HOME (default tab for returning users) -->
+<section id="v-home" hidden>
+  <h1 id="hHello">Welcome back.</h1>
+  <div class="home">
+    <div class="h-col">
+    <div class="h-plan panel">
+      <h2>Your plan for today</h2>
+      <ol class="plan" id="hPlan"></ol>
+    </div>
+    <div class="h-since panel">
+      <h2 id="hSinceT">Since your last visit</h2>
+      <div id="hSince"></div>
+      <button class="h-swing" id="hSwing" type="button" hidden><div class="boardwrap thumb" id="hThumb"></div><span id="hSwingTxt" class="small"></span></button>
+    </div>
+    <div class="h-actions">
+      <h2>Quick actions</h2>
+      <div class="row"><button id="hSync" type="button">Check for new games</button><button id="hAn" type="button">Analyse 20 more</button><button id="hSwitch" type="button">Switch account</button><button id="hSign" type="button" hidden>Sign in to sync</button></div>
+      <p class="small" id="hNote"></p>
+      <label class="fr-check small"><input type="checkbox" id="hHide"> Hide streaks, XP and badges</label>
+    </div>
+    </div>
+    <div class="h-col">
+    <div class="h-game panel" id="hGame">
+      <div class="goal-row"><div id="hRing"></div><div id="hRingTxt" class="goal-txt"></div></div>
+      <div class="streak" id="hStreak"></div>
+      <div id="hLevel"></div>
+      <div id="hChallenge" style="margin-top:12px"></div>
+      <details class="small" style="margin-top:12px"><summary>Goal settings</summary>
+        <label for="hInt">Daily goal</label>
+        <select id="hInt"><option value="light">Light (5 a day)</option><option value="normal">Normal (10 a day)</option><option value="serious">Serious (20 a day)</option></select>
+      </details>
+    </div>
+    <div class="h-glance">
+      <h2>Progress at a glance</h2>
+      <div class="kpis" id="hGlance"></div>
+      <div id="hInsight"></div>
+    </div>
+    <div class="h-lb panel" id="hLb" hidden>
+      <h2>Friends this week</h2>
+      <div id="hLbBody"></div>
+      <a href="#friends">See the full leaderboard</a>
+    </div>
+    </div>
+    <div class="h-badges" id="hBadgesSec">
+      <h2>Badges</h2>
+      <ul class="badges" id="hBadges"></ul>
+      <h2>Personal records</h2>
+      <ul class="records" id="hRecords"></ul>
+    </div>
   </div>
 </section>
 
@@ -182,7 +250,7 @@
   </div>
   <div id="fIn" hidden>
     <h2 id="fBoardTitle">Leaderboard</h2>
-    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Openings learned</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
+    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Openings learned</th><th class="r">XP this week</th><th class="r">Streak</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
     <p class="small" id="fNote">Last 20 analysed games; “–” means fewer than 10 analysed so far. Lower blunders and mistakes are better. Rating change is shown as a difference only, because chess.com and Lichess ratings can't be compared.</p>
     <div class="two" style="margin-top:28px">
       <div class="panel">
@@ -216,6 +284,8 @@
   <a href="privacy.html">Privacy</a>
 </footer>
 
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
 <dialog id="acct" aria-labelledby="acctTitle">
   <div class="acct-head"><h2 id="acctTitle">Sync across devices</h2><button class="link" id="acctClose" type="button">Close</button></div>
   <div data-acct="email">
@@ -246,8 +316,8 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-16d"></script>
+<script src="config.js?v=2026-11-16e"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-16d"></script>
+<script src="app.js?v=2026-11-16e"></script>
 </body>
 </html>
