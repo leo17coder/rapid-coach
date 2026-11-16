@@ -206,7 +206,7 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
  try{while(AQ.list.length&&gen===GEN){const g=replay(AQ.list.shift());if(g.an)continue;const ev=[],best=[];
   for(let i=0;i<g._f.length;i++){if(gen!==GEN)break;const c=new Chess(g._f[i]);if(c.game_over()){ev.push(c.in_checkmate()?(c.turn()==="w"?-10000:10000):0);best.push(null)}else{const r=await Engine.eval(g._f[i],DEPTH);ev.push(r.cp);best.push(r.best)}
    job("an",`Analysing game ${AQ.done+1} of ${AQ.done+AQ.list.length+1}`,(i+1)/g._f.length)}
-  if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);AQ.done++;maybeBaseline();
+  if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);Fr.soon();AQ.done++;maybeBaseline();
   if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle())}}
  catch(e){$("#anState").innerHTML='<div class="verdict v-no">The engine could not start in this browser.</div>'}
  AQ=null;job("an",null);if(P&&gen===GEN)maybeBaseline();if(route.cur==="progress")renderProgress();if(CUR&&!CUR.an)renderAnState()}
@@ -222,7 +222,7 @@ function loadPuzzle(p){PI=p;HINT=0;DONE=false;$("#tFeedback").innerHTML="";$("#t
  const g=p.g,e=p.e,c=new Chess(g._f[e.i]),m=g._m[e.i-1];TB.flip=c.turn()==="b";TB.set(g._f[e.i],{last:m?{from:m.from,to:m.to}:null});
  $("#tPrompt").textContent=`${c.turn()==="w"?"White":"Black"} to move. Find the best move.`;
  $("#tMeta").innerHTML=`<span>From your game on ${esc(g.date)} vs ${esc(g.opp)} · ${esc(famOf(g.eco))} · move ${Math.floor(e.i/2)+1}</span>`;renderTStats()}
-const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id)};
+const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id);Fr.soon()};
 async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;
  TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={});st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
  if(!ok){$("#tFeedback").innerHTML='<div class="small">Checking your move…</div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
@@ -302,7 +302,7 @@ function renderOps(){const col=$("#opColor").value,m={};GAMES.filter(g=>g.color=
   return `<tr><td data-l="Opening">${esc(f)}</td><td class="r" data-l="Games">${a.length}</td><td class="r" data-l="Score" style="color:${s<45?"var(--red)":s>55?"var(--good)":"inherit"};font-weight:700">${Math.round(s)}%</td><td data-l="W / D / L"><span class="num">${w} / ${d} / ${l}</span></td></tr>`}).join(""):'<tr><td colspan="4" class="small">No opening with 5+ games in the last year.</td></tr>'}
 $("#opColor").onchange=renderOps;
 $("#anMore").onclick=()=>{analyseRecent(20);$("#anNote").textContent="Queued — see progress at the top."};
-$("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10),manual:new Date().toISOString()});Sync.mark("base",acct()+"|"+P.tc);renderProgress()};
+$("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10),manual:new Date().toISOString()});Sync.mark("base",acct()+"|"+P.tc);Fr.soon();renderProgress()};
 $("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sync();$("#anNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#anNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#syncBtn").disabled=false;renderProgress()};
 
 /* ---------- onboarding ---------- */
@@ -331,6 +331,8 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   s.onerror=()=>{this._load=null;rej(new Error("load"))};document.head.appendChild(s)}))},
  hasSession(){try{const ref=new URL(CFG.supabaseUrl).hostname.split(".")[0];return !!localStorage.getItem("sb-"+ref+"-auth-token")}catch(e){return false}},
  async start(){if(!SB_ON)return;document.querySelectorAll(".acct-only").forEach(e=>e.hidden=false);const q=new URLSearchParams(location.search);
+  if(q.has("invite")){LS.set("invite",q.get("invite").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,40));history.replaceState(null,"",location.pathname+location.hash);
+   if(!this.hasSession()){acctOpen();acctMsg("A friend invited you. Sign in to accept, then you can compare your games.")}}
   if(q.has("error_description")){acctOpen();acctMsg(q.get("error_description")+" Ask for a new link, or enter the code from the email.");}
   if(!q.has("code")&&!this.hasSession()){if(q.has("error_description"))history.replaceState(null,"",location.pathname+location.hash);return}
   try{await this.load();const {error}=await this.sb.auth.initialize();
@@ -339,8 +341,8 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   if(q.has("code")||q.has("error_description"))history.replaceState(null,"",location.pathname+location.hash);
   document.addEventListener("visibilitychange",()=>{if(!this.me)return;if(document.hidden)this.flush();else if(Date.now()-this.pulled>5*60e3)this.run()})},
  onAuth(ses){const u=ses&&ses.user;
-  if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};acctUI();this.run()}
-  else if(!u&&this.me){this.me=null;acctUI()}},
+  if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};Fr.prof=null;acctUI();this.run();Fr.onSignIn()}
+  else if(!u&&this.me){this.me=null;Fr.prof=null;acctUI();if(route.cur==="friends")Fr.render()}},
  /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}} */
  mark(kind,key){if(!SB_ON)return;const o=LS.get("sb.out",{});(o[kind]=o[kind]||{})[key]=1;LS.set("sb.out",o);if(this.me){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),2000)}},
  async run(){if(!this.me||this.busy)return;this.busy=true;this.err="";acctUI();
@@ -382,10 +384,11 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   hi(bs,"base");
   // linked accounts: on a device with no profile yet, open the most recently used one
   const la=await this.rows("linked_accounts","account,tc",w.la);hi(la,"la");LS.set(wk,w);this.pulled=Date.now();
-  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats()}
+  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats();Fr.soon()}
   else if(la.length){const r=la[la.length-1],i=r.account.indexOf(":");P={source:r.account.slice(0,i),user:r.account.slice(i+1),tc:r.tc};LS.set("profile",P);enter(false)}},
- async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines"])out[t]=await this.rows(t,"*");return out},
- async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;LS.set("sb.out",{});acctUI()},
+ async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
+  const f=await this.sb.rpc("my_friends");if(f.error)throw f.error;out.friends=f.data;return out},
+ async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;Fr.prof=null;LS.set("sb.out",{});acctUI();if(route.cur==="friends")Fr.render()},
  async deleteAccount(){const {error}=await this.sb.rpc("delete_my_account");if(error)throw error;const id=this.me.id;await this.signOut();try{localStorage.removeItem("rc.sb.init."+id);localStorage.removeItem("rc.sb.pull."+id)}catch(e){}}};
 
 /* account panel */
@@ -416,10 +419,55 @@ $("#acctExport").onclick=async()=>{acctMsg("Preparing your data…");try{const d
 $("#acctDelete").onclick=async()=>{if(!acctDel){acctDel=true;acctUI();return}acctMsg("Deleting…");
  try{await Sync.deleteAccount();acctDel=false;acctMsg("Your account and its synced data are deleted. Data in this browser is kept.")}catch(x){acctMsg("Couldn't delete the account. Try again in a minute.")}};
 
+/* ---------- friends + leaderboard (optional; needs an account) ----------
+   Stats are worked out here from the current account's games and uploaded (only while sharing is on,
+   at most every 20 s). Friends' rows come from friends_leaderboard(); see supabase/migrations/002_friends.sql. */
+const Fr={prof:null,_t:null,
+ err(e){const m=(e&&e.message)||"";return /invite not found/.test(m)?"That invite link doesn't work any more. Ask your friend for a new one.":/own invite/.test(m)?"That's your own invite link. Send it to a friend instead.":"Couldn't reach the server. Try again in a minute."},
+ msg(t){$("#fMsg").textContent=t||""},
+ async profile(){if(this.prof)return this.prof;const sb=Sync.sb,cols="display_name,share,invite_code";let {data,error}=await sb.from("profiles").select(cols).maybeSingle();if(error)throw error;
+  if(!data){const r=await sb.from("profiles").insert({share:false}).select(cols).single();if(r.error)throw r.error;data=r.data}return this.prof=data},
+ async onSignIn(){try{await this.profile();const code=LS.get("invite",null);if(code){LS.set("invite",null);await this.accept(code)}this.soon(1000)}catch(e){}if(route.cur==="friends")this.render()},
+ async accept(code){let t;try{const {data,error}=await Sync.sb.rpc("add_friend",{code});if(error)throw error;t=`You and ${data||"your friend"} are now friends.`}catch(e){t=this.err(e)}
+  if($("#acct").open)$("#acct").close();if(P){if(location.hash!=="#friends")location.hash="friends";this.msg(t)}else $("#startMsg").textContent=t+" Enter your username to start."},
+ soon(ms){if(!SB_ON)return;clearTimeout(this._t);this._t=setTimeout(()=>this.publish(),ms==null?20000:ms)},
+ row(){const an=GAMES.filter(g=>g.an),last=an.slice(-20),n=last.length,r=x=>x==null?null:Math.round(x);let bl=0,mi=0;
+  last.forEach(g=>errorsOf(g).forEach(e=>{if(e.mine){if(e.kind==="blunder")bl++;else if(e.kind==="mistake")mi++}}));
+  const s=stats(),b=LS.get(uk("base."+P.tc),null);
+  return {user_id:Sync.me.id,account:acct(),tc:P.tc,games_analysed:an.length,blunders_per_game:n?bl/n:null,mistakes_per_game:n?mi/n:null,median_time_used:r(s.time),
+   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
+ async publish(){if(!Sync.me||!P||!GAMES.length||!ACCT_RE.test(acct()))return;
+  try{const pr=await this.profile();if(!pr.share)return;const {error}=await Sync.sb.from("leaderboard_stats").upsert(this.row(),{onConflict:"user_id,account,tc"});if(error)throw error;
+   if(route.cur==="friends")await this.board()}catch(e){this.soon(120000)}},
+ async render(){const on=!!Sync.me;$("#fOut").hidden=on;$("#fIn").hidden=!on;if(!on)return;
+  try{const pr=await this.profile();$("#fName").value=pr.display_name||"";$("#fShare").checked=pr.share;$("#fLink").value=location.origin+location.pathname+"?invite="+pr.invite_code;
+   await this.board();await this.friends()}catch(e){this.msg(this.err(e))}},
+ async board(){$("#fBoardTitle").textContent="Leaderboard · "+TCL[P.tc];const {data,error}=await Sync.sb.rpc("friends_leaderboard",{p_tc:P.tc});if(error)throw error;
+  const few=r=>r.games_analysed<10,num=(v,d)=>v==null?"–":v.toFixed(d),bpg=r=>r.blunders_per_game==null?99:r.blunders_per_game;
+  const rows=(data||[]).slice().sort((a,b)=>(few(a)-few(b))||(bpg(a)-bpg(b)));
+  $("#fBody").innerHTML=rows.length?rows.map(r=>{const d=r.rating_now!=null&&r.rating_base!=null?r.rating_now-r.rating_base:null;
+   return `<tr class="${r.is_me?"me":""}"><td>${esc(r.display_name||"(no name)")}${r.is_me?" (you)":""}<span class="src">${esc((SRC[r.source]||{}).name||"")}</span></td>`+
+    `<td class="r">${few(r)?"–":num(r.blunders_per_game,2)}</td><td class="r">${few(r)?"–":num(r.mistakes_per_game,2)}</td><td class="r">${mmss(r.median_time_used)}</td>`+
+    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
+   :`<tr><td colspan="7" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
+ async friends(){const {data,error}=await Sync.sb.rpc("my_friends");if(error)throw error;const L=$("#fList");
+  L.innerHTML=(data||[]).length?data.map(f=>`<li><span>${esc(f.display_name||"(no name yet)")}${f.sharing?"":'<span class="small">not sharing</span>'}</span><button class="link" type="button" data-rm="${esc(f.friend_id)}">Remove</button></li>`).join("")
+   :'<li class="small">No friends yet. Send them your invite link.</li>';
+  L.querySelectorAll("[data-rm]").forEach(b=>b.onclick=async()=>{if(b.dataset.ok!=="1"){b.dataset.ok="1";b.textContent="Click again to remove";return}
+   const id=b.dataset.rm,me=Sync.me.id,[a,c]=me<id?[me,id]:[id,me],{error}=await Sync.sb.from("friendships").delete().eq("user_a",a).eq("user_b",c);
+   this.msg(error?this.err(error):"Friend removed.");await this.render()})}};
+$("#fShareForm").onsubmit=async e=>{e.preventDefault();const name=$("#fName").value.trim(),share=$("#fShare").checked;
+ if(share&&!name)return Fr.msg("Add a name so your friends know it's you.");$("#fSave").disabled=true;
+ try{const {error}=await Sync.sb.from("profiles").update({display_name:name||null,share}).eq("user_id",Sync.me.id);if(error)throw error;Fr.prof=null;
+  Fr.msg(share?"Saved. Your stats are shared with your friends.":"Saved. Your stats aren't shared.");if(share)await Fr.publish();await Fr.render()}
+ catch(x){Fr.msg(Fr.err(x))}$("#fSave").disabled=false};
+$("#fCopy").onclick=()=>{const v=$("#fLink").value,done=()=>Fr.msg("Link copied.");try{navigator.clipboard.writeText(v).then(done,()=>{$("#fLink").select();document.execCommand("copy");done()})}catch(e){$("#fLink").select()}};
+$("#fNewLink").onclick=async()=>{try{const {data,error}=await Sync.sb.rpc("new_invite_code");if(error)throw error;Fr.prof.invite_code=data;$("#fLink").value=location.origin+location.pathname+"?invite="+data;Fr.msg("New link made. The old one no longer works.")}catch(e){Fr.msg(Fr.err(e))}};
+
 /* ---------- routing ---------- */
-function route(){if(!P){show1("start");return}const t=["review","trainer","progress"].includes(location.hash.slice(1))?location.hash.slice(1):"review";route.cur=t;show1(t);
+function route(){if(!P){show1("start");return}const t=["review","trainer","progress"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"review";route.cur=t;show1(t);
  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.t===t)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show()}
+ if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render()}
 function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);$("#hdr").hidden=t==="start"}
 window.addEventListener("hashchange",route);
 

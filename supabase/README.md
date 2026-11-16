@@ -8,7 +8,9 @@ Project: `https://ednyucirnrdcsveqlokb.supabase.co`. Make sure it's in an EU reg
 
 SQL Editor → New query → paste all of `migrations/001_sync.sql` → Run. It's safe to run again.
 
-Then check Database → Tables: `analyses`, `baselines`, `linked_accounts` and `puzzle_progress` should each show "RLS enabled".
+Then do the same with `migrations/002_friends.sql` (friends and the leaderboard).
+
+Then check Database → Tables: `analyses`, `baselines`, `linked_accounts`, `puzzle_progress`, `profiles`, `friendships` and `leaderboard_stats` should each show "RLS enabled".
 
 ## 2. Sign-in settings (Authentication)
 

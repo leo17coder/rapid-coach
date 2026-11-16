@@ -1,6 +1,6 @@
 # Rapid Coach V2 plan
 
-Status: part 3 (Lichess) and part 1 (accounts and sync) are built; part 1 goes live once the Supabase setup in `supabase/README.md` is done. Part 2 (leaderboard) is not started. Not built yet from part 1: deleting long-inactive accounts, and the keep-awake job. The V1 rules still hold: all compute in the browser, no AI calls, free to run, GPL-3.0, one request at a time to every game API.
+Status: part 3 (Lichess) and part 1 (accounts and sync) are built; part 1 goes live once the Supabase setup in `supabase/README.md` is done. Part 2 (leaderboard) is built too; invite links make two people friends at once instead of a request to accept, and the 7-day puzzle count was left out. Not built yet from part 1: deleting long-inactive accounts, and the keep-awake job. The V1 rules still hold: all compute in the browser, no AI calls, free to run, GPL-3.0, one request at a time to every game API.
 
 Build order: **3 → 1 → 2**. Lichess first, because it changes the local data keys that sync then has to mirror; the leaderboard last, because it needs accounts.
 

@@ -54,5 +54,5 @@ Not affiliated with or endorsed by chess.com or Lichess.
 ## Roadmap (V2)
 
 - ~~Optional accounts (Supabase) to sync across devices~~ (built; needs the Supabase setup above)
-- Friends leaderboard: blunders per game, time used, puzzles solved
+- ~~Friends leaderboard: blunders per game, time used, puzzles solved~~ (built; run `supabase/migrations/002_friends.sql`)
 - ~~Lichess support~~ (done)

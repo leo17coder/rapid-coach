@@ -17,6 +17,7 @@
     <a href="#review" data-t="review">Review</a>
     <a href="#trainer" data-t="trainer">Trainer</a>
     <a href="#progress" data-t="progress">Progress</a>
+    <a href="#friends" data-t="friends" class="acct-only" hidden>Friends</a>
   </nav>
   <div class="job" id="job" hidden><span id="jobTxt"></span><div class="bar"><b id="jobBar"></b></div></div>
   <div class="who"><span id="whoName"></span><button class="link" id="switchBtn">Switch</button><button class="link acctBtn acct-only" type="button" hidden>Sign in to sync</button></div>
@@ -132,6 +133,44 @@
     <table class="stack" style="margin-top:8px"><thead><tr><th>Opening</th><th class="r">Games</th><th class="r">Score</th><th>W / D / L</th></tr></thead><tbody id="opBody"></tbody></table>
   </div>
   <div class="row" style="margin-top:24px"><button id="anMore" class="pri">Analyse 20 more games</button><button id="syncBtn">Check for new games</button><button id="resetBase">Reset baseline</button><span class="small" id="anNote"></span></div>
+</section>
+
+<!-- FRIENDS (only with accounts switched on) -->
+<section id="v-friends" hidden>
+  <h1>Friends</h1>
+  <p class="sub" id="fSub">Compare blunders, time used, puzzles and rating progress with friends.</p>
+  <div class="status" id="fMsg" role="status"></div>
+  <div id="fOut" hidden>
+    <div class="panel fr-out">
+      <p>Sign in to compare with friends. Each of you shares an invite link, and only people you add can see your numbers.</p>
+      <button class="pri acctBtn" type="button">Sign in to sync</button>
+    </div>
+  </div>
+  <div id="fIn" hidden>
+    <h2 id="fBoardTitle">Leaderboard</h2>
+    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
+    <p class="small" id="fNote">Last 20 analysed games; “–” means fewer than 10 analysed so far. Lower blunders and mistakes are better. Rating change is shown as a difference only, because chess.com and Lichess ratings can't be compared.</p>
+    <div class="two" style="margin-top:28px">
+      <div class="panel">
+        <h2>Your sharing</h2>
+        <form id="fShareForm" class="fr-form">
+          <label for="fName">Name your friends see</label>
+          <input id="fName" maxlength="30" autocomplete="nickname" placeholder="e.g. Leo">
+          <label class="fr-check"><input type="checkbox" id="fShare"> Share my stats with friends</label>
+          <p class="small">Friends see your name, which site you play on and the numbers in the table, never your email or your games. Switching sharing off deletes your shared stats.</p>
+          <button class="pri" id="fSave">Save</button>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Invite friends</h2>
+        <p class="small">Anyone who opens this link and signs in becomes your friend. Send it only to people you want to add.</p>
+        <div class="fr-link"><input id="fLink" readonly aria-label="Your invite link"><button id="fCopy" type="button">Copy</button></div>
+        <button class="link" id="fNewLink" type="button">Make a new link (the old one stops working)</button>
+        <h2 style="margin-top:22px">Your friends</h2>
+        <ul class="fr-list" id="fList"></ul>
+      </div>
+    </div>
+  </div>
 </section>
 </main>
 
