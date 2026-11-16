@@ -2,7 +2,6 @@
 {
 /* ---------- utils ---------- */
 const $=s=>document.querySelector(s);
-const GLY={k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
 const DRAWS=new Set(["agreed","repetition","stalemate","insufficient","50move","timevsinsufficient"]);
 const wp=cp=>50+50*(2/(1+Math.exp(-0.00368208*cp))-1);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -134,26 +133,79 @@ const baseSecs=()=>tcParts(P.tc==="600"?"600":(GAMES.length?GAMES[GAMES.length-1
 const score=a=>a.length?(a.filter(g=>g.result==="win").length+a.filter(g=>g.result==="draw").length/2)/a.length*100:null;
 
 /* ---------- board ---------- */
-function Board(el,opts){this.el=el;this.flip=false;this.sel=null;this.onMove=opts&&opts.onMove;this.fen=new Chess().fen();this.arrows=[];this.last=null;this.targets=[];
- el.addEventListener("click",e=>{if(!this.onMove)return;const r=el.getBoundingClientRect();let x=Math.floor((e.clientX-r.left)/r.width*8),y=Math.floor((e.clientY-r.top)/r.height*8);if(this.flip){x=7-x;y=7-y}this.click("abcdefgh"[x]+(8-y))})}
+/* ---------- display settings, icons, sounds ---------- */
+/* UI = rc.ui (this browser only): theme "system"|"light"|"dark", board "green"|"wood"|"slate", pieces "cburnett"|"bold", sound */
+const UI=Object.assign({theme:"system",board:"green",pieces:"cburnett",sound:false},LS.get("ui",{})),BOARDS=[];
+const RM=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
+const ic=(n,c)=>`<svg class="ic${c?" "+c:""}" aria-hidden="true" focusable="false"><use href="vendor/icons.svg#i-${n}"/></svg>`;
+function applyUI(){const d=document.documentElement;if(UI.theme==="system")delete d.dataset.theme;else d.dataset.theme=UI.theme;d.dataset.board=UI.board;BOARDS.forEach(b=>b.draw())}
+/* sounds are synthesised with Web Audio (no audio files); off unless switched on in settings */
+const Snd={ctx:null,nb:null,
+ play(k){if(!UI.sound)return;try{const C=this.ctx||(this.ctx=new (window.AudioContext||window.webkitAudioContext)()),t=C.currentTime;if(C.state==="suspended")C.resume();
+  if(!this.nb){this.nb=C.createBuffer(1,C.sampleRate*.08,C.sampleRate);const d=this.nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3)}
+  const knock=(f,v,at)=>{const s=C.createBufferSource(),bp=C.createBiquadFilter(),g=C.createGain();s.buffer=this.nb;bp.type="bandpass";bp.frequency.value=f;bp.Q.value=1.6;g.gain.value=v;s.connect(bp).connect(g).connect(C.destination);s.start(t+at)};
+  const tone=(f,d,v,at,type)=>{const o=C.createOscillator(),g=C.createGain();o.type=type||"sine";o.frequency.setValueAtTime(f,t+at);g.gain.setValueAtTime(0,t+at);g.gain.linearRampToValueAtTime(v,t+at+.008);g.gain.exponentialRampToValueAtTime(.0001,t+at+d);o.connect(g).connect(C.destination);o.start(t+at);o.stop(t+at+d+.05)};
+  if(k==="move")knock(1100,1.4,0);else if(k==="capture"){knock(700,1.8,0);knock(1500,1,.045)}
+  else if(k==="correct"){tone(660,.14,.16,0);tone(990,.22,.16,.09)}else if(k==="wrong"){tone(233,.22,.14,0,"triangle");tone(196,.3,.12,.12,"triangle")}
+  else if(k==="goal")[523,659,784,1047].forEach((f,i)=>tone(f,.28,.13,i*.09))}catch(e){}}};
+
+/* ---------- board: SVG pieces, click or drag to move, keyboard play, move animation ----------
+   opts: onMove(from, to), sound (default: on for playable boards), label (aria). Board.lock blocks input. */
+function Board(el,opts){opts=opts||{};this.el=el;this.flip=false;this.sel=null;this.onMove=opts.onMove;this.fen=new Chess().fen();this.arrows=[];this.last=null;this.targets=[];this.kb=null;
+ this.sound=opts.sound!=null?opts.sound:!!opts.onMove;el.innerHTML='<div class="bsvg"></div><span class="sr-only" aria-live="polite"></span>';this.host=el.firstChild;this.live=el.lastChild;BOARDS.push(this);
+ el.setAttribute("role","group");el.setAttribute("aria-label",(opts.label||"Chess board")+(this.onMove?". Click or drag pieces; with the keyboard use the arrow keys, then Enter to pick up and drop.":""));
+ if(!this.onMove)return;el.tabIndex=0;
+ const sqAt=e=>{const r=el.getBoundingClientRect();let x=Math.floor((e.clientX-r.left)/r.width*8),y=Math.floor((e.clientY-r.top)/r.height*8);if(x<0||y<0||x>7||y>7)return null;if(this.flip){x=7-x;y=7-y}return "abcdefgh"[x]+(8-y)};
+ el.addEventListener("pointerdown",e=>{if(this.lock||e.button>0)return;const sq=sqAt(e);if(!sq)return;this.kbOn=false;const c=new Chess(this.fen),p=c.get(sq);
+  if(this.sel&&this.targets.includes(sq)){e.preventDefault();this.click(sq);return}
+  if(p&&p.color===c.turn()){const was=this.sel===sq;if(!was)this.click(sq);this.drag={from:sq,x:e.clientX,y:e.clientY,moved:false,id:e.pointerId,p,was};try{el.setPointerCapture(e.pointerId)}catch(x){}e.preventDefault()}else this.click(sq)});
+ el.addEventListener("pointermove",e=>{const d=this.drag;if(!d||d.id!==e.pointerId)return;
+  if(!d.moved){if(Math.hypot(e.clientX-d.x,e.clientY-d.y)<5)return;d.moved=true;el.classList.add("dragging");const r=el.getBoundingClientRect(),g=document.createElement("img");g.className="ghost-pc";g.alt="";g.src=this.pcSrc(d.p);g.style.width=g.style.height=r.width/8+"px";el.appendChild(g);d.g=g;this.dragFrom=d.from;this.draw()}
+  const r=el.getBoundingClientRect();d.g.style.left=e.clientX-r.left+"px";d.g.style.top=e.clientY-r.top+"px"});
+ const end=(e,drop)=>{const d=this.drag;if(!d||d.id!==e.pointerId)return;this.drag=null;this.dragFrom=null;el.classList.remove("dragging");if(d.g)d.g.remove();
+  if(!d.moved){if(d.was){this.sel=null;this.targets=[];this.draw()}return}const to=drop&&sqAt(e);
+  if(to&&to!==d.from&&this.targets.includes(to)){this.sel=null;this.targets=[];this.noAnim=true;this.onMove(d.from,to)}else this.draw()};
+ el.addEventListener("pointerup",e=>end(e,true));el.addEventListener("pointercancel",e=>end(e,false));
+ el.addEventListener("keydown",e=>{if(this.lock)return;const k=e.key,F="abcdefgh";if(!this.kb)this.kb=this.flip?"e7":"e2";let f=F.indexOf(this.kb[0]),r=+this.kb[1];const dir=this.flip?-1:1;
+  if(k==="ArrowUp")r=Math.min(8,Math.max(1,r+dir));else if(k==="ArrowDown")r=Math.min(8,Math.max(1,r-dir));else if(k==="ArrowLeft")f=Math.min(7,Math.max(0,f-dir));else if(k==="ArrowRight")f=Math.min(7,Math.max(0,f+dir));
+  else if(k==="Enter"||k===" "){e.preventDefault();this.kbOn=true;this.click(this.kb);return}else if(k==="Escape"){this.sel=null;this.targets=[];this.draw();return}else return;
+  e.preventDefault();this.kb=F[f]+r;this.kbOn=true;const p=new Chess(this.fen).get(this.kb);this.live.textContent=this.kb+(p?` ${p.color==="w"?"white":"black"} ${({p:"pawn",n:"knight",b:"bishop",r:"rook",q:"queen",k:"king"})[p.type]}`:"");this.draw()});
+ el.addEventListener("blur",()=>{if(this.kbOn){this.kbOn=false;this.draw()}})}
+Board.prototype.pcSrc=function(p){return `vendor/pieces/${UI.pieces==="bold"?"bold":"cburnett"}/${p.color}${p.type.toUpperCase()}.svg`};
 Board.prototype.sqXY=function(sq){let x="abcdefgh".indexOf(sq[0]),y=8-+sq[1];if(this.flip){x=7-x;y=7-y}return [x,y]};
-Board.prototype.click=function(sq){if(this.lock)return;const c=new Chess(this.fen);if(this.sel&&this.targets.includes(sq)){const from=this.sel;this.sel=null;this.targets=[];this.onMove(from,sq);return}
- const p=c.get(sq);if(p&&p.color===c.turn()){this.sel=sq;this.targets=c.moves({square:sq,verbose:true}).map(m=>m.to)}else{this.sel=null;this.targets=[]}this.draw()};
-Board.prototype.set=function(fen,o){this.fen=fen;o=o||{};this.last=o.last||null;this.arrows=o.arrows||[];this.hl=o.hl||null;this.sel=null;this.targets=[];this.draw()};
-Board.prototype.draw=function(){const c=new Chess(this.fen),B=c.board(),C=["#2d6cdf","#c7362b","#2f8a4e"];let s='<svg viewBox="0 0 8 8" role="img" aria-label="Chess board">';
- for(let r=0;r<8;r++)for(let f=0;f<8;f++){const sq="abcdefgh"[f]+(8-r),[x,y]=this.sqXY(sq);s+=`<rect x="${x}" y="${y}" width="1" height="1" fill="${(r+f)%2?"var(--dk)":"var(--lt)"}"/>`;
-  if(this.last&&(this.last.from===sq||this.last.to===sq))s+=`<rect x="${x}" y="${y}" width="1" height="1" fill="#f2c94c" opacity=".45"/>`;
-  if(this.sel===sq||this.hl===sq)s+=`<rect x="${x}" y="${y}" width="1" height="1" fill="#2d6cdf" opacity=".35"/>`}
- for(let i=0;i<8;i++){const fl=this.flip?"hgfedcba"[i]:"abcdefgh"[i],rk=this.flip?i+1:8-i,col=i%2?"var(--lt)":"var(--dk)";s+=`<text class="coord" x="${i+.05}" y="7.95" fill="${col}" style="filter:brightness(.8)">${fl}</text><text class="coord" x="7.82" y="${i+.2}" fill="${col}" style="filter:brightness(.8)">${rk}</text>`}
- for(let r=0;r<8;r++)for(let f=0;f<8;f++){const p=B[r][f];if(!p)continue;const [x,y]=this.sqXY("abcdefgh"[f]+(8-r));s+=`<text class="pc ${p.color}" x="${x+.5}" y="${y+.54}">${GLY[p.type]}︎</text>`}
- for(const t of this.targets){const [x,y]=this.sqXY(t);s+=c.get(t)?`<circle cx="${x+.5}" cy="${y+.5}" r=".44" fill="none" stroke="#1d1813" stroke-opacity=".35" stroke-width=".07"/>`:`<circle cx="${x+.5}" cy="${y+.5}" r=".15" fill="#1d1813" opacity=".3"/>`}
- s+="<defs>"+C.map((c,i)=>`<marker id="ah${this.el.id}${i}" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="2.6" markerHeight="2.6" orient="auto"><path d="M0,0L10,5L0,10z" fill="${c}"/></marker>`).join("")+"</defs>";
- for(const a of this.arrows){const [x1,y1]=this.sqXY(a.from),[x2,y2]=this.sqXY(a.to),dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ci=a.c==="red"?1:a.c==="green"?2:0;
-  s+=`<line x1="${x1+.5}" y1="${y1+.5}" x2="${x2+.5-dx/L*.32}" y2="${y2+.5-dy/L*.32}" stroke="${C[ci]}" stroke-width=".16" stroke-linecap="round" opacity=".85" marker-end="url(#ah${this.el.id}${ci})"/>`}
- this.el.innerHTML=s+"</svg>"};
+Board.prototype.click=function(sq){if(this.lock)return;const c=new Chess(this.fen);if(this.sel&&this.targets.includes(sq)){const from=this.sel;this.sel=null;this.targets=[];this.live.textContent=`${from} to ${sq}`;this.onMove(from,sq);return}
+ const p=c.get(sq);if(p&&p.color===c.turn()){this.sel=sq;this.targets=c.moves({square:sq,verbose:true}).map(m=>m.to);this.live.textContent=`${sq} selected`}else{this.sel=null;this.targets=[]}this.draw()};
+/* o: {last: {from, to}, arrows: [{from, to, c: "green"|"red"|"blue"}], hl: square}. A position reached by `last` from the shown one slides and may click. */
+Board.prototype.set=function(fen,o){o=o||{};const prev=this.fen,L=o.last;let mv=null;
+ if(L&&prev!==fen){const a=new Chess(prev).get(L.from),b=new Chess(fen).get(L.to);if(a&&b&&a.color===b.color)mv={...L,cap:(prev.split(" ")[0].match(/[a-z]/gi)||[]).length>(fen.split(" ")[0].match(/[a-z]/gi)||[]).length}}
+ this.fen=fen;this.last=L||null;this.arrows=o.arrows||[];this.hl=o.hl||null;this.sel=null;this.targets=[];this.draw(mv&&!this.noAnim&&!RM()?mv:null);this.noAnim=false;
+ if(mv&&this.sound)Snd.play(mv.cap?"capture":"move")};
+Board.prototype.draw=function(anim){const c=new Chess(this.fen),B=c.board(),F="abcdefgh",AC={green:"var(--ar-green)",red:"var(--ar-red)",blue:"var(--ar-blue)"};let s='<svg viewBox="0 0 8 8" aria-hidden="true">';
+ const chk=c.in_check()?(()=>{for(let r=0;r<8;r++)for(let f=0;f<8;f++){const p=B[r][f];if(p&&p.type==="k"&&p.color===c.turn())return F[f]+(8-r)}})():null;
+ if(chk)s+='<defs><radialGradient id="chk'+this.el.id+'"><stop offset="0" stop-color="var(--hl-check)" stop-opacity=".95"/><stop offset=".55" stop-color="var(--hl-check)" stop-opacity=".45"/><stop offset="1" stop-color="var(--hl-check)" stop-opacity="0"/></radialGradient></defs>';
+ for(let r=0;r<8;r++)for(let f=0;f<8;f++){const sq=F[f]+(8-r),[x,y]=this.sqXY(sq),lt=(r+f)%2===0;s+=`<rect x="${x}" y="${y}" width="1" height="1" style="fill:var(${lt?"--sq-l":"--sq-d"})"/>`;
+  if(this.last&&(this.last.from===sq||this.last.to===sq))s+=`<rect x="${x}" y="${y}" width="1" height="1" style="fill:var(--hl-last)"/>`;
+  if(this.sel===sq||this.hl===sq)s+=`<rect x="${x}" y="${y}" width="1" height="1" style="fill:var(--hl-sel)"/>`;
+  if(chk===sq)s+=`<rect x="${x}" y="${y}" width="1" height="1" fill="url(#chk${this.el.id})"/>`;
+  if(y===7)s+=`<text class="coord" x="${x+.94}" y="${y+.93}" text-anchor="end" style="fill:var(${lt?"--sq-d":"--sq-l"})">${sq[0]}</text>`;
+  if(x===0)s+=`<text class="coord" x="${x+.06}" y="${y+.22}" style="fill:var(${lt?"--sq-d":"--sq-l"})">${sq[1]}</text>`}
+ for(let r=0;r<8;r++)for(let f=0;f<8;f++){const p=B[r][f];if(!p)continue;const sq=F[f]+(8-r),[x,y]=this.sqXY(sq);s+=`<image class="pc" data-sq="${sq}" href="${this.pcSrc(p)}" x="${x}" y="${y}" width="1" height="1"${this.dragFrom===sq?' opacity=".3"':""}/>`}
+ for(const t of this.targets){const [x,y]=this.sqXY(t);s+=c.get(t)?`<circle cx="${x+.5}" cy="${y+.5}" r=".45" fill="none" style="stroke:var(--dot)" stroke-width=".09"/>`:`<circle cx="${x+.5}" cy="${y+.5}" r=".16" style="fill:var(--dot)"/>`}
+ if(this.kbOn&&this.kb){const [x,y]=this.sqXY(this.kb);s+=`<rect x="${x+.04}" y="${y+.04}" width=".92" height=".92" rx=".06" fill="none" style="stroke:var(--focus)" stroke-width=".08"/>`}
+ for(const a of this.arrows){const [x1,y1]=this.sqXY(a.from),[x2,y2]=this.sqXY(a.to),dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L,col=AC[a.c]||AC.blue;
+  const sx=x1+.5+ux*.22,sy=y1+.5+uy*.22,hx=x2+.5-ux*.12,hy=y2+.5-uy*.12,bx=hx-ux*.42,by=hy-uy*.42,w=.13,hw=.3;
+  s+=`<g opacity=".82" style="fill:${col}"><path d="M${sx-uy*w/2},${sy+ux*w/2}L${bx-uy*w/2},${by+ux*w/2}L${bx-uy*hw},${by+ux*hw}L${hx},${hy}L${bx+uy*hw},${by-ux*hw}L${bx+uy*w/2},${by-ux*w/2}L${sx+uy*w/2},${sy-ux*w/2}Z"/></g>`}
+ this.host.innerHTML=s+"</svg>";
+ if(anim){const im=this.host.querySelector(`image[data-sq="${anim.to}"]`);if(im){const [x1,y1]=this.sqXY(anim.from),[x2,y2]=this.sqXY(anim.to);im.style.transition="none";im.style.transform=`translate(${x1-x2}px,${y1-y2}px)`;im.getBoundingClientRect();requestAnimationFrame(()=>{im.style.transition="";im.style.transform="";setTimeout(()=>im.removeAttribute("style"),260)})}}};
+/* vertical eval bar (white's share); flip = black at the bottom */
+function EvalBar(el){this.el=el;el.innerHTML='<b></b><span class="top"></span><span class="bot"></span>';el.setAttribute("role","img")}
+EvalBar.prototype.set=function(cp,flip){const el=this.el;el.hidden=false;el.classList.toggle("flip",!!flip);if(cp==null){el.classList.add("wait");el.setAttribute("aria-label","Evaluation: working it out");return}
+ el.classList.remove("wait");el.querySelector("b").style.height=Math.max(3,Math.min(97,wp(cp)))+"%";const w=flip?"top":"bot",bl=flip?"bot":"top",t=evTxt(cp);
+ el.querySelector("."+w).textContent=cp>=0?t.replace("+",""):"";el.querySelector("."+bl).textContent=cp<0?t.replace("−",""):"";el.setAttribute("aria-label","Evaluation "+t)};
+EvalBar.prototype.hide=function(){this.el.hidden=true};
 
 /* ---------- REVIEW ---------- */
-const RB=new Board($("#board"));
+const RB=new Board($("#board"),{sound:true,label:"Game board"}),REB=new EvalBar($("#evBar"));
 function filtered(){const f=$("#gameFilter").value;return GAMES.filter(g=>f==="all"||(f==="loss"&&g.result==="loss")||(f==="win"&&g.result==="win")||f===g.color||(f==="an"&&g.an)).slice().reverse()}
 function fillPicker(){const list=filtered().slice(0,500),sel=$("#gamePick");
  sel.innerHTML=list.length?list.map(g=>{const e=g.an?serious(g).filter(x=>x.kind==="blunder").length:null;
@@ -166,7 +218,7 @@ function openGame(g,ply){CUR=replay(g);RB.flip=g.color==="b";PLY=ply==null?0:ply
  renderMoves();renderKM();renderAnState();show();$("#gamePick").value=g.id}
 function show(){const g=CUR;if(!g)return;if(g.an&&GS&&!GS.rev[g.id]){(g._seen||(g._seen=new Set())).add(PLY);if(g._seen.size>=8){GS.rev[g.id]=1;gAdd(g.result==="loss"?{rv:1,rvl:1}:{rv:1})}}const m=g._m[PLY-1],o={last:m?{from:m.from,to:m.to}:null,arrows:[]};
  if(g.an&&PLY<g.moves.length&&g.an.best[PLY]){const er=errorsOf(g).find(e=>e.i===PLY);if(er&&er.kind!=="inacc"){const nx=g._m[PLY],b=g.an.best[PLY];o.arrows.push({from:nx.from,to:nx.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"})}}
- RB.set(g._f[PLY],o);document.querySelectorAll("#moves button,#km button").forEach(b=>b.classList.toggle("on",+b.dataset.p===PLY));
+ RB.set(g._f[PLY],o);if(g.an&&g.an.ev[PLY]!=null)REB.set(g.an.ev[PLY],RB.flip);else REB.hide();document.querySelectorAll("#moves button,#km button").forEach(b=>b.classList.toggle("on",+b.dataset.p===PLY));
  const on=document.querySelector("#moves button.on"),mv=$("#moves");if(on){const t=on.offsetTop;if(t<mv.scrollTop||t>mv.scrollTop+mv.clientHeight-30)mv.scrollTop=t-mv.clientHeight/2}
  $("#evNow").textContent=g.an&&g.an.ev[PLY]!=null?`Move ${PLY?mvLabel(PLY-1):"0"} · ${evTxt(g.an.ev[PLY])}`:"";drawEval()}
 function renderMoves(){const g=CUR,er=errorsOf(g),tag={blunder:"??",mistake:"?",inacc:"?!"};let h="";
@@ -248,10 +300,10 @@ function wLabel(line,me,keep){if(!line||!line.L.length)return null;const L=line.
  return null}
 /* move text with move numbers from fen: "5. Nd6+ exd6 6. Bd3" / "5… exd6 6. Bd3" */
 const wMoves=(fen,L)=>{const f=fen.split(" "),w=f[1]==="w",n0=+f[5]||1;return L.map((m,j)=>{const wm=(j%2===0)===w,n=n0+Math.floor((j+(w?0:1))/2);return {num:wm?n+".":j===0?n+"…":"",san:m.san}})};
-function Why(el,board){this.el=el;this.b=board;this.tok=0}
-Why.prototype.clear=function(){this.tok++;this.el.innerHTML="";this.b.lock=false};
+function Why(el,board,bar){this.el=el;this.b=board;this.bar=bar;this.tok=0}
+Why.prototype.clear=function(){this.tok++;this.el.innerHTML="";this.b.lock=false;if(this.bar)this.bar.hide()};
 /* o: {fen, played: UCI of the move being explained, best: UCI of the right move (optional), ok: played was right, restore(): redraw the drill/puzzle position} */
-Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.lock=false;this.el.innerHTML='<div class="why-wait">Working out why…</div>';
+Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.lock=false;this.el.innerHTML='<div class="why-wait" role="status"><span class="sr-only">Working out why…</span><span class="skel" style="width:85%"></span><span class="skel" style="width:60%"></span><span class="skel" style="width:72%"></span></div>';
  const me=o.fen.split(" ")[1],opp=me==="w"?"Black":"White";let ev0=null,A=null,B=null;
  try{ev0=(await wEval(o.fen)).cp;if(t!==this.tok)return;if(o.played)A=await wLine(o.fen,o.played);if(t!==this.tok)return;
   if(!o.ok){const pv0=(await wEval(o.fen)).pv[0],b=o.best&&o.best!==o.played?o.best:pv0&&pv0!==o.played?pv0:null;if(b)B=await wLine(o.fen,b!==pv0?b:null)}}catch(e){}
@@ -265,17 +317,18 @@ Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.
 Why.prototype.render=function(say,lines){this.lines=lines;this.cur=null;
  this.el.innerHTML=`<p class="why-say">${esc(say)}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${l.title}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
   `<p class="why-moves">${wMoves(l.x.fen,l.x.L.slice(0,WHY_SHOW)).map((m,k)=>`${m.num?`<span class="num">${m.num}</span> `:""}<button class="why-mv" type="button" data-k="${k+1}">${esc(m.san)}</button>`).join(" ")}</p>`+
-  `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">◀ Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward ▶</button><button class="link" type="button" data-a="reset">Back to the position</button></div></div>`).join("");
+  `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">${ic("chevron-left","sm")}Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward${ic("chevron-right","sm")}</button><button class="link" type="button" data-a="reset">Back to the position</button></div></div>`).join("");
  this.el.querySelectorAll(".why-line").forEach(d=>{const i=+d.dataset.i;d.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>this.step(i,+b.dataset.k));
   d.querySelector('[data-a="back"]').onclick=()=>this.step(i,(this.cur&&this.cur.i===i?this.cur.k:1)-1);d.querySelector('[data-a="fwd"]').onclick=()=>this.step(i,(this.cur&&this.cur.i===i?this.cur.k:0)+1);
   d.querySelector('[data-a="reset"]').onclick=()=>this.reset()})};
 /* show line i after k plies: last move highlighted, arrow for the next move */
 Why.prototype.step=function(i,k){const l=this.lines[i];if(!l)return;const L=l.x.L.slice(0,WHY_SHOW);k=Math.max(0,Math.min(L.length,k));this.cur={i,k};this.b.lock=true;
- const m=L[k-1],nx=L[k];this.b.set(k?m.fen:l.x.fen,{last:m?{from:m.from,to:m.to}:null,arrows:nx?[{from:nx.from,to:nx.to,c:l.c}]:[]});
+ const m=L[k-1],nx=L[k],fen=k?m.fen:l.x.fen;this.b.set(fen,{last:m?{from:m.from,to:m.to}:null,arrows:nx?[{from:nx.from,to:nx.to,c:l.c}]:[]});
+ if(this.bar){const bar=this.bar,t=this.tok,cur=this.cur;bar.set(null,this.b.flip);wEval(fen).then(r=>{if(t===this.tok&&this.cur===cur)bar.set(r.cp,this.b.flip)}).catch(()=>{})}
  this.el.querySelectorAll(".why-mv").forEach(b=>b.classList.toggle("on",+b.closest(".why-line").dataset.i===i&&+b.dataset.k===k))};
-Why.prototype.reset=function(){this.cur=null;this.b.lock=false;this.el.querySelectorAll(".why-mv.on").forEach(b=>b.classList.remove("on"));if(this.o&&this.o.restore)this.o.restore()};
+Why.prototype.reset=function(){this.cur=null;this.b.lock=false;this.b.noAnim=true;if(this.bar)this.bar.hide();this.el.querySelectorAll(".why-mv.on").forEach(b=>b.classList.remove("on"));if(this.o&&this.o.restore)this.o.restore()};
 
-const TB=new Board($("#tboard"),{onMove:tryMove}),TW=new Why($("#tWhy"),TB);let PZ=[],PI=null,HINT=0,DONE=false;
+const TB=new Board($("#tboard"),{onMove:tryMove,label:"Puzzle board"}),TW=new Why($("#tWhy"),TB,new EvalBar($("#tEv")));let PZ=[],PI=null,HINT=0,DONE=false;
 const TST=()=>{const t=LS.get(uk("trainer"),{});return t};let TS={};
 function buildPuzzles(){PZ=[];for(const g of GAMES){if(!g.an)continue;replay(g);for(const e of serious(g))if(wp(e.before)>=30&&e.best)PZ.push({id:g.id+":"+e.i,g,e})}PZ.sort((a,b)=>b.g.ts-a.g.ts);if(route.cur==="trainer")renderTStats()}
 function pickPuzzle(){const st=id=>TS[id]||{};const failed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen);const pool=failed.length?failed:fresh.length?fresh:PZ;return pool[0]||null}
@@ -288,9 +341,9 @@ const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id
 async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;TW.clear();
  const back=()=>TB.set(c.fen(),{last:{from,to}});
  TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={}),was=!!st.ok;st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
- if(!ok){$("#tFeedback").innerHTML='<div class="small">Checking your move…</div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
+ if(!ok){$("#tFeedback").innerHTML='<div class="skel-wrap" role="status"><span class="sr-only">Checking your move…</span><span class="skel" style="width:55%"></span></div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
  if(PI!==p)return;
- if(ok){DONE=true;st.ok=1;const award=!was&&!st.x;if(award)st.x=1;saveTS();if(award)gAdd(st.fail?{pz:1}:{pz:1,p1:1});const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div><button class="link" id="tWhyBtn" type="button">Why?</button>`;
+ Snd.play(ok?"correct":"wrong");if(ok){DONE=true;st.ok=1;const award=!was&&!st.x;if(award)st.x=1;saveTS();if(award)gAdd(st.fail?{pz:1}:{pz:1,p1:1});const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div><button class="link" id="tWhyBtn" type="button">Why?</button>`;
   $("#tWhyBtn").onclick=()=>{$("#tWhyBtn").remove();TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:back})}}
  else{st.fail=(st.fail||0)+1;st.ok=0;saveTS();$("#tFeedback").innerHTML=`<div class="verdict v-no">${esc(mv.san)} isn't it. Look again at checks, captures and threats — for both sides.</div><button id="tRetry">Try again</button>`;$("#tRetry").onclick=()=>loadPuzzle(p);
   TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),best:p.e.best,restore:back})}
@@ -318,7 +371,7 @@ const OP_PLY=24,OP_TOL=6,OP_IV=[0,1,3,7,16,35,80],OP_LEARNED=3;   // plies, win-
 const posKey=fen=>fen.split(" ").slice(0,4).join(" "),opRes=g=>g.result==="win"?1:g.result==="draw"?.5:0;
 const movesTxt=path=>path.map((m,i)=>i%2===0?mvLabel(i)+" "+m:m).join(" ");
 let OPSEL=null,OT=null,OD=null,OPS={};
-const OB=new Board($("#oboard"),{onMove:(f,t)=>opMove(f,t)}),OEV=new Map(),OW=new Why($("#oWhy"),OB);
+const OB=new Board($("#oboard"),{onMove:(f,t)=>opMove(f,t),label:"Opening board"}),OEV=new Map(),OW=new Why($("#oWhy"),OB,new EvalBar($("#oEv")));
 const opBack=()=>{if(!OD)return;const h=OD.c.history({verbose:true}).slice(-1)[0];OB.set(OD.c.fen(),{last:h?{from:h.from,to:h.to}:null})};
 const saveOPS=k=>{LS.set(uk("openings"),OPS);if(k)Sync.mark("op",acct()+"|"+k);Fr.soon()};
 const opGames=(col,fam)=>GAMES.filter(g=>g.color===col&&famOf(g.eco)===fam);
@@ -359,14 +412,14 @@ async function opStep(){const d=OD;if(!d||d.gen!==GEN||d.key!==(OT&&OT.key))retu
  const m=c.move(x.san);if(!m)return opLineDone(d,"data");d.viaEx=x.src==="lichess";d.ply++;OB.set(c.fen(),{last:{from:m.from,to:m.to}});setTimeout(()=>{if(d===OD)opStep()},450)}
 async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=c.fen(),t=new Chess(fen),mv=t.move({from,to,promotion:"q"});if(!mv)return;d.wait=false;OW.clear();
  const k=posKey(fen),n=OT.T.get(k),u=mv.from+mv.to+(mv.promotion||""),pin=(OPS[k]||{}).pin,s=c.turn()==="w"?1:-1;OB.set(t.fen(),{last:{from,to}});
- $("#oFeedback").innerHTML='<div class="small">Checking your move…</div>';let best=pin||(n&&n.best),bev=n?n.ev:null,aev=null;
+ $("#oFeedback").innerHTML='<div class="skel-wrap" role="status"><span class="sr-only">Checking your move…</span><span class="skel" style="width:55%"></span></div>';let best=pin||(n&&n.best),bev=n?n.ev:null,aev=null;
  try{if(!best||bev==null){const r=await opEval(fen,14);best=best||r.best;if(bev==null)bev=r.cp}}catch(e){}
  if(d!==OD)return;let ok=!best||u===best,play=false;
  if(!ok){try{aev=(await opEval(t.fen(),12)).cp}catch(e){}if(d!==OD)return;const near=aev!=null&&bev!=null&&wp(s*bev)-wp(s*aev)<OP_TOL;if(pin&&near)play=true;else ok=near}
  const bs=best?uciSan(fen,best):null;
  if(play){d.wait=true;OB.set(fen,{last:c.history({verbose:true}).slice(-1).map(m=>({from:m.from,to:m.to}))[0]||null,arrows:[{from:pin.slice(0,2),to:pin.slice(2,4),c:"green"}]});
   $("#oFeedback").innerHTML=`<div class="verdict v-info">${esc(mv.san)} is playable, but your repertoire move here is <b>${esc(bs)}</b>. Play it.</div>`;return}
- opGrade(k,ok);
+ opGrade(k,ok);Snd.play(ok?"correct":"wrong");
  if(ok){c.move(mv.san);d.ply++;d.last={k,u,san:mv.san};const pinned=pin===u;
   $("#oFeedback").innerHTML=`<div class="verdict v-ok">${esc(mv.san)} — correct.${!pinned&&bs&&bs!==mv.san?` The engine's first choice is ${esc(bs)}, but yours is just as good.`:""}</div>`+
    `<button class="link" id="oPin" type="button">${pinned?`Unpin ${esc(mv.san)}`:`Pin ${esc(mv.san)} as my move here`}</button> <button class="link" id="oWhyBtn" type="button">Why?</button>`;
@@ -469,6 +522,8 @@ const BADGES=[["pz1","First puzzle","Solve a puzzle",c=>c.pz>=1],["pz25","Puzzle
  ["imp_op","Opening fixed","Score 10+ points more in an opening since you started practising it",c=>c.opUp>=10],
  ["fun_night","Night owl","Train after 11 pm",c=>c.n],["fun_early","Early bird","Train before 7 am",c=>c.e],["fun_wknd","Weekend warrior","Meet your goal on a Saturday and the Sunday after",c=>c.wknd],
  ["fun_p1","Sharpshooter","Solve 10 puzzles on the first try in one day",c=>c.p1day>=10],["fun_wk","Challenge accepted","Complete a weekly challenge",c=>c.wkDone]];
+const BICON={pz1:"puzzle",pz25:"puzzle",pz100:"puzzle",pz500:"crown",ol10:"book-open",ol50:"book-open",ol200:"graduation-cap",s3:"flame",s7:"flame",s30:"flame",s100:"flame",rv10:"search",rv50:"search",
+ imp_bl:"shield-check",imp_clk:"timer",imp_op:"trending-up",fun_night:"moon",fun_early:"sunrise",fun_wknd:"calendar-check",fun_p1:"crosshair",fun_wk:"trophy"};
 function gCtx(){const c={pz:0,ol:0,rv:0,p1day:0,n:0,e:0,wknd:0},D=GS.days;for(const k in D){const d=D[k];c.pz+=d.pz||0;c.ol+=d.ol||0;c.rv+=d.rv||0;c.p1day=Math.max(c.p1day,d.p1||0);if(d.n)c.n=1;if(d.e)c.e=1;
   if(d.g&&new Date(k+"T12:00:00Z").getUTCDay()===6&&(D[dAdd(k,1)]||{}).g)c.wknd=1}
  const st=gStreak(),s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs();c.best=st.best;c.cur=st.cur;c.wkDone=gWeeks().some(w=>wkSum(w).done);
@@ -486,7 +541,7 @@ function gCheck(xp0){if(!P||!GS)return;const xp=gXP(),l0=gLevel(xp0==null?xp:xp0
  if(ch)gSave()}
 /* record training: o = {pz: 1, p1: 1, ...} */
 function gAdd(o){if(!P||!GS)return;const xp0=gXP(),t=dkey(),d=GS.days[t]||(GS.days[t]={}),h=new Date().getHours();for(const k in o)d[k]=(d[k]||0)+o[k];
- if(h>=23||h<4)d.n=1;else if(h<7)d.e=1;if(!d.g&&dayU(d)>=gGoal()){d.g=1;gToast(`Daily goal met! +${GX.g} XP`)}
+ if(h>=23||h<4)d.n=1;else if(h<7)d.e=1;if(!d.g&&dayU(d)>=gGoal()){d.g=1;gToast(`Daily goal met! +${GX.g} XP`);Snd.play("goal")}
  const w=wkSum(wkOf(t));if(w.done&&!(GS.wkt===wkOf(t))){GS.wkt=wkOf(t);gToast(`Weekly challenge complete: ${w.ch.t}! +${WK_BONUS} XP`)}
  gSave();gCheck(xp0);if(route.cur==="home")renderHome()}
 /* merge two states (sync): day counts max, badges earliest, records best, settings newest, reviewed union */
@@ -500,7 +555,7 @@ function lbPassed(rows){const wk=wkOf(dkey()),xp=r=>r.xp_week===wk?r.weekly_xp||
  const prev=LS.get(uk("lbseen"),null),out=prev&&prev.wk===wk?prev.ahead.filter(n=>!ahead.includes(n)&&rows.some(r=>(r.display_name||"?")===n)):[];LS.set(uk("lbseen"),{wk,ahead});return out}
 
 /* ---------- HOME ---------- */
-const HTB=new Board($("#hThumb"));let HOMEtok=0,HSW=null;
+const HTB=new Board($("#hThumb"),{label:"Biggest swing"});let HOMEtok=0,HSW=null;
 function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen),un=GAMES.filter(g=>!g.an).length,now=Date.now();
  const due=Object.values(OPS).filter(x=>x.due&&x.due<=now).length,loss=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an),pl=(n,w)=>n+" "+w+(n===1?"":"s");
  if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:`Retry ${pl(n,"puzzle")} you missed`,p:"Positions where you went wrong before. Getting them right is the fastest way to fix a habit.",xp:n*GX.pz,go:"#trainer"})}
@@ -535,7 +590,7 @@ function renderHome(){if(!P||!GS)return;const tok=++HOMEtok,hide=GS.set.hide,tod
   $("#hStreak").innerHTML=`<b class="num">${st.cur}</b> day streak<span class="small">${st.fz?`${st.fz} streak freeze${st.fz>1?"s":""} ready`:"Earn a freeze every 7 days"} · best ${Math.max(st.best,GS.rec.ls||0)}</span>`;
   $("#hLevel").innerHTML=`<div class="lv-row"><b>${esc(lv.name)}</b><span class="small num">${xp} XP · ${lv.to-xp} to ${esc(lv.next)}</span></div><div class="meter"><b style="width:${Math.round((xp-lv.from)/(lv.to-lv.from)*100)}%;background:var(--ink)"></b></div>`;
   $("#hChallenge").innerHTML=`<div class="lv-row"><b>This week: ${esc(w.ch.t)}</b><span class="small num">${w.chv}/${w.ch.n} · +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(w.chv/w.ch.n*100)}%;background:var(--good)"></b></div>`;
-  $("#hBadges").innerHTML=BADGES.map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}" title="${esc(how)}"><span class="bdg" aria-hidden="true">${id.startsWith("imp")?"▲":id.startsWith("fun")?"★":id[0]==="s"?"✦":"●"}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?"Earned "+dkey(GS.badges[id]):esc(how)}</span></li>`).join("");
+  $("#hBadges").innerHTML=BADGES.map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}" title="${esc(how)}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?"Earned "+dkey(GS.badges[id]):esc(how)}</span></li>`).join("");
   const R=GS.rec;$("#hRecords").innerHTML=`<li><b class="num">${R.bw||0}</b> XP · best week</li><li><b class="num">${Math.max(R.ls||0,st.best)}</b> days · longest streak</li><li><b class="num">${R.bb==null?"—":R.bb.toFixed(1)}</b> · lowest blunders + mistakes per game</li>`}
  $("#hInt").value=GS.set.int||"normal";$("#hHide").checked=!!hide;
  // since last visit
@@ -547,10 +602,10 @@ function renderHome(){if(!P||!GS)return;const tok=++HOMEtok,hide=GS.set.hide,tod
  $("#hSwing").hidden=!big;HSW=big;if(big){const g=big.g,e=big.e,m=g._m[e.i];HTB.flip=g.color==="b";HTB.set(g._f[e.i],{arrows:[{from:m.from,to:m.to,c:"red"}].concat(e.best?[{from:e.best.slice(0,2),to:e.best.slice(2,4),c:"green"}]:[])});
   $("#hSwingTxt").textContent=`Biggest swing: ${mvLabel(e.i)} ${g.moves[e.i]} vs ${g.opp}, ${evTxt(e.before)} → ${evTxt(e.after)}. Open it in Review.`}
  // at a glance
- const s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs(),arr=(v,bv,goodUp,f)=>bv==null||v==null||/^[0.]+%?$/.test(f(Math.abs(v-bv)))?"":`<span class="${(v>bv)===goodUp?"up-good":"up-bad"}">${v>bv?"▲":"▼"} ${f(Math.abs(v-bv))}</span>`;
+ const s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs(),arr=(v,bv,goodUp,f)=>bv==null||v==null||/^[0.]+%?$/.test(f(Math.abs(v-bv)))?"":`<span class="${(v>bv)===goodUp?"up-good":"up-bad"}">${ic(v>bv?"arrow-up":"arrow-down","sm")} ${f(Math.abs(v-bv))}</span>`;
  const tGood=b&&b.time!=null&&s.time!=null?Math.abs(s.time-B*.7)<Math.abs(b.time-B*.7):true;
  $("#hGlance").innerHTML=[["Rating",s.rating??"—",arr(s.rating,b&&b.rating,true,Math.round)],["Blunders + mistakes / game",s.errs==null?"—":s.errs.toFixed(1),arr(s.errs,b&&b.errs,false,x=>x.toFixed(1))],
-  ["Median time used",mmss(s.time),b&&b.time!=null&&s.time!=null&&Math.abs(s.time-b.time)>=1?`<span class="${tGood?"up-good":"up-bad"}">${s.time>b.time?"▲":"▼"} ${mmss(Math.abs(s.time-b.time))}</span>`:""],
+  ["Median time used",mmss(s.time),b&&b.time!=null&&s.time!=null&&Math.abs(s.time-b.time)>=1?`<span class="${tGood?"up-good":"up-bad"}">${ic(s.time>b.time?"arrow-up":"arrow-down","sm")} ${mmss(Math.abs(s.time-b.time))}</span>`:""],
   ["Score, last 30",s.score==null?"—":Math.round(s.score)+"%",arr(s.score,b&&b.score,true,x=>Math.round(x)+"%")]].map(([l,v,a])=>`<div class="kpi"><b class="num">${v}</b>${l}<s>${a||"&nbsp;"}</s></div>`).join("")+
   `<p class="small" style="grid-column:1/-1">${b?`Arrows compare with your baseline from ${b.date}.`:"Arrows appear once your baseline is set (after 10 analysed games)."}</p>`;
  const ins=insights(),eff=Object.entries(LS.get(uk("opstart"),{})).map(([k,t])=>opEffect(k,t)).filter(Boolean).sort((a,b)=>(b.a-b.b)-(a.a-a.b))[0];
@@ -637,7 +692,7 @@ $("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:
 $("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sync();$("#anNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#anNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#syncBtn").disabled=false;renderProgress()};
 
 /* ---------- onboarding ---------- */
-const HB=new Board($("#heroBoard")),HW=new Why($("#heroWhy"),HB),DEMO_FEN="rn1qkbnr/pp2pppp/2p5/5b2/3PN3/8/PPP2PPP/R1BQKBNR w KQkq - 1 5";
+const HB=new Board($("#heroBoard"),{label:"Example position"}),HW=new Why($("#heroWhy"),HB),DEMO_FEN="rn1qkbnr/pp2pppp/2p5/5b2/3PN3/8/PPP2PPP/R1BQKBNR w KQkq - 1 5";
 const demoLine=(fen,sans)=>{const c=new Chess(fen),L=[];for(const s of sans){const m=c.move(s);if(!m)break;L.push({san:m.san,from:m.from,to:m.to,cap:!!m.captured,fen:c.fen()})}return {fen,L}};
 let demoT=null,demoK=0,demoOff=false;
 function demoStart(){if(!HW.lines){HW.render("After Nd6+, Black plays Qxd6 and you've lost a knight. Ng3 is better: the evaluation stays +0.3.",
@@ -825,6 +880,18 @@ $("#fShareForm").onsubmit=async e=>{e.preventDefault();const name=$("#fName").va
  catch(x){Fr.msg(Fr.err(x))}$("#fSave").disabled=false};
 $("#fCopy").onclick=()=>{const v=$("#fLink").value,done=()=>Fr.msg("Link copied.");try{navigator.clipboard.writeText(v).then(done,()=>{$("#fLink").select();document.execCommand("copy");done()})}catch(e){$("#fLink").select()}};
 $("#fNewLink").onclick=async()=>{try{const {data,error}=await Sync.sb.rpc("new_invite_code");if(error)throw error;Fr.prof.invite_code=data;$("#fLink").value=location.origin+location.pathname+"?invite="+data;Fr.msg("New link made. The old one no longer works.")}catch(e){Fr.msg(Fr.err(e))}};
+
+/* ---------- settings dialog (display settings are local to this browser) ---------- */
+function setOpen(){const d=$("#settings");document.querySelectorAll('[name="sTheme"]').forEach(r=>r.checked=r.value===UI.theme);document.querySelectorAll('[name="sBoard"]').forEach(r=>r.checked=r.value===UI.board);
+ document.querySelectorAll('[name="sPieces"]').forEach(r=>r.checked=r.value===UI.pieces);$("#sSound").checked=!!UI.sound;$("#sHideRow").hidden=!GS;if(GS)$("#sHide").checked=!!GS.set.hide;if(!d.open)d.showModal()}
+const setSave=()=>{LS.set("ui",UI);applyUI()};
+document.querySelectorAll('[name="sTheme"]').forEach(r=>r.onchange=()=>{UI.theme=r.value;setSave()});
+document.querySelectorAll('[name="sBoard"]').forEach(r=>r.onchange=()=>{UI.board=r.value;setSave()});
+document.querySelectorAll('[name="sPieces"]').forEach(r=>r.onchange=()=>{UI.pieces=r.value;setSave()});
+$("#sSound").onchange=()=>{UI.sound=$("#sSound").checked;setSave();if(UI.sound)Snd.play("correct")};
+$("#sHide").onchange=()=>{if(!GS)return;GS.set={...GS.set,hide:$("#sHide").checked,at:Date.now()};gSave();if(route.cur==="home")renderHome()};
+$("#setBtn").onclick=setOpen;$("#setClose").onclick=()=>$("#settings").close();
+applyUI();
 
 /* ---------- routing ---------- */
 function route(){if(!P){show1("start");return}const t=["home","review","trainer","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"home";route.cur=t;show1(t);

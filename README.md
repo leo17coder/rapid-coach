@@ -51,6 +51,10 @@ python3 -m http.server 8000
 GPL-3.0 (see `LICENSE`), because the app ships Stockfish, which is GPL-3.0.
 Stockfish: https://github.com/official-stockfish/Stockfish · stockfish.js: https://github.com/nmrugg/stockfish.js (licence in `vendor/STOCKFISH-LICENSE.txt`).
 chess.js © Jeff Hlywa, BSD-2-Clause (`vendor/CHESSJS-LICENSE.txt`).
+Chess pieces: cburnett by Colin M.L. Burnett, GPL-2.0-or-later, from @lichess-org/chessground 10.5.0; "Bold" is a derived variant (`vendor/pieces/LICENSE.txt`).
+Fonts: Fredoka and Nunito, SIL Open Font License 1.1, from @fontsource-variable 5.3.0, subset to Latin (`vendor/fonts/*-OFL.txt`).
+Icons: Lucide (lucide-static 1.66.0), ISC (`vendor/LUCIDE-LICENSE.txt`).
+Sounds are generated in the browser with the Web Audio API (no audio files).
 supabase-js © Supabase, MIT (`vendor/SUPABASE-JS-LICENSE.txt`).
 
 Not affiliated with or endorsed by chess.com or Lichess.

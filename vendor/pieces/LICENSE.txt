@@ -1,0 +1,12 @@
+Chess piece images
+
+cburnett/  "Cburnett" chess pieces by Colin M.L. Burnett.
+           Licensed under the GNU General Public License, version 2 or (at your option) any later
+           version (the author also released them under GFDL, BSD and CC BY-SA 3.0 on Wikimedia Commons).
+           These files were extracted unchanged from the embedded SVGs in assets/chessground.cburnett.css
+           of @lichess-org/chessground 10.5.0 (GPL-3.0-or-later, https://github.com/lichess-org/chessground);
+           only a viewBox attribute was added so the images scale.
+
+bold/      "Bold" set, made for Rapid Coach from the cburnett files above: same shapes, thicker outline
+           (2.2 instead of 1.5) and different fill/outline colours. A derived work of the cburnett pieces,
+           distributed under the same licence (GPL-2.0-or-later), as part of Rapid Coach (GPL-3.0).
