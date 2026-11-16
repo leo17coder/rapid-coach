@@ -44,9 +44,11 @@ const Engine={w:null,q:[],cur:null,ready:null,
  init(){if(this.ready)return this.ready;this.ready=new Promise((res,rej)=>{try{this.w=new Worker("vendor/stockfish-19-lite-single.js")}catch(e){return rej(e)}
   this._r=res;this.w.onmessage=e=>this.line(String(e.data));this.w.onerror=e=>rej(e);this.w.postMessage("uci");this.w.postMessage("isready")});return this.ready},
  line(l){if(l==="readyok"&&this._r){this._r();this._r=null;return}const c=this.cur;if(!c)return;
-  if(l.startsWith("info")&&l.includes(" score ")){const m=l.match(/score (cp|mate) (-?\d+)/);if(m){c.t=m[1];c.v=+m[2]}}
-  if(l.startsWith("bestmove")){const b=l.split(" ")[1];this.cur=null;let cp=c.t==="mate"?(c.v>0?10000-c.v:-10000-c.v):(c.v||0);if(!c.white)cp=-cp;c.res({cp,best:b&&b!=="(none)"?b:null});this.next()}},
- eval(fen,depth){return this.init().then(()=>new Promise(res=>{this.q.push({fen,depth,res,white:fen.split(" ")[1]==="w"});if(!this.cur)this.next()}))},
+  if(l.startsWith("info")&&l.includes(" score ")){const m=l.match(/score (cp|mate) (-?\d+)/);if(m){c.t=m[1];c.v=+m[2]}const i=l.indexOf(" pv ");if(i>0)c.pv=l.slice(i+4).trim().split(/\s+/)}
+  if(l.startsWith("bestmove")){const b=l.split(" ")[1],best=b&&b!=="(none)"?b:null;this.cur=null;let cp=c.t==="mate"?(c.v>0?10000-c.v:-10000-c.v):(c.v||0);if(!c.white)cp=-cp;
+   c.res({cp,best,pv:c.pv&&c.pv[0]===best?c.pv:best?[best]:[]});this.next()}},
+ /* resolves {cp (white's view, mate = ±(10000-n)), best (UCI), pv (principal variation, UCI)}; front: run next, ahead of queued analysis */
+ eval(fen,depth,front){return this.init().then(()=>new Promise(res=>{const j={fen,depth,res,white:fen.split(" ")[1]==="w"};front?this.q.unshift(j):this.q.push(j);if(!this.cur)this.next()}))},
  next(){const j=this.q.shift();if(!j)return;this.cur=j;this.w.postMessage("position fen "+j.fen);this.w.postMessage("go depth "+j.depth)}};
 const DEPTH=12;
 
@@ -135,7 +137,7 @@ const score=a=>a.length?(a.filter(g=>g.result==="win").length+a.filter(g=>g.resu
 function Board(el,opts){this.el=el;this.flip=false;this.sel=null;this.onMove=opts&&opts.onMove;this.fen=new Chess().fen();this.arrows=[];this.last=null;this.targets=[];
  el.addEventListener("click",e=>{if(!this.onMove)return;const r=el.getBoundingClientRect();let x=Math.floor((e.clientX-r.left)/r.width*8),y=Math.floor((e.clientY-r.top)/r.height*8);if(this.flip){x=7-x;y=7-y}this.click("abcdefgh"[x]+(8-y))})}
 Board.prototype.sqXY=function(sq){let x="abcdefgh".indexOf(sq[0]),y=8-+sq[1];if(this.flip){x=7-x;y=7-y}return [x,y]};
-Board.prototype.click=function(sq){const c=new Chess(this.fen);if(this.sel&&this.targets.includes(sq)){const from=this.sel;this.sel=null;this.targets=[];this.onMove(from,sq);return}
+Board.prototype.click=function(sq){if(this.lock)return;const c=new Chess(this.fen);if(this.sel&&this.targets.includes(sq)){const from=this.sel;this.sel=null;this.targets=[];this.onMove(from,sq);return}
  const p=c.get(sq);if(p&&p.color===c.turn()){this.sel=sq;this.targets=c.moves({square:sq,verbose:true}).map(m=>m.to)}else{this.sel=null;this.targets=[]}this.draw()};
 Board.prototype.set=function(fen,o){this.fen=fen;o=o||{};this.last=o.last||null;this.arrows=o.arrows||[];this.hl=o.hl||null;this.sel=null;this.targets=[];this.draw()};
 Board.prototype.draw=function(){const c=new Chess(this.fen),B=c.board(),C=["#2d6cdf","#c7362b","#2f8a4e"];let s='<svg viewBox="0 0 8 8" role="img" aria-label="Chess board">';
@@ -213,29 +215,91 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
 
 /* ---------- TRAINER ---------- */
-const TB=new Board($("#tboard"),{onMove:tryMove});let PZ=[],PI=null,HINT=0,DONE=false;
+/* ---------- WHY panel: engine lines that explain a move (shared by the Trainer and the opening drill) ----------
+   Computed only on demand (wrong move, Show answer, Why?), at depth WHY_D, jumping the analysis queue; engine results
+   are cached per position (WEV). Every line is replayed with chess.js and cut at the first illegal move; lines shorter
+   than 6 plies are extended from their last position. Labels are fixed rules over material and mate at the line's end. */
+const WHY_D=14,WHY_SHOW=8,WHY_MAX=16,WEV=new Map(),VAL={p:1,n:3,b:3,r:5,q:9};
+const wEval=fen=>{const k=posKey(fen);if(!WEV.has(k))WEV.set(k,Engine.eval(fen,WHY_D,true).catch(e=>{WEV.delete(k);throw e}));return WEV.get(k)};
+/* line from fen (starting with move `first` when given): {fen, L:[{san,from,to,cap,fen}], cp: eval after the first move, white's view} */
+async function wLine(fen,first){const c=new Chess(fen),L=[];let cp=null;
+ const push=u=>{const m=u&&c.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});if(!m)return false;L.push({san:m.san,from:m.from,to:m.to,cap:!!m.captured,fen:c.fen()});return true};
+ if(first&&!push(first))return null;
+ for(let k=0;k<3&&L.length<WHY_SHOW&&!c.game_over();k++){const r=await wEval(c.fen());if(k===0)cp=r.cp;let n=0;for(const u of r.pv){if(L.length>=WHY_MAX||!push(u))break;n++}if(!n)break}
+ if(cp==null&&c.in_checkmate())cp=c.turn()==="w"?-10000:10000;return {fen,L,cp}}
+const matOf=fen=>{const m={w:{p:0,n:0,b:0,r:0,q:0},b:{p:0,n:0,b:0,r:0,q:0}};for(const ch of fen.split(" ")[0]){const t=ch.toLowerCase();if(VAL[t])m[ch===t?"b":"w"][t]++}return m};
+const balOf=(m,me)=>{const op=me==="w"?"b":"w";let s=0;for(const t in VAL)s+=VAL[t]*(m[me][t]-m[op][t]);return s};
+const piecesTxt=d=>{const PL={p:"pawns",n:"knights",b:"bishops",r:"rooks",q:"queens"},ONE={p:"a pawn",n:"a knight",b:"a bishop",r:"a rook",q:"the queen"},out=[];
+ for(const t of ["q","r","b","n","p"]){const k=d[t]||0;if(k>0)out.push(k===1?ONE[t]:(k===2?"two ":k+" ")+PL[t])}return out.join(" and ")};
+/* plain-language label of a line for `me` (the side to move at its start). keep: allow "keeps an extra pawn" (not for a wrong move) */
+function wLabel(line,me,keep){if(!line||!line.L.length)return null;const L=line.L,op=me==="w"?"b":"w";let e=Math.min(L.length,WHY_SHOW);while(e<L.length&&L[e-1].cap)e++;   // don't stop mid-exchange
+ const end=L[e-1].fen,c=new Chess(end),cp=line.cp==null?null:me==="w"?line.cp:-line.cp;
+ if(c.in_checkmate())return c.turn()===me?{t:"gets mated",y:"you get mated"}:{t:"gives mate",y:"you give mate"};
+ if(cp!=null&&Math.abs(cp)>=9000){const n=10000-Math.abs(cp);return cp>0?{t:`mates in ${n}`,y:`you mate in ${n}`}:{t:`allows mate in ${n}`,y:`they mate in ${n}`}}
+ const m0=matOf(line.fen),m1=matOf(end),lost={},got={};for(const t in VAL){const a=m0[me][t]-m1[me][t],b=m0[op][t]-m1[op][t];if(a>0)lost[t]=a;if(b>0)got[t]=b}
+ const net=balOf(m1,me)-balOf(m0,me),b0=balOf(m0,me),b1=balOf(m1,me),lt=piecesTxt(lost)||"material",gt=piecesTxt(got)||"material";
+ const exch=(a,b)=>a.r===1&&!a.q&&!a.n&&!a.b&&!b.r&&!b.q&&(b.n||0)+(b.b||0)===1;
+ if(net<=-2&&exch(lost,got))return {t:"loses the exchange",y:"you've lost the exchange"};
+ if(net>=2&&exch(got,lost))return {t:"wins the exchange",y:"you win the exchange"};
+ if(net<=-1)return {t:`loses ${lt}${piecesTxt(got)?` for ${gt}`:""}`,y:`you've lost ${lt}${piecesTxt(got)?` for ${gt}`:""}`};
+ if(net>=1)return {t:`wins ${gt}${piecesTxt(lost)?` for ${lt}`:""}`,y:`you win ${gt}${piecesTxt(lost)?` for ${lt}`:""}`};
+ if(keep&&b0>=1){const x={1:"an extra pawn",2:"two extra pawns",3:"an extra piece",4:"an extra piece",5:"an extra rook"}[b0]||"a material advantage";return {t:`keeps ${x}`,y:`you keep ${x}`}}
+ if(b1===0&&cp!=null&&Math.abs(cp)>=60)return cp>0?{t:"equal material, better position",y:"you're better with equal material"}:{t:"equal material, worse position",y:"you're worse with equal material"};
+ return null}
+/* move text with move numbers from fen: "5. Nd6+ exd6 6. Bd3" / "5… exd6 6. Bd3" */
+const wMoves=(fen,L)=>{const f=fen.split(" "),w=f[1]==="w",n0=+f[5]||1;return L.map((m,j)=>{const wm=(j%2===0)===w,n=n0+Math.floor((j+(w?0:1))/2);return {num:wm?n+".":j===0?n+"…":"",san:m.san}})};
+function Why(el,board){this.el=el;this.b=board;this.tok=0}
+Why.prototype.clear=function(){this.tok++;this.el.innerHTML="";this.b.lock=false};
+/* o: {fen, played: UCI of the move being explained, best: UCI of the right move (optional), ok: played was right, restore(): redraw the drill/puzzle position} */
+Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.lock=false;this.el.innerHTML='<div class="why-wait">Working out why…</div>';
+ const me=o.fen.split(" ")[1],opp=me==="w"?"Black":"White";let ev0=null,A=null,B=null;
+ try{ev0=(await wEval(o.fen)).cp;if(t!==this.tok)return;if(o.played)A=await wLine(o.fen,o.played);if(t!==this.tok)return;
+  if(!o.ok){const pv0=(await wEval(o.fen)).pv[0],b=o.best&&o.best!==o.played?o.best:pv0&&pv0!==o.played?pv0:null;if(b)B=await wLine(o.fen,b!==pv0?b:null)}}catch(e){}
+ if(t!==this.tok||gen!==GEN)return;if(!A&&!B){this.el.innerHTML='<p class="small">Couldn\'t work out the lines for this position.</p>';return}
+ const la=wLabel(A,me,!!o.ok),lb=wLabel(B,me,true),sw=(a,b)=>a!=null&&b!=null?`the evaluation goes ${evTxt(a)} → ${evTxt(b)}`:"",S=[];
+ if(A&&!o.ok){const r=A.L[1];S.push(`After ${A.L[0].san}${r?`, ${opp} plays ${r.san}`:""}${la?` and ${la.y}`:sw(ev0,A.cp)?`: ${sw(ev0,A.cp)}`:""}.`)}
+ if(A&&o.ok)S.push(`${A.L[0].san} works: ${la?la.t:`it keeps the evaluation at ${evTxt(A.cp)}`}.`);
+ if(B)S.push(`${B.L[0].san} is better: ${lb?lb.t:`the evaluation stays ${evTxt(B.cp)}`}.`);
+ this.lines=[A&&{title:o.ok?"Why it works":"Your move",c:o.ok?"green":"red",x:A,lab:la},B&&{title:"Better",c:"green",x:B,lab:lb}].filter(Boolean);this.cur=null;
+ this.el.innerHTML=`<p class="why-say">${S.map(esc).join(" ")}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${l.title}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
+  `<p class="why-moves">${wMoves(l.x.fen,l.x.L.slice(0,WHY_SHOW)).map((m,k)=>`${m.num?`<span class="num">${m.num}</span> `:""}<button class="why-mv" type="button" data-k="${k+1}">${esc(m.san)}</button>`).join(" ")}</p>`+
+  `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">◀ Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward ▶</button><button class="link" type="button" data-a="reset">Back to the position</button></div></div>`).join("");
+ this.el.querySelectorAll(".why-line").forEach(d=>{const i=+d.dataset.i;d.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>this.step(i,+b.dataset.k));
+  d.querySelector('[data-a="back"]').onclick=()=>this.step(i,(this.cur&&this.cur.i===i?this.cur.k:1)-1);d.querySelector('[data-a="fwd"]').onclick=()=>this.step(i,(this.cur&&this.cur.i===i?this.cur.k:0)+1);
+  d.querySelector('[data-a="reset"]').onclick=()=>this.reset()})};
+/* show line i after k plies: last move highlighted, arrow for the next move */
+Why.prototype.step=function(i,k){const l=this.lines[i];if(!l)return;const L=l.x.L.slice(0,WHY_SHOW);k=Math.max(0,Math.min(L.length,k));this.cur={i,k};this.b.lock=true;
+ const m=L[k-1],nx=L[k];this.b.set(k?m.fen:l.x.fen,{last:m?{from:m.from,to:m.to}:null,arrows:nx?[{from:nx.from,to:nx.to,c:l.c}]:[]});
+ this.el.querySelectorAll(".why-mv").forEach(b=>b.classList.toggle("on",+b.closest(".why-line").dataset.i===i&&+b.dataset.k===k))};
+Why.prototype.reset=function(){this.cur=null;this.b.lock=false;this.el.querySelectorAll(".why-mv.on").forEach(b=>b.classList.remove("on"));if(this.o&&this.o.restore)this.o.restore()};
+
+const TB=new Board($("#tboard"),{onMove:tryMove}),TW=new Why($("#tWhy"),TB);let PZ=[],PI=null,HINT=0,DONE=false;
 const TST=()=>{const t=LS.get(uk("trainer"),{});return t};let TS={};
 function buildPuzzles(){PZ=[];for(const g of GAMES){if(!g.an)continue;replay(g);for(const e of serious(g))if(wp(e.before)>=30&&e.best)PZ.push({id:g.id+":"+e.i,g,e})}PZ.sort((a,b)=>b.g.ts-a.g.ts);if(route.cur==="trainer")renderTStats()}
 function pickPuzzle(){const st=id=>TS[id]||{};const failed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen);const pool=failed.length?failed:fresh.length?fresh:PZ;return pool[0]||null}
-function loadPuzzle(p){PI=p;HINT=0;DONE=false;$("#tFeedback").innerHTML="";$("#tMeta").innerHTML="";
+function loadPuzzle(p){PI=p;HINT=0;DONE=false;TW.clear();$("#tFeedback").innerHTML="";$("#tMeta").innerHTML="";
  if(!p){$("#tPrompt").textContent=AQ?"Your games are being analysed — puzzles appear here as soon as the first one is done.":"No puzzles yet. Analyse a few games first (Progress → Analyse 20 more games).";TB.flip=false;TB.set(new Chess().fen());renderTStats();return}
  const g=p.g,e=p.e,c=new Chess(g._f[e.i]),m=g._m[e.i-1];TB.flip=c.turn()==="b";TB.set(g._f[e.i],{last:m?{from:m.from,to:m.to}:null});
  $("#tPrompt").textContent=`${c.turn()==="w"?"White":"Black"} to move. Find the best move.`;
  $("#tMeta").innerHTML=`<span>From your game on ${esc(g.date)} vs ${esc(g.opp)} · ${esc(famOf(g.eco))} · move ${Math.floor(e.i/2)+1}</span>`;renderTStats()}
 const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id);Fr.soon()};
-async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;
+async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;TW.clear();
+ const back=()=>TB.set(c.fen(),{last:{from,to}});
  TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={});st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
  if(!ok){$("#tFeedback").innerHTML='<div class="small">Checking your move…</div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
  if(PI!==p)return;
- if(ok){DONE=true;st.ok=1;saveTS();const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div>`}
- else{st.fail=(st.fail||0)+1;st.ok=0;saveTS();$("#tFeedback").innerHTML=`<div class="verdict v-no">${esc(mv.san)} isn't it. Look again at checks, captures and threats — for both sides.</div><button id="tRetry">Try again</button>`;$("#tRetry").onclick=()=>loadPuzzle(p)}
+ if(ok){DONE=true;st.ok=1;saveTS();const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div><button class="link" id="tWhyBtn" type="button">Why?</button>`;
+  $("#tWhyBtn").onclick=()=>{$("#tWhyBtn").remove();TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:back})}}
+ else{st.fail=(st.fail||0)+1;st.ok=0;saveTS();$("#tFeedback").innerHTML=`<div class="verdict v-no">${esc(mv.san)} isn't it. Look again at checks, captures and threats — for both sides.</div><button id="tRetry">Try again</button>`;$("#tRetry").onclick=()=>loadPuzzle(p);
+  TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),best:p.e.best,restore:back})}
  renderTStats()}
 $("#tHint").onclick=()=>{if(!PI||DONE)return;HINT++;const b=PI.e.best,c=new Chess(PI.g._f[PI.e.i]),m=c.move({from:b.slice(0,2),to:b.slice(2,4),promotion:"q"});
  const kind=m.san.includes("#")?"There's a checkmate.":m.captured?"There's material to win.":m.san.includes("+")?"Start with a check.":"Think about what your opponent is threatening.";
  if(HINT===1)$("#tFeedback").innerHTML=`<div class="verdict v-info">${kind}</div>`;else{TB.set(PI.g._f[PI.e.i],{hl:b.slice(0,2)});$("#tFeedback").innerHTML=`<div class="verdict v-info">${kind} Move the highlighted piece.</div>`}};
 $("#tShow").onclick=()=>{if(!PI)return;const p=PI,b=p.e.best,st=TS[p.id]||(TS[p.id]={});if(!DONE){st.seen=1;st.fail=(st.fail||0)+1;st.ok=0;saveTS()}DONE=true;
  const fen=p.g._f[p.e.i],bs=uciSan(fen,b),pl=p.g._m[p.e.i];TB.set(fen,{arrows:[{from:pl.from,to:pl.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"}]});
- $("#tFeedback").innerHTML=`<div class="verdict v-info">The move was <b>${esc(bs)}</b> (green). You played ${esc(p.g.moves[p.e.i])} (red), which swung the game ${evTxt(p.e.before)} → ${evTxt(p.e.after)}.</div>`;renderTStats()};
+ $("#tFeedback").innerHTML=`<div class="verdict v-info">The move was <b>${esc(bs)}</b> (green). You played ${esc(p.g.moves[p.e.i])} (red), which swung the game ${evTxt(p.e.before)} → ${evTxt(p.e.after)}.</div>`;renderTStats();
+ const ar=[{from:pl.from,to:pl.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"}];TW.show({fen,played:pl.from+pl.to+(pl.promotion||""),best:b,restore:()=>TB.set(fen,{arrows:ar})})};
 $("#tNext").onclick=()=>{if(PI){(TS[PI.id]||(TS[PI.id]={})).seen=1;saveTS()}const cur=PI;let p=pickPuzzle();if(p===cur&&PZ.length>1)p=PZ[(PZ.indexOf(cur)+1)%PZ.length];loadPuzzle(p)};
 function renderTStats(){const st=id=>TS[id]||{};const solved=PZ.filter(p=>st(p.id).ok).length,missed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok).length,fresh=PZ.filter(p=>!st(p.id).seen).length;
  $("#tStats").innerHTML=`<div class="kpi"><b>${PZ.length}</b>puzzles from your games</div><div class="kpi"><b>${solved}</b>solved</div><div class="kpi goal"><b>${missed}</b>to retry</div><div class="kpi"><b>${fresh}</b>not seen yet</div>`}
@@ -252,7 +316,8 @@ const OP_PLY=24,OP_TOL=6,OP_IV=[0,1,3,7,16,35,80],OP_LEARNED=3;   // plies, win-
 const posKey=fen=>fen.split(" ").slice(0,4).join(" "),opRes=g=>g.result==="win"?1:g.result==="draw"?.5:0;
 const movesTxt=path=>path.map((m,i)=>i%2===0?mvLabel(i)+" "+m:m).join(" ");
 let OPSEL=null,OT=null,OD=null,OPS={};
-const OB=new Board($("#oboard"),{onMove:(f,t)=>opMove(f,t)}),OEV=new Map();
+const OB=new Board($("#oboard"),{onMove:(f,t)=>opMove(f,t)}),OEV=new Map(),OW=new Why($("#oWhy"),OB);
+const opBack=()=>{if(!OD)return;const h=OD.c.history({verbose:true}).slice(-1)[0];OB.set(OD.c.fen(),{last:h?{from:h.from,to:h.to}:null})};
 const saveOPS=k=>{LS.set(uk("openings"),OPS);if(k)Sync.mark("op",acct()+"|"+k);Fr.soon()};
 const opGames=(col,fam)=>GAMES.filter(g=>g.color===col&&famOf(g.eco)===fam);
 const opLearned=()=>Object.values(OPS).filter(x=>(x.s||0)>=OP_LEARNED).length;
@@ -283,14 +348,14 @@ async function opPickOpp(fen,n){const own=n?Object.values(n.mv):[],tot=own.reduc
  const L=[...W.values()];if(!L.length)return null;let r=Math.random()*L.reduce((a,x)=>a+x.w,0);for(const x of L)if((r-=x.w)<=0)return x;return L[L.length-1]}
 function opStartLine(replay,at){if(!OT)return;const start=replay&&OD?OD.start:at||null;
  OD={gen:GEN,key:OT.key,c:new Chess(start?start.fen:undefined),ply:start?start.ply:0,opp:replay&&OD?OD.opp:[],start,miss:false,wait:false,viaEx:false};
- OB.flip=OT.col==="b";OB.set(OD.c.fen());$("#oFeedback").innerHTML="";opStep()}
+ OB.flip=OT.col==="b";OW.clear();OB.set(OD.c.fen());$("#oFeedback").innerHTML="";opStep()}
 async function opStep(){const d=OD;if(!d||d.gen!==GEN||d.key!==(OT&&OT.key))return;const c=d.c,fen=c.fen(),k=posKey(fen),n=OT.T.get(k),mine=(c.turn()==="w")===(OT.col==="w");
  if(d.ply>=OP_PLY||c.game_over())return opLineDone(d,"end");
  if(mine){if(!n&&!d.viaEx)return opLineDone(d,"data");d.wait=true;const x=OPS[k];
   $("#oPrompt").innerHTML=`<b>Your move.</b> ${n?`Seen in ${n.n} of your games.`:"From Lichess games at your rating."}${n&&n.weak?' <span class="tag">weak spot</span>':""}${x&&x.pin?' <span class="tag">repertoire</span>':""}`;return}
  let x=d.opp[d.ply];if(!x){$("#oPrompt").textContent="Your opponent is choosing a move…";x=await opPickOpp(fen,n);if(d!==OD)return;if(!x)return opLineDone(d,"data");d.opp[d.ply]=x}
  const m=c.move(x.san);if(!m)return opLineDone(d,"data");d.viaEx=x.src==="lichess";d.ply++;OB.set(c.fen(),{last:{from:m.from,to:m.to}});setTimeout(()=>{if(d===OD)opStep()},450)}
-async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=c.fen(),t=new Chess(fen),mv=t.move({from,to,promotion:"q"});if(!mv)return;d.wait=false;
+async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=c.fen(),t=new Chess(fen),mv=t.move({from,to,promotion:"q"});if(!mv)return;d.wait=false;OW.clear();
  const k=posKey(fen),n=OT.T.get(k),u=mv.from+mv.to+(mv.promotion||""),pin=(OPS[k]||{}).pin,s=c.turn()==="w"?1:-1;OB.set(t.fen(),{last:{from,to}});
  $("#oFeedback").innerHTML='<div class="small">Checking your move…</div>';let best=pin||(n&&n.best),bev=n?n.ev:null,aev=null;
  try{if(!best||bev==null){const r=await opEval(fen,14);best=best||r.best;if(bev==null)bev=r.cp}}catch(e){}
@@ -302,13 +367,14 @@ async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=
  opGrade(k,ok);
  if(ok){c.move(mv.san);d.ply++;d.last={k,u,san:mv.san};const pinned=pin===u;
   $("#oFeedback").innerHTML=`<div class="verdict v-ok">${esc(mv.san)} — correct.${!pinned&&bs&&bs!==mv.san?` The engine's first choice is ${esc(bs)}, but yours is just as good.`:""}</div>`+
-   `<button class="link" id="oPin" type="button">${pinned?`Unpin ${esc(mv.san)}`:`Pin ${esc(mv.san)} as my move here`}</button>`;
+   `<button class="link" id="oPin" type="button">${pinned?`Unpin ${esc(mv.san)}`:`Pin ${esc(mv.san)} as my move here`}</button> <button class="link" id="oWhyBtn" type="button">Why?</button>`;
+  $("#oWhyBtn").onclick=()=>{$("#oWhyBtn").remove();OW.show({fen,played:u,ok:true,restore:opBack})};
   $("#oPin").onclick=()=>{const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0});x.pin=pinned?null:u;if(!x.pin)delete x.pin;x.at=Date.now();saveOPS(k);$("#oPin").outerHTML=`<span class="small">${x.pin?`Pinned ${esc(mv.san)} as your repertoire move.`:"Unpinned."}</span>`};
   setTimeout(()=>{if(d===OD)opStep()},350)}
  else{d.miss=true;const arrows=[{from:mv.from,to:mv.to,c:"red"}];if(best)arrows.push({from:best.slice(0,2),to:best.slice(2,4),c:"green"});OB.set(fen,{arrows});
   $("#oPrompt").innerHTML="<b>Not this time.</b>";
   $("#oFeedback").innerHTML=`<div class="verdict v-no">${esc(mv.san)} isn't it. ${pin?"Your repertoire move":"The move"} here is <b>${esc(bs||"?")}</b> (green)${bev!=null&&aev!=null?`: ${esc(mv.san)} swings it ${evTxt(bev)} → ${evTxt(aev)}`:""}.</div><button class="pri" id="oReplay" type="button">Replay the line</button>`;
-  $("#oReplay").onclick=()=>opStartLine(true)}
+  $("#oReplay").onclick=()=>opStartLine(true);OW.show({fen,played:u,best,restore:()=>OB.set(fen,{arrows})})}
  renderOpStats()}
 function opLineDone(d,why){if(d!==OD)return;d.done=true;$("#oPrompt").innerHTML=(why==="end"?"<b>Line complete.</b> ":"<b>That's as far as your games go in this line.</b> ")+(d.miss?"You missed a move: replay it to lock it in.":"Next line?");renderOpStats()}
 function opEffect(key,t){const gs=opGames(key[0],key.slice(2)),b=gs.filter(g=>g.ts<t&&g.ts>=t-365*864e5),a=gs.filter(g=>g.ts>=t);

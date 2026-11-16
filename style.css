@@ -115,4 +115,14 @@ button.danger{color:var(--red);border-color:var(--red);background:none}
 /* opening trainer */
 .op-weak{padding-left:20px;margin:0 0 12px;display:grid;gap:8px}.op-weak li{line-height:1.4}.op-weak button.link{padding:0;text-align:left;font-family:"Archivo Narrow",Archivo,sans-serif;font-size:15px}
 .tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--mute);margin-left:4px}
+/* why panel */
+.why:empty{display:none}.why{margin-top:10px;display:grid;gap:10px}
+.why-wait{font-size:14px;color:var(--mute)}.why-wait::before{content:"";display:inline-block;width:10px;height:10px;margin-right:8px;border-radius:50%;background:var(--red);animation:whyp 1s ease-in-out infinite alternate}
+@keyframes whyp{from{opacity:.25}to{opacity:1}}@media(prefers-reduced-motion:reduce){.why-wait::before{animation:none}}
+.why-say{margin:0;font-weight:600}
+.why-line{border-left:3px solid var(--line);padding:2px 0 2px 12px}.why-line.red{border-color:var(--red)}.why-line.green{border-color:var(--good)}
+.why-head{font-size:14px}.why-moves{margin:4px 0;line-height:1.9;font-family:"Archivo Narrow",Archivo,sans-serif;font-size:16px}
+.why-moves .num{color:var(--mute)}
+.why-mv{border:0;background:none;min-height:0;padding:1px 4px;border-radius:5px;font:inherit;font-weight:600;cursor:pointer}.why-mv:hover{background:var(--line)}.why-mv.on{background:var(--ink);color:var(--bg)}
+.why-nav{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.why-nav button:not(.link){min-height:36px;padding:0 12px;font-size:14px}
 
