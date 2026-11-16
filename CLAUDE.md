@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rapid Coach: a free chess coach for chess.com and Lichess games, shared with friends and deployed on GitHub Pages at https://leo17coder.github.io/rapid-coach/ (from `main`, repo root). Static site with **no build step, no package manager, no tests, no linter**: `index.html` + `style.css` + `app.js` + `config.js`, a `privacy.html` page, and third-party code vendored in `vendor/`. Optional accounts use Supabase; the database schema is `supabase/migrations/*.sql` (run by hand in the Supabase SQL editor; setup steps in `supabase/README.md`).
 
+## Releasing
+
+GitHub Pages lets browsers cache files for about 10 minutes, so a new `index.html` can load with an old `app.js`. `index.html` (and `privacy.html` for the stylesheet) reference `style.css`, `config.js` and `app.js` with a `?v=<version>` query: **change that version in every release that touches those files.** Vendored files have the version in their name and need no query.
+
 ## Run locally
 
 The page must be served over http(s), not opened as `file://`, because Stockfish runs in a Web Worker:
