@@ -112,4 +112,7 @@ button.danger{color:var(--red);border-color:var(--red);background:none}
 .fr-list{list-style:none;padding:0;margin:0;display:grid;gap:4px}
 .fr-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)}
 .fr-list li .small{margin-left:6px}
+/* opening trainer */
+.op-weak{padding-left:20px;margin:0 0 12px;display:grid;gap:8px}.op-weak li{line-height:1.4}.op-weak button.link{padding:0;text-align:left;font-family:"Archivo Narrow",Archivo,sans-serif;font-size:15px}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--mute);margin-left:4px}
 

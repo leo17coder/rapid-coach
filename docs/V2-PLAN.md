@@ -154,3 +154,17 @@ Nothing runs on a server. As with chess.com, games aren't uploaded, so opponents
 1. Brevo with your own address (free, may land in spam) or buy a small domain for sending mail?
 2. Inactive-account deletion after 24 months: OK, or a different period?
 3. Should one account link both a chess.com and a Lichess name, with the leaderboard letting each person pick which one to show? (The plan assumes yes.)
+
+---
+
+## 4. Opening trainer (built)
+
+From Progress → Openings → **Practise**, a drill view (`#openings`) for one colour + opening family, built from the first 12 moves of your own games.
+
+- **Tree and weak spots**: positions merged across games (transpositions included), with how often each was reached, the moves played and the score from there. Weak spots: an inaccuracy or worse in at least a third of analysed visits, or a score 10+ points below the opening's average; ranked by how often they come up.
+- **Right move**: pinned repertoire move, else Stockfish's move from the stored analyses, else a quick depth-14 eval; anything within 6 win-% counts.
+- **Drill**: opponent moves in proportion to your opponents' choices (nudged towards lines with positions due for review). A miss shows the right move with an arrow and the eval swing, then replays the same line.
+- **Spaced repetition**: correct streak and next review per position (1, 3, 7, 16, 35, 80 days); a miss resets the streak and comes back within 10 minutes. Three correct reviews in a row = learned. Synced via `supabase/migrations/003_openings.sql`; "openings learned" is on the friends leaderboard.
+- **Lichess opening explorer**: now at `explorer.lichess.org` and requires a Lichess OAuth token. The app uses Lichess's PKCE flow for unregistered public clients ("Connect Lichess"); the token stays in the browser. Used only where your own games have fewer than 3 games at an opponent's turn; one request at a time, cached locally, and the trainer works without it.
+- **Effect**: score in the opening before vs since your first drill (needs 5+ games on each side), as a Progress insight.
+

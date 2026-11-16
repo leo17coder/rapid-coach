@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%23ead6b1'/%3E%3Crect width='1' height='1' fill='%23a8784c'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23a8784c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2026-11-16b">
+<link rel="stylesheet" href="style.css?v=2026-11-16c">
 <style>
 .doc{max-width:68ch;margin:0 auto;padding:32px max(16px,4vw) 48px}
 .doc h1{font:700 clamp(30px,5vw,44px)/1.1 "Archivo Narrow",Archivo,sans-serif;margin:0 0 8px}
@@ -22,7 +22,7 @@
 <main class="doc">
 <p><a href="./">← Back to Rapid Coach</a></p>
 <h1>Privacy</h1>
-<p class="small">Last updated 16 November 2026</p>
+<p class="small">Last updated 16 November 2026 (opening trainer added)</p>
 
 <h2>The short version</h2>
 <ul>
@@ -44,6 +44,7 @@
     <tr><td>The chess.com or Lichess usernames and time controls you review</td><td>So a new device opens the right games</td></tr>
     <tr><td>Engine analyses of your games (evaluations and best moves)</td><td>So games aren't analysed again on every device</td></tr>
     <tr><td>Puzzle progress (which puzzles you've seen, solved or missed)</td><td>To continue training on any device</td></tr>
+    <tr><td>Opening trainer progress: per position you've drilled, your correct streak, next review date, how often you got it right or wrong, and the move you pinned as your repertoire move; and the date you started practising each opening</td><td>To continue your opening practice on any device, and to compare your results before and after practising</td></tr>
     <tr><td>Your baselines (rating, time used, errors per game, score, date)</td><td>To measure progress from the same starting point everywhere</td></tr>
   </tbody>
 </table></div>
@@ -53,7 +54,7 @@
 <ul>
   <li>the name you choose to show</li>
   <li>which site you play on (chess.com or Lichess), but not your username there</li>
-  <li>per time control: games analysed, blunders and mistakes per game, median time used per game, puzzles solved, and your rating now and at your baseline</li>
+  <li>per time control: games analysed, blunders and mistakes per game, median time used per game, puzzles solved, opening positions learned, and your rating now and at your baseline</li>
 </ul>
 <p>Your friends see your chosen name in their friends list even if you don't share. They never see your email or your games. Switching sharing off deletes your shared stats straight away. When you last switched sharing on or off is recorded, as a record of your choice.</p>
 <p>Not stored: your games, your opponents' names, your IP address (beyond the short-lived logs any web host keeps), or anything about how you use the site.</p>
@@ -78,6 +79,14 @@
   <li><b>Deletion</b>: Account → <i>Delete account</i> removes your account and all synced data immediately. Data in your browser stays until you clear it.</li>
   <li><b>Correction, objection, restriction</b>: contact the maintainer as above.</li>
   <li><b>Complaints</b>: you can complain to the Danish Data Protection Agency, <a href="https://www.datatilsynet.dk">Datatilsynet</a>.</li>
+</ul>
+
+<h2>Connecting Lichess (optional, opening trainer)</h2>
+<p>The opening trainer can fill gaps in your own games with the most common moves from Lichess games at your rating, using the Lichess opening explorer. Lichess only allows this for signed-in Lichess accounts, so you can choose <i>Connect Lichess</i>. You then sign in on lichess.org and Lichess gives this browser an access token without any extra permissions.</p>
+<ul>
+  <li>The token is stored only in this browser. It is never sent to Rapid Coach's account service and doesn't sync.</li>
+  <li>Each explorer request sends Lichess a chess position, the game speed and your rating band, with your token, so Lichess knows which account asked. Lichess's privacy policy applies.</li>
+  <li>Results are cached in this browser. <i>Disconnect Lichess</i> deletes the token and the cache here and asks Lichess to revoke the token.</li>
 </ul>
 
 <h2>Storage in your browser</h2>

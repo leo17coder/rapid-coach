@@ -240,6 +240,131 @@ $("#tNext").onclick=()=>{if(PI){(TS[PI.id]||(TS[PI.id]={})).seen=1;saveTS()}cons
 function renderTStats(){const st=id=>TS[id]||{};const solved=PZ.filter(p=>st(p.id).ok).length,missed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok).length,fresh=PZ.filter(p=>!st(p.id).seen).length;
  $("#tStats").innerHTML=`<div class="kpi"><b>${PZ.length}</b>puzzles from your games</div><div class="kpi"><b>${solved}</b>solved</div><div class="kpi goal"><b>${missed}</b>to retry</div><div class="kpi"><b>${fresh}</b>not seen yet</div>`}
 
+/* ---------- OPENING TRAINER ----------
+   For one colour + opening family (famOf, as in the openings table) the first 12 moves of the current account's
+   games are merged into a tree keyed by position (posKey: first four FEN fields, so transpositions merge).
+   Weak spots come from the stored analyses; the right move is the pinned repertoire move, else the engine's move
+   from the analyses, else a quick deeper eval. Progress per position, like puzzle progress:
+   uk("openings") = {posKey: {s: correct streak, due: next review (ms), ok, miss, pin: repertoire move (UCI), at: last change (ms)}},
+   uk("opstart") = {"w|<family>": first drill (ms)}. Opponent moves follow how often my opponents played them;
+   with a Lichess connection, thin spots are filled from the Lichess opening explorer (Explorer, cached locally). */
+const OP_PLY=24,OP_TOL=6,OP_IV=[0,1,3,7,16,35,80],OP_LEARNED=3;   // plies, win-% tolerance, days to next review by streak, streak = learned
+const posKey=fen=>fen.split(" ").slice(0,4).join(" "),opRes=g=>g.result==="win"?1:g.result==="draw"?.5:0;
+const movesTxt=path=>path.map((m,i)=>i%2===0?mvLabel(i)+" "+m:m).join(" ");
+let OPSEL=null,OT=null,OD=null,OPS={};
+const OB=new Board($("#oboard"),{onMove:(f,t)=>opMove(f,t)}),OEV=new Map();
+const saveOPS=k=>{LS.set(uk("openings"),OPS);if(k)Sync.mark("op",acct()+"|"+k);Fr.soon()};
+const opGames=(col,fam)=>GAMES.filter(g=>g.color===col&&famOf(g.eco)===fam);
+const opLearned=()=>Object.values(OPS).filter(x=>(x.s||0)>=OP_LEARNED).length;
+const isDue=k=>{const x=OPS[k];return !x||!x.due||x.due<=Date.now()};
+function buildTree(col,fam){const T=new Map(),gs=opGames(col,fam),fs=score(gs)||0;
+ for(const g of gs){replay(g);const er=g.an?errorsOf(g):[],r=opRes(g),N=Math.min(OP_PLY,g._m.length);
+  for(let i=0;i<N;i++){const k=posKey(g._f[i]);let n=T.get(k);
+   if(!n)T.set(k,n={k,fen:g._f[i],ply:i,path:g.moves.slice(0,i),mine:(i%2===0)===(g.color==="w"),n:0,sc:0,mv:{},anN:0,err:0,bv:{},ev:null});
+   const m=g._m[i],u=m.from+m.to+(m.promotion||""),x=n.mv[u]||(n.mv[u]={u,san:m.san,n:0,sc:0,ck:posKey(g._f[i+1])});n.n++;n.sc+=r;x.n++;x.sc+=r;
+   if(g.an&&g.an.ev[i]!=null){n.anN++;if(n.ev==null)n.ev=g.an.ev[i];const b=g.an.best[i];if(b)n.bv[b]=(n.bv[b]||0)+1;if(n.mine&&er.some(e=>e.i===i&&e.mine))n.err++}}}
+ for(const n of T.values()){n.score=n.sc/n.n*100;n.best=Object.keys(n.bv).sort((a,b)=>n.bv[b]-n.bv[a])[0]||null;n.errRate=n.anN?n.err/n.anN:0;
+  n.drop=n.n>=3?Math.max(0,fs-n.score):0;n.weak=n.mine&&((n.err>=1&&n.errRate>=.34)||n.drop>=10);n.prio=n.mine?n.n*(n.errRate+n.drop/100):0}
+ return {col,fam,key:col+"|"+fam,T,games:gs,score:fs,sig:gs.length+"/"+gs.filter(g=>g.an).length}}
+const opCore=()=>OT?[...OT.T.values()].filter(n=>n.mine&&(n.n>=2||n.weak)):[];
+/* how much a subtree needs practice: a due core position within d plies */
+function opNeed(k,d){const n=OT.T.get(k);if(!n||d<0)return 0;let v=n.mine&&(n.n>=2||n.weak)&&isDue(k)?1:0;if(d>0&&!v)for(const x of Object.values(n.mv)){v=Math.max(v,opNeed(x.ck,d-1));if(v)break}return v}
+async function opEval(fen,d){const k=posKey(fen)+"|"+d;if(OEV.has(k))return OEV.get(k);const r=await Engine.eval(fen,d);OEV.set(k,r);return r}
+function opGrade(k,ok){const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0}),now=Date.now();
+ if(ok){if(!x.due||x.due<=now){x.s=(x.s||0)+1;x.due=now+OP_IV[Math.min(x.s,OP_IV.length-1)]*864e5}x.ok=(x.ok||0)+1}
+ else{x.s=0;x.due=now+10*6e4;x.miss=(x.miss||0)+1}     // a miss comes back within the session
+ x.at=now;saveOPS(k);const st=LS.get(uk("opstart"),{});if(!st[OT.key]){st[OT.key]=now;LS.set(uk("opstart"),st);Sync.mark("ops",acct()+"|"+OT.key)}}
+/* opponent move: weighted by how often my opponents played it, nudged towards lines with positions due for review;
+   where my games are thin (< 3 games), add the Lichess explorer's moves at my rating (worth 2 games in total) */
+async function opPickOpp(fen,n){const own=n?Object.values(n.mv):[],tot=own.reduce((a,x)=>a+x.n,0),W=new Map();
+ own.forEach(x=>W.set(x.san,{san:x.san,w:x.n*(1+2*opNeed(x.ck,5)),src:"games"}));
+ if(tot<3){const ex=await Explorer.moves(fen);if(ex&&ex.length){const et=ex.reduce((a,x)=>a+x.n,0);
+  ex.filter(x=>x.n/et>=.05).forEach(x=>{const o=W.get(x.san)||{san:x.san,w:0,src:"lichess"};o.w+=2*x.n/et;W.set(x.san,o)})}}
+ const L=[...W.values()];if(!L.length)return null;let r=Math.random()*L.reduce((a,x)=>a+x.w,0);for(const x of L)if((r-=x.w)<=0)return x;return L[L.length-1]}
+function opStartLine(replay,at){if(!OT)return;const start=replay&&OD?OD.start:at||null;
+ OD={gen:GEN,key:OT.key,c:new Chess(start?start.fen:undefined),ply:start?start.ply:0,opp:replay&&OD?OD.opp:[],start,miss:false,wait:false,viaEx:false};
+ OB.flip=OT.col==="b";OB.set(OD.c.fen());$("#oFeedback").innerHTML="";opStep()}
+async function opStep(){const d=OD;if(!d||d.gen!==GEN||d.key!==(OT&&OT.key))return;const c=d.c,fen=c.fen(),k=posKey(fen),n=OT.T.get(k),mine=(c.turn()==="w")===(OT.col==="w");
+ if(d.ply>=OP_PLY||c.game_over())return opLineDone(d,"end");
+ if(mine){if(!n&&!d.viaEx)return opLineDone(d,"data");d.wait=true;const x=OPS[k];
+  $("#oPrompt").innerHTML=`<b>Your move.</b> ${n?`Seen in ${n.n} of your games.`:"From Lichess games at your rating."}${n&&n.weak?' <span class="tag">weak spot</span>':""}${x&&x.pin?' <span class="tag">repertoire</span>':""}`;return}
+ let x=d.opp[d.ply];if(!x){$("#oPrompt").textContent="Your opponent is choosing a move…";x=await opPickOpp(fen,n);if(d!==OD)return;if(!x)return opLineDone(d,"data");d.opp[d.ply]=x}
+ const m=c.move(x.san);if(!m)return opLineDone(d,"data");d.viaEx=x.src==="lichess";d.ply++;OB.set(c.fen(),{last:{from:m.from,to:m.to}});setTimeout(()=>{if(d===OD)opStep()},450)}
+async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=c.fen(),t=new Chess(fen),mv=t.move({from,to,promotion:"q"});if(!mv)return;d.wait=false;
+ const k=posKey(fen),n=OT.T.get(k),u=mv.from+mv.to+(mv.promotion||""),pin=(OPS[k]||{}).pin,s=c.turn()==="w"?1:-1;OB.set(t.fen(),{last:{from,to}});
+ $("#oFeedback").innerHTML='<div class="small">Checking your move…</div>';let best=pin||(n&&n.best),bev=n?n.ev:null,aev=null;
+ try{if(!best||bev==null){const r=await opEval(fen,14);best=best||r.best;if(bev==null)bev=r.cp}}catch(e){}
+ if(d!==OD)return;let ok=!best||u===best,play=false;
+ if(!ok){try{aev=(await opEval(t.fen(),12)).cp}catch(e){}if(d!==OD)return;const near=aev!=null&&bev!=null&&wp(s*bev)-wp(s*aev)<OP_TOL;if(pin&&near)play=true;else ok=near}
+ const bs=best?uciSan(fen,best):null;
+ if(play){d.wait=true;OB.set(fen,{last:c.history({verbose:true}).slice(-1).map(m=>({from:m.from,to:m.to}))[0]||null,arrows:[{from:pin.slice(0,2),to:pin.slice(2,4),c:"green"}]});
+  $("#oFeedback").innerHTML=`<div class="verdict v-info">${esc(mv.san)} is playable, but your repertoire move here is <b>${esc(bs)}</b>. Play it.</div>`;return}
+ opGrade(k,ok);
+ if(ok){c.move(mv.san);d.ply++;d.last={k,u,san:mv.san};const pinned=pin===u;
+  $("#oFeedback").innerHTML=`<div class="verdict v-ok">${esc(mv.san)} — correct.${!pinned&&bs&&bs!==mv.san?` The engine's first choice is ${esc(bs)}, but yours is just as good.`:""}</div>`+
+   `<button class="link" id="oPin" type="button">${pinned?`Unpin ${esc(mv.san)}`:`Pin ${esc(mv.san)} as my move here`}</button>`;
+  $("#oPin").onclick=()=>{const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0});x.pin=pinned?null:u;if(!x.pin)delete x.pin;x.at=Date.now();saveOPS(k);$("#oPin").outerHTML=`<span class="small">${x.pin?`Pinned ${esc(mv.san)} as your repertoire move.`:"Unpinned."}</span>`};
+  setTimeout(()=>{if(d===OD)opStep()},350)}
+ else{d.miss=true;const arrows=[{from:mv.from,to:mv.to,c:"red"}];if(best)arrows.push({from:best.slice(0,2),to:best.slice(2,4),c:"green"});OB.set(fen,{arrows});
+  $("#oPrompt").innerHTML="<b>Not this time.</b>";
+  $("#oFeedback").innerHTML=`<div class="verdict v-no">${esc(mv.san)} isn't it. ${pin?"Your repertoire move":"The move"} here is <b>${esc(bs||"?")}</b> (green)${bev!=null&&aev!=null?`: ${esc(mv.san)} swings it ${evTxt(bev)} → ${evTxt(aev)}`:""}.</div><button class="pri" id="oReplay" type="button">Replay the line</button>`;
+  $("#oReplay").onclick=()=>opStartLine(true)}
+ renderOpStats()}
+function opLineDone(d,why){if(d!==OD)return;d.done=true;$("#oPrompt").innerHTML=(why==="end"?"<b>Line complete.</b> ":"<b>That's as far as your games go in this line.</b> ")+(d.miss?"You missed a move: replay it to lock it in.":"Next line?");renderOpStats()}
+function opEffect(key,t){const gs=opGames(key[0],key.slice(2)),b=gs.filter(g=>g.ts<t&&g.ts>=t-365*864e5),a=gs.filter(g=>g.ts>=t);
+ return a.length>=5&&b.length>=5?{col:key[0],fam:key.slice(2),a:score(a),b:score(b),na:a.length,nb:b.length,date:new Date(t).toISOString().slice(0,10)}:null}
+function renderOpStats(){if(!OT)return;const core=opCore(),learned=core.filter(n=>((OPS[n.k]||{}).s||0)>=OP_LEARNED).length,due=core.filter(n=>isDue(n.k)).length,weak=core.filter(n=>n.weak).length;
+ $("#oKpis").innerHTML=`<div class="kpi"><b>${OT.games.length}</b>games in this opening</div><div class="kpi${OT.score<45?" goal":""}"><b>${Math.round(OT.score)}%</b>your score</div><div class="kpi"><b>${learned}<s>of ${core.length}</s></b>positions learned</div><div class="kpi goal"><b>${due}</b>due for review</div><div class="kpi"><b>${weak}</b>weak spots</div>`}
+function renderOpenings(){const opts=[];for(const col of ["w","b"]){const m={};GAMES.filter(g=>g.color===col).forEach(g=>{const f=famOf(g.eco);m[f]=(m[f]||0)+1});
+  Object.entries(m).filter(([,n])=>n>=3).sort((a,b)=>b[1]-a[1]).forEach(([f,n])=>opts.push({v:col+"|"+f,t:`${f} as ${col==="w"?"White":"Black"} (${n})`}))}
+ if(OPSEL&&!opts.some(o=>o.v===OPSEL))OPSEL=null;if(!OPSEL&&opts.length)OPSEL=opts[0].v;
+ $("#oPick").innerHTML=opts.map(o=>`<option value="${esc(o.v)}"${o.v===OPSEL?" selected":""}>${esc(o.t)}</option>`).join("");
+ $("#oEmpty").hidden=!!OPSEL;$("#oMain").hidden=!OPSEL;if(!OPSEL){OT=null;OD=null;return}
+ const col=OPSEL[0],fam=OPSEL.slice(2),sig=opGames(col,fam).length+"/"+opGames(col,fam).filter(g=>g.an).length;
+ if(!OT||OT.key!==OPSEL||OT.sig!==sig){OT=buildTree(col,fam)}
+ $("#oTitle").textContent=`${fam} as ${col==="w"?"White":"Black"}`;
+ const W=[...OT.T.values()].filter(n=>n.weak).sort((a,b)=>b.prio-a.prio).slice(0,6);
+ $("#oWeak").innerHTML=W.length?W.map((n,i)=>{const top=Object.values(n.mv).sort((a,b)=>b.n-a.n)[0];
+  return `<li><button class="link" type="button" data-w="${i}">${esc(n.path.length?movesTxt(n.path)+" …":"Starting position")}</button><span class="small"> seen ${n.n}×${n.err?`, an inaccuracy or worse in ${n.err} of ${n.anN} analysed games`:""}${n.drop>=10?`, you score ${Math.round(n.score)}% from here`:""}. You usually play ${esc(top.san)}.</span></li>`}).join("")
+  :'<li class="small">No weak spots found yet. Analyse more games in this opening to find them.</li>';
+ $("#oWeak").querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>opStartLine(false,W[+b.dataset.w]));
+ const st=LS.get(uk("opstart"),{})[OT.key],e=st?opEffect(OT.key,st):null;
+ $("#oEffect").textContent=st?(e?`Since you started practising on ${e.date}: ${Math.round(e.a)}% over ${e.na} games (was ${Math.round(e.b)}% over ${e.nb} games).`:`Practising since ${new Date(st).toISOString().slice(0,10)}. Your before-and-after score appears once you've played 5 games in this opening since then.`):"";
+ renderExplorer();renderOpStats();if(!OD||OD.key!==OT.key||OD.gen!==GEN)opStartLine(false)}
+$("#oPick").onchange=()=>{OPSEL=$("#oPick").value;LS.set(uk("opsel"),OPSEL);OD=null;renderOpenings()};
+$("#oRestart").onclick=()=>opStartLine(true);$("#oNext").onclick=()=>opStartLine(false);
+
+/* Lichess connection (OAuth with PKCE; no app registration). The token stays in this browser and is only used
+   for the opening explorer, which needs one. */
+const LI_CLIENT="rapid-coach",LIX="https://explorer.lichess.org",b64u=a=>btoa(String.fromCharCode(...a)).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const LiAuth={msg:"",token(){return LS.get("li.token",null)},redirect(){return location.origin+location.pathname},
+ async connect(){const v=b64u(crypto.getRandomValues(new Uint8Array(32))),st=b64u(crypto.getRandomValues(new Uint8Array(16))),ch=b64u(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(v))));
+  try{sessionStorage.setItem("rc.li.oauth",JSON.stringify({v,st,back:location.hash}))}catch(e){}
+  location.href=LI+"/oauth?"+new URLSearchParams({response_type:"code",client_id:LI_CLIENT,redirect_uri:this.redirect(),code_challenge_method:"S256",code_challenge:ch,state:st})},
+ async callback(){const q=new URLSearchParams(location.search);if(!q.has("state"))return;let o=null;try{o=JSON.parse(sessionStorage.getItem("rc.li.oauth"))}catch(e){}
+  if(!o||o.st!==q.get("state"))return;sessionStorage.removeItem("rc.li.oauth");history.replaceState(null,"",location.pathname+(o.back||""));
+  if(!q.has("code")){this.msg="Connecting Lichess was cancelled.";return}
+  try{const r=await fetch(LI+"/api/token",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({grant_type:"authorization_code",code:q.get("code"),code_verifier:o.v,redirect_uri:this.redirect(),client_id:LI_CLIENT})});
+   const j=await r.json();if(!r.ok||!j.access_token)throw 0;LS.set("li.token",j.access_token);this.msg="Lichess connected."}catch(e){this.msg="Couldn't connect Lichess. Try again."}},
+ async disconnect(){const t=this.token();LS.set("li.token",null);LS.set("lx",{});if(t)try{await fetch(LI+"/api/token",{method:"DELETE",headers:{Authorization:"Bearer "+t}})}catch(e){}}};
+/* Lichess opening explorer: one request at a time, results cached in localStorage (rc.lx, newest 600 positions).
+   Unavailable (no connection, error, timeout, rate limit) = null, and the trainer uses my games only. */
+const Explorer={busy:Promise.resolve(),cool:0,
+ band(){const r=(GAMES.length&&GAMES[GAMES.length-1].myR)||1500,B=[0,1000,1200,1400,1600,1800,2000,2200,2500];let i=B.length-1;while(i>0&&B[i]>r)i--;return B[i]},
+ moves(fen){const t=LiAuth.token();if(!t||!P)return Promise.resolve(null);const sp=P.tc==="600"?"rapid":P.tc,rb=this.band(),ck=sp+"|"+rb+"|"+posKey(fen),hit=LS.get("lx",{})[ck];
+  if(hit)return Promise.resolve(hit.m);
+  const run=async()=>{if(Date.now()<this.cool)return null;const ctl=new AbortController(),tm=setTimeout(()=>ctl.abort(),6000);
+   try{const r=await fetch(LIX+"/lichess?"+new URLSearchParams({variant:"standard",fen,speeds:sp,ratings:rb,moves:"8",topGames:"0",recentGames:"0"}),{headers:{Authorization:"Bearer "+t},signal:ctl.signal});
+    if(r.status===429){this.cool=Date.now()+LI_WAIT;return null}
+    if(r.status===401){LS.set("li.token",null);LiAuth.msg="Your Lichess connection has expired. Connect again to get more opponent moves.";renderExplorer();return null}
+    if(!r.ok)return null;const j=await r.json(),m=(j.moves||[]).map(x=>({san:x.san,n:(x.white||0)+(x.draws||0)+(x.black||0)})).filter(x=>x.san&&x.n>0);
+    const c=LS.get("lx",{}),ks=Object.keys(c);if(ks.length>=600)ks.sort((a,b)=>c[a].t-c[b].t).slice(0,100).forEach(k=>delete c[k]);c[ck]={t:Date.now(),m};LS.set("lx",c);return m}
+   catch(e){return null}finally{clearTimeout(tm)}};
+  const p=this.busy.then(run);this.busy=p.catch(()=>{});return p}};
+function renderExplorer(){const on=!!LiAuth.token();$("#oExNote").textContent=LiAuth.msg||(on?"Connected. Where your own games run out, your opponents' moves come from Lichess games at your rating.":"Connect a Lichess account (any account works) to fill gaps in your games with the most common moves at your rating. Without it, the trainer uses your own games only.");
+ $("#oExBtn").textContent=on?"Disconnect Lichess":"Connect Lichess"}
+$("#oExBtn").onclick=async()=>{if(LiAuth.token()){await LiAuth.disconnect();LiAuth.msg="Lichess disconnected.";renderExplorer()}else{try{await LiAuth.connect()}catch(e){LiAuth.msg="Couldn't start the Lichess connection in this browser.";renderExplorer()}}};
+
 /* ---------- PROGRESS + rule-based insights ---------- */
 function stats(){const G=GAMES,recent=G.slice(-30),an=G.filter(g=>g.an),lastAn=an.slice(-20);
  const tu=recent.map(timeUsed).filter(x=>x!=null),errs=lastAn.map(g=>serious(g).length);
@@ -263,6 +388,8 @@ function insights(){const G=GAMES,yr=G.filter(g=>g.ts>Date.now()-365*864e5),an=G
  if(best&&best.s>58)out.push({w:3,c:"ok",t:`Your ${best.k.split("|")[1]} works`,p:`${Math.round(best.s)}% over ${best.n} games as ${best.k[0]==="w"?"White":"Black"} this year. Keep steering towards it.`});
  const long=yr.filter(g=>g.moves.length>=120);if(long.length>=10){const d=score(yr)-score(long);if(d>=10)out.push({w:5,c:"",t:"Long games cost you",p:`You score ${Math.round(score(long))}% in games past move 60, against ${Math.round(score(yr))}% overall. Endgame technique is a cheap source of rating points.`})}
  const w=yr.filter(g=>g.color==="w"),b=yr.filter(g=>g.color==="b");if(w.length>=30&&b.length>=30){const d=score(w)-score(b);if(Math.abs(d)>=8)out.push({w:4,c:"",t:`Weaker with ${d>0?"Black":"White"}`,p:`${Math.round(score(w))}% with White vs ${Math.round(score(b))}% with Black over the last year.`})}
+ const ost=LS.get(uk("opstart"),{});for(const k in ost){const e=opEffect(k,ost[k]);if(e)out.push({w:6.5,c:e.a>=e.b?"ok":"",t:`Since practising the ${e.fam} you score ${Math.round(e.a)}% (was ${Math.round(e.b)}%)`,
+  p:`As ${e.col==="w"?"White":"Black"}: ${e.na} games since you started on ${e.date}, against ${e.nb} games in the year before.${e.a>=e.b?" Keep drilling it.":" Keep at it: the weak spots in the opening trainer show where the points go."}`})}
  if(!out.length&&an.length>=10)out.push({w:1,c:"ok",t:"No big leaks right now",p:"Nothing stands out across your recent games. Keep doing puzzles from your own mistakes and review every loss."});
  return out.sort((a,b)=>b.w-a.w).slice(0,5)}
 function chart(el,pts,o){const draw=()=>{const W=el.clientWidth||500,H=el.clientHeight||260,pad={l:44,r:10,t:10,b:24};if(pts.length<2){el.innerHTML='<div class="empty" style="height:100%;display:grid;place-items:center">Not enough games yet</div>';return}
@@ -299,7 +426,8 @@ function renderProgress(){const G=GAMES,s=stats(),base=LS.get(uk("base."+P.tc),n
 function renderOps(){const col=$("#opColor").value,m={};GAMES.filter(g=>g.color===col&&g.ts>Date.now()-365*864e5).forEach(g=>{const f=famOf(g.eco);(m[f]=m[f]||[]).push(g)});
  const rows=Object.entries(m).filter(([,a])=>a.length>=5).sort((a,b)=>b[1].length-a[1].length).slice(0,15);
  $("#opBody").innerHTML=rows.length?rows.map(([f,a])=>{const w=a.filter(g=>g.result==="win").length,d=a.filter(g=>g.result==="draw").length,l=a.length-w-d,s=score(a);
-  return `<tr><td data-l="Opening">${esc(f)}</td><td class="r" data-l="Games">${a.length}</td><td class="r" data-l="Score" style="color:${s<45?"var(--red)":s>55?"var(--good)":"inherit"};font-weight:700">${Math.round(s)}%</td><td data-l="W / D / L"><span class="num">${w} / ${d} / ${l}</span></td></tr>`}).join(""):'<tr><td colspan="4" class="small">No opening with 5+ games in the last year.</td></tr>'}
+  return `<tr><td data-l="Opening">${esc(f)}</td><td class="r" data-l="Games">${a.length}</td><td class="r" data-l="Score" style="color:${s<45?"var(--red)":s>55?"var(--good)":"inherit"};font-weight:700">${Math.round(s)}%</td><td data-l="W / D / L"><span class="num">${w} / ${d} / ${l}</span></td><td class="r" data-l=""><button class="link" type="button" data-op="${esc(col+"|"+f)}">Practise</button></td></tr>`}).join(""):'<tr><td colspan="5" class="small">No opening with 5+ games in the last year.</td></tr>';
+ $("#opBody").querySelectorAll("[data-op]").forEach(b=>b.onclick=()=>{OPSEL=b.dataset.op;LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"})}
 $("#opColor").onchange=renderOps;
 $("#anMore").onclick=()=>{analyseRecent(20);$("#anNote").textContent="Queued — see progress at the top."};
 $("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10),manual:new Date().toISOString()});Sync.mark("base",acct()+"|"+P.tc);Fr.soon();renderProgress()};
@@ -343,14 +471,16 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
  onAuth(ses){const u=ses&&ses.user;
   if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};Fr.prof=null;acctUI();this.run();Fr.onSignIn()}
   else if(!u&&this.me){this.me=null;Fr.prof=null;acctUI();if(route.cur==="friends")Fr.render()}},
- /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}} */
+ /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}, op:{"acct|posKey":1}, ops:{"acct|w|<family>":1}} */
  mark(kind,key){if(!SB_ON)return;const o=LS.get("sb.out",{});(o[kind]=o[kind]||{})[key]=1;LS.set("sb.out",o);if(this.me){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),2000)}},
  async run(){if(!this.me||this.busy)return;this.busy=true;this.err="";acctUI();
   try{await this.pull();const k="sb.init."+this.me.id;if(!LS.get(k,0)){this.markAll();LS.set(k,1)}this.busy=false;await this.flush()}
   catch(e){this.err="Sync failed. It will retry later; nothing is lost.";this.busy=false}acctUI()},
  markAll(){ALL.forEach(g=>{if(g.an)this.mark("an",g.id)});
   for(const k of Object.keys(localStorage)){let m=k.match(/^rc\.((?:cc|li):[^.]+)\.trainer$/);if(m)Object.keys(LS.get(m[1]+".trainer",{})).forEach(id=>this.mark("pz",m[1]+"|"+id));
-   m=k.match(/^rc\.((?:cc|li):[^.]+)\.base\.(\w+)$/);if(m)this.mark("base",m[1]+"|"+m[2])}
+   m=k.match(/^rc\.((?:cc|li):[^.]+)\.base\.(\w+)$/);if(m)this.mark("base",m[1]+"|"+m[2]);
+   m=k.match(/^rc\.((?:cc|li):[^.]+)\.openings$/);if(m)Object.keys(LS.get(m[1]+".openings",{})).forEach(p=>this.mark("op",m[1]+"|"+p));
+   m=k.match(/^rc\.((?:cc|li):[^.]+)\.opstart$/);if(m)Object.keys(LS.get(m[1]+".opstart",{})).forEach(o=>this.mark("ops",m[1]+"|"+o))}
   if(P)this.mark("la",acct()+"|"+P.tc)},
  async flush(){if(!this.me)return;if(this.busy){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),5000);return}const o=LS.get("sb.out",{});if(!Object.keys(o).some(k=>Object.keys(o[k]).length))return;
   this.busy=true;LS.set("sb.out",{});const uid=this.me.id,ok=a=>ACCT_RE.test(a),keys=k=>Object.keys(o[k]||{}),sp=x=>{const i=x.indexOf("|");return [x.slice(0,i),x.slice(i+1)]};
@@ -359,8 +489,10 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
    analyses:keys("an").map(id=>byId.get(id)).filter(g=>g&&g.an).map(g=>({user_id:uid,game_id:g.id,depth:g.an.depth,ev:g.an.ev.map(clamp),best:g.an.best})),
    puzzle_progress:keys("pz").map(sp).filter(([a])=>ok(a)).map(([a,id])=>{const st=LS.get(a+".trainer",{})[id]||{};return {user_id:uid,account:a,puzzle_id:id,seen:!!st.seen,ok:!!st.ok,fail:st.fail||0}}),
    baselines:keys("base").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({a,tc,b:LS.get(a+".base."+tc,null)})).filter(x=>x.b).map(x=>({user_id:uid,account:x.a,tc:x.tc,stats:x.b})),
-   linked_accounts:keys("la").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({user_id:uid,account:a,tc}))};
-  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc"};
+   linked_accounts:keys("la").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({user_id:uid,account:a,tc})),
+   opening_progress:keys("op").map(sp).filter(([a])=>ok(a)).map(([a,pos])=>({a,pos,x:LS.get(a+".openings",{})[pos]})).filter(r=>r.x).map(({a,pos,x})=>({user_id:uid,account:a,pos,streak:x.s||0,due:x.due?new Date(x.due).toISOString():null,correct:x.ok||0,misses:x.miss||0,pinned:x.pin||null,changed_at:x.at||0})),
+   opening_practice:keys("ops").map(sp).filter(([a])=>ok(a)).map(([a,o])=>({a,o,t:LS.get(a+".opstart",{})[o]})).filter(r=>r.t).map(({a,o,t})=>({user_id:uid,account:a,opening:o,started_at:new Date(t).toISOString()}))};
+  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc",opening_progress:"user_id,account,pos",opening_practice:"user_id,account,opening"};
   try{for(const t in rows)for(let i=0;i<rows[t].length;i+=200){const {error}=await this.sb.from(t).upsert(rows[t].slice(i,i+200),{onConflict:pk[t]});if(error)throw error}
    this.err=""}
   catch(e){const n=LS.get("sb.out",{});for(const k in o)n[k]={...o[k],...(n[k]||{})};LS.set("sb.out",n);this.err="Couldn't upload changes. Retrying in a minute.";clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),60e3)}
@@ -382,11 +514,19 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
    if(l){if(l.manual||rm.manual)use=(l.manual||"")>=(rm.manual||"")?l:rm;else use=(l.date||"")<=(rm.date||"")?l:rm}
    if(use===rm)LS.set(k,rm);else this.mark("base",r.account+"|"+r.tc)}
   hi(bs,"base");
+  // opening progress: the most recent change wins (changed_at, device time); practice start: the earliest wins
+  const op=await this.rows("opening_progress","account,pos,streak,due,correct,misses,pinned,changed_at",w.op),om={};
+  for(const r of op){const m=om[r.account]||(om[r.account]=LS.get(r.account+".openings",{})),l=m[r.pos],at=+r.changed_at||0;
+   if(!l||(l.at||0)<at){m[r.pos]={s:r.streak,due:r.due?Date.parse(r.due):0,ok:r.correct,miss:r.misses,at};if(r.pinned)m[r.pos].pin=r.pinned}else if((l.at||0)>at)this.mark("op",r.account+"|"+r.pos)}
+  for(const a in om)LS.set(a+".openings",om[a]);hi(op,"op");
+  const opr=await this.rows("opening_practice","account,opening,started_at",w.ops),os={};
+  for(const r of opr){const m=os[r.account]||(os[r.account]=LS.get(r.account+".opstart",{})),t=Date.parse(r.started_at);if(!m[r.opening]||t<m[r.opening])m[r.opening]=t;else if(m[r.opening]<t)this.mark("ops",r.account+"|"+r.opening)}
+  for(const a in os)LS.set(a+".opstart",os[a]);hi(opr,"ops");if(P)OPS=LS.get(uk("openings"),{});
   // linked accounts: on a device with no profile yet, open the most recently used one
   const la=await this.rows("linked_accounts","account,tc",w.la);hi(la,"la");LS.set(wk,w);this.pulled=Date.now();
   if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats();Fr.soon()}
   else if(la.length){const r=la[la.length-1],i=r.account.indexOf(":");P={source:r.account.slice(0,i),user:r.account.slice(i+1),tc:r.tc};LS.set("profile",P);enter(false)}},
- async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
+ async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","opening_progress","opening_practice","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
   const f=await this.sb.rpc("my_friends");if(f.error)throw f.error;out.friends=f.data;return out},
  async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;Fr.prof=null;LS.set("sb.out",{});acctUI();if(route.cur==="friends")Fr.render()},
  async deleteAccount(){const {error}=await this.sb.rpc("delete_my_account");if(error)throw error;const id=this.me.id;await this.signOut();try{localStorage.removeItem("rc.sb.init."+id);localStorage.removeItem("rc.sb.pull."+id)}catch(e){}}};
@@ -435,7 +575,7 @@ const Fr={prof:null,_t:null,
   last.forEach(g=>errorsOf(g).forEach(e=>{if(e.mine){if(e.kind==="blunder")bl++;else if(e.kind==="mistake")mi++}}));
   const s=stats(),b=LS.get(uk("base."+P.tc),null);
   return {user_id:Sync.me.id,account:acct(),tc:P.tc,games_analysed:an.length,blunders_per_game:n?bl/n:null,mistakes_per_game:n?mi/n:null,median_time_used:r(s.time),
-   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
+   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,openings_learned:opLearned(),rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
  async publish(){if(!Sync.me||!P||!GAMES.length||!ACCT_RE.test(acct()))return;
   try{const pr=await this.profile();if(!pr.share)return;const {error}=await Sync.sb.from("leaderboard_stats").upsert(this.row(),{onConflict:"user_id,account,tc"});if(error)throw error;
    if(route.cur==="friends")await this.board()}catch(e){this.soon(120000)}},
@@ -448,8 +588,8 @@ const Fr={prof:null,_t:null,
   $("#fBody").innerHTML=rows.length?rows.map(r=>{const d=r.rating_now!=null&&r.rating_base!=null?r.rating_now-r.rating_base:null;
    return `<tr class="${r.is_me?"me":""}"><td>${esc(r.display_name||"(no name)")}${r.is_me?" (you)":""}<span class="src">${esc((SRC[r.source]||{}).name||"")}</span></td>`+
     `<td class="r">${few(r)?"–":num(r.blunders_per_game,2)}</td><td class="r">${few(r)?"–":num(r.mistakes_per_game,2)}</td><td class="r">${mmss(r.median_time_used)}</td>`+
-    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
-   :`<tr><td colspan="7" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
+    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.openings_learned||0}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
+   :`<tr><td colspan="8" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
  async friends(){const {data,error}=await Sync.sb.rpc("my_friends");if(error)throw error;const L=$("#fList");
   L.innerHTML=(data||[]).length?data.map(f=>`<li><span>${esc(f.display_name||"(no name yet)")}${f.sharing?"":'<span class="small">not sharing</span>'}</span><button class="link" type="button" data-rm="${esc(f.friend_id)}">Remove</button></li>`).join("")
    :'<li class="small">No friends yet. Send them your invite link.</li>';
@@ -465,14 +605,14 @@ $("#fCopy").onclick=()=>{const v=$("#fLink").value,done=()=>Fr.msg("Link copied.
 $("#fNewLink").onclick=async()=>{try{const {data,error}=await Sync.sb.rpc("new_invite_code");if(error)throw error;Fr.prof.invite_code=data;$("#fLink").value=location.origin+location.pathname+"?invite="+data;Fr.msg("New link made. The old one no longer works.")}catch(e){Fr.msg(Fr.err(e))}};
 
 /* ---------- routing ---------- */
-function route(){if(!P){show1("start");return}const t=["review","trainer","progress"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"review";route.cur=t;show1(t);
+function route(){if(!P){show1("start");return}const t=["review","trainer","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"review";route.cur=t;show1(t);
  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.t===t)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render()}
+ if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings()}
 function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);$("#hdr").hidden=t==="start"}
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
@@ -480,5 +620,5 @@ async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});S
  catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=`Couldn't load your games from ${SRC[P.source].name}. Try again in a minute.`;$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
  if(!fresh&&!AQ)analyseRecent(5)}
 async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
-(async()=>{await DB.open();ALL=await DB.all();(await DB.pend()).forEach(x=>PEND.set(x.id,x.an));Sync.start();boot()})();
+(async()=>{await DB.open();ALL=await DB.all();(await DB.pend()).forEach(x=>PEND.set(x.id,x.an));await LiAuth.callback();Sync.start();boot()})();
 }

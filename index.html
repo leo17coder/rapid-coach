@@ -8,7 +8,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2'%3E%3Crect width='2' height='2' fill='%23ead6b1'/%3E%3Crect width='1' height='1' fill='%23a8784c'/%3E%3Crect x='1' y='1' width='1' height='1' fill='%23a8784c'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600;700&family=Noto+Sans+Symbols+2&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=2026-11-16b">
+<link rel="stylesheet" href="style.css?v=2026-11-16c">
 </head>
 <body>
 <header id="hdr" hidden>
@@ -130,9 +130,41 @@
   <div style="margin-top:28px">
     <div class="row" style="justify-content:space-between"><h2 style="margin:0">Openings <span class="small">(last 12 months)</span></h2>
       <select id="opColor" aria-label="Openings colour"><option value="w">As White</option><option value="b">As Black</option></select></div>
-    <table class="stack" style="margin-top:8px"><thead><tr><th>Opening</th><th class="r">Games</th><th class="r">Score</th><th>W / D / L</th></tr></thead><tbody id="opBody"></tbody></table>
+    <table class="stack" style="margin-top:8px"><thead><tr><th>Opening</th><th class="r">Games</th><th class="r">Score</th><th>W / D / L</th><th></th></tr></thead><tbody id="opBody"></tbody></table>
   </div>
   <div class="row" style="margin-top:24px"><button id="anMore" class="pri">Analyse 20 more games</button><button id="syncBtn">Check for new games</button><button id="resetBase">Reset baseline</button><span class="small" id="anNote"></span></div>
+</section>
+
+<!-- OPENING TRAINER (reached from Progress → Openings → Practise) -->
+<section id="v-openings" hidden>
+  <p class="small"><a href="#progress">← Progress</a></p>
+  <div id="oEmpty" hidden><h1>Opening trainer</h1><p class="sub">Play a few more games: an opening needs at least 3 of your games to practise.</p></div>
+  <div class="grid" id="oMain">
+    <div>
+      <div class="boardwrap" id="oboard"></div>
+      <div class="row" style="margin-top:10px"><button id="oRestart" type="button">Restart line</button><button id="oNext" class="pri" type="button">Next line</button></div>
+    </div>
+    <div>
+      <label class="small" for="oPick">Opening</label>
+      <select id="oPick" style="width:100%;margin:4px 0 14px"></select>
+      <h1 id="oTitle">Opening trainer</h1>
+      <p class="sub">Play your side of the lines from your own games. Your opponents' moves come up as often as they did against you.</p>
+      <div class="panel">
+        <div id="oPrompt" class="verdict v-info">Loading…</div>
+        <div id="oFeedback"></div>
+      </div>
+      <div class="kpis" id="oKpis"></div>
+      <p class="small" id="oEffect"></p>
+      <h2>Weak spots</h2>
+      <ol class="op-weak" id="oWeak"></ol>
+      <p class="small">A move counts as right when it's your pinned repertoire move, the engine's move, or within 6 win-percentage points of it. Positions you miss come back sooner; one you get right three reviews in a row counts as learned.</p>
+      <div class="panel" style="margin-top:16px">
+        <h2>More opponent moves</h2>
+        <p class="small" id="oExNote"></p>
+        <button id="oExBtn" type="button">Connect Lichess</button>
+      </div>
+    </div>
+  </div>
 </section>
 
 <!-- FRIENDS (only with accounts switched on) -->
@@ -148,7 +180,7 @@
   </div>
   <div id="fIn" hidden>
     <h2 id="fBoardTitle">Leaderboard</h2>
-    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
+    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Openings learned</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
     <p class="small" id="fNote">Last 20 analysed games; “–” means fewer than 10 analysed so far. Lower blunders and mistakes are better. Rating change is shown as a difference only, because chess.com and Lichess ratings can't be compared.</p>
     <div class="two" style="margin-top:28px">
       <div class="panel">
@@ -212,8 +244,8 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-16b"></script>
+<script src="config.js?v=2026-11-16c"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-16b"></script>
+<script src="app.js?v=2026-11-16c"></script>
 </body>
 </html>
