@@ -581,3 +581,13 @@ dialog form{display:grid;gap:var(--s2);margin-bottom:var(--s3)}
 .switch input:focus-visible+.sw{outline:3px solid var(--focus);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.switch .sw,.switch .sw::after{transition:none}}
 .bdg-p{display:grid;grid-template-columns:1fr auto;gap:var(--s2);align-items:center;margin-top:var(--s1)}
+
+/* ---------- polish: every control is at least 44 px tall (text links inside sentences excepted) ---------- */
+button.link{min-height:44px;display:inline-flex;align-items:center;gap:var(--s1)}
+.lang-sw button,.fchip,.gcard-an,.why-nav button:not(.link){min-height:44px}
+.brand{min-height:44px}
+.ins-go,#hNew,.prio-item>a.small{display:inline-flex;align-items:center;min-height:44px}
+footer a{display:inline-flex;align-items:center;min-height:44px}
+@media (pointer:coarse){.why-mv{min-height:44px;min-width:36px}}
+/* the eval bar shows its number as a tooltip (and to screen readers): a 10 px label on a narrow bar was below the 14 px minimum */
+.evalbar span{display:none}

@@ -39,7 +39,7 @@
  "home.late":"Sen runde, {name}","home.morning":"Godmorgen, {name}","home.afternoon":"God eftermiddag, {name}","home.evening":"Godaften, {name}",
  "home.focus":"Dagens fokus","home.focusGo":"Træn det","home.plan":"Dagens plan","home.latest":"Seneste parti",
  "home.streakLbl.one":"dag i træk","home.streakLbl.other":"dage i træk","home.goal":"{n} af {goal} i dag","home.trophies":"Trofæer",
- "home.newGames.one":"1 nyt parti siden dit sidste besøg","home.newGames.other":"{n} nye partier siden dit sidste besøg","home.allGames":"Alle partier","home.noGames":"Ingen partier endnu.",
+ "home.newGames.one":"1 nyt parti siden dit sidste besøg","home.newGames.other":"{n} nye partier siden dit sidste besøg","home.allGames":"Alle partier","home.noGames":"Ingen partier endnu. Spil et parti, så dukker det op her, klar til gennemgang.",
  "home.streakStart":"Træn én gang i dag for at starte en stime","tro.allBadges":"Se alle {n} badges",
  "home.streakDays.one":"{n} dag","home.streakDays.other":"{n} dage",
  "tro.hiddenNote":"Stimer, XP og badges er skjult på forsiden. Du kan vise dem igen under Indstillinger.","tro.goalSize":"Dagligt mål",
@@ -170,4 +170,17 @@
 "why.l.lose.t":"taber {a}","why.l.lose.y":"du har tabt {a}","why.l.loseFor.t":"taber {a} for {b}","why.l.loseFor.y":"du har tabt {a} for {b}","why.l.win.t":"vinder {a}","why.l.win.y":"du vinder {a}","why.l.winFor.t":"vinder {a} for {b}","why.l.winFor.y":"du vinder {a} for {b}",
 "why.l.keep.t":"beholder {x}","why.l.keep.y":"du beholder {x}","why.x1":"en merbonde","why.x2":"to merbønder","why.x3":"en merofficer","why.x5":"et mertårn","why.xM":"en materiel fordel",
 "why.l.eqB.t":"lige materiale, bedre stilling","why.l.eqB.y":"du står bedst med lige materiale","why.l.eqW.t":"lige materiale, dårligere stilling","why.l.eqW.y":"du står dårligst med lige materiale",
+ /* opening drill coach, lesson courses */
+"od.your":"Dit træk.","od.seen.one":"Set i 1 af dine partier.","od.seen.other":"Set i {n} af dine partier.","od.lines":"Fra dine lektionsvarianter.","od.lichess":"Fra Lichess-partier på dit niveau.","od.weak":"svagt punkt","od.rep":"repertoire",
+"od.wait":"Din modstander vælger et træk…","od.playable":"{mv} kan spilles, men dit repertoiretræk her er {b}. Spil det.","od.alsoGood":"Motorens førstevalg er {b}, men dit er lige så godt.",
+"od.pin":"Fastlæg {mv} som mit træk her","od.unpin":"Fjern {mv}","od.pinned":"{mv} er fastlagt som dit repertoiretræk.","od.unpinned":"Fjernet.","od.notH":"Ikke denne gang.","od.notP":"Spil varianten igen, så den sidder.",
+"od.wrong":"{mv} er det ikke. Trækket her er {b} (grøn).","od.wrongPin":"{mv} er det ikke. Dit repertoiretræk her er {b} (grøn).","od.replay":"Spil varianten igen",
+"od.doneH":"Varianten er klaret.","od.endH":"Længere når dine partier ikke her.","od.doneMiss":"Du missede et træk: spil varianten igen, så den sidder.","od.doneOk":"Videre til næste variant.",
+"ls.trainer":"Åbningstræner","ls.again":"Øv igen","ls.contL":"Fortsæt","ls.startL":"Start","ls.clock":"Se dit tidsforbrug","ls.review":"Gennemgå dine partier","ls.here":"Start her","ls.lessons":"lektioner",
+"ls.skipPz":"Spring frem: test med {n} opgaver","ls.skipMv":"Kan du den? Test med {n} træk","ls.skipPos":"Spring frem: test med {n} stillinger","ls.lvlHere":"Dit niveau her: omkring {n}","ls.more":"Læs mere","ls.passed":"Test bestået","ls.rec":"Anbefalet",
+"ls.egPz":"Slutspilsopgaver fra rigtige partier","ls.pzRange":"Opgaver fra 400 til {n}","ls.upTo":"op til {n}","ls.yourCh":"Dit kapitel: {ch}",
+ /* lesson player */
+"lp.src":"Opgave med rating {r}, fra et rigtigt parti:","lp.srcLink":"Lichess-opgave {id}","lp.mem":"Udenad: trin {i} af {n}","lp.guided":"Med vejledning: trin {i} af {n}","lp.play":"Spil det til ende: trin {i} af {n}",
+"lp.goalWin":"Mål: vind. Træk {m} af {max}; Stockfish spiller i dybde {d}.","lp.goalDraw":"Mål: hold remis. Træk {m} af {max}; Stockfish spiller i dybde {d}.","fr.board":"Rangliste: {tc}",
+"eb.label":"Vurdering {t}","eb.wait":"Vurdering: beregnes",
 };

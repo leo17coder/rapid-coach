@@ -37,7 +37,7 @@
  "home.late":"Late session, {name}","home.morning":"Good morning, {name}","home.afternoon":"Good afternoon, {name}","home.evening":"Good evening, {name}",
  "home.focus":"Today's focus","home.focusGo":"Train this","home.plan":"Today's plan","home.latest":"Latest game","home.streakLbl.one":"day streak","home.streakLbl.other":"day streak",
  "home.goal":"{n} of {goal} today","home.trophies":"Trophies","home.newGames.one":"1 new game since your last visit","home.newGames.other":"{n} new games since your last visit","home.allGames":"All games",
- "home.noGames":"No games yet.","home.streakStart":"Train once today to start a streak","tro.allBadges":"See all {n} badges","home.streakDays.one":"{n} day","home.streakDays.other":"{n} days",
+ "home.noGames":"No games here yet. Play a game and it appears here, ready to review.","home.streakStart":"Train once today to start a streak","tro.allBadges":"See all {n} badges","home.streakDays.one":"{n} day","home.streakDays.other":"{n} days",
  "tro.hiddenNote":"Streaks, XP and badges are hidden on Home. You can show them again in Settings.","tro.goalSize":"Daily goal","tro.light":"Light: 5 a day","tro.normal":"Normal: 10 a day","tro.serious":"Serious: 20 a day",
  "tro.challenge":"This week's challenge","tro.badges":"Badges","tro.records":"Personal records","tro.ringLabel":"Daily goal: {n} of {goal}","tro.goalMet":"goal met","tro.today":"today",
  "tro.xpTo":"{xp} XP, {left} to {next}","tro.freezes.one":"1 streak freeze ready","tro.freezes.other":"{n} streak freezes ready","tro.freezeEvery":"You earn a streak freeze every 7 days.","tro.best":"Best: {n} days",
@@ -239,4 +239,17 @@
 "why.l.lose.t":"loses {a}","why.l.lose.y":"you've lost {a}","why.l.loseFor.t":"loses {a} for {b}","why.l.loseFor.y":"you've lost {a} for {b}","why.l.win.t":"wins {a}","why.l.win.y":"you win {a}","why.l.winFor.t":"wins {a} for {b}","why.l.winFor.y":"you win {a} for {b}",
 "why.l.keep.t":"keeps {x}","why.l.keep.y":"you keep {x}","why.x1":"an extra pawn","why.x2":"two extra pawns","why.x3":"an extra piece","why.x5":"an extra rook","why.xM":"a material advantage",
 "why.l.eqB.t":"equal material, better position","why.l.eqB.y":"you're better with equal material","why.l.eqW.t":"equal material, worse position","why.l.eqW.y":"you're worse with equal material",
+ /* opening drill coach, lesson courses */
+"od.your":"Your move.","od.seen.one":"Seen in 1 of your games.","od.seen.other":"Seen in {n} of your games.","od.lines":"From your lesson lines.","od.lichess":"From Lichess games at your rating.","od.weak":"weak spot","od.rep":"repertoire",
+"od.wait":"Your opponent is choosing a move…","od.playable":"{mv} is playable, but your repertoire move here is {b}. Play it.","od.alsoGood":"The engine's first choice is {b}, but yours is just as good.",
+"od.pin":"Pin {mv} as my move here","od.unpin":"Unpin {mv}","od.pinned":"Pinned {mv} as your repertoire move.","od.unpinned":"Unpinned.","od.notH":"Not this time.","od.notP":"Replay the line and lock it in.",
+"od.wrong":"{mv} isn't it. The move here is {b} (green).","od.wrongPin":"{mv} isn't it. Your repertoire move here is {b} (green).","od.replay":"Replay the line",
+"od.doneH":"Line complete.","od.endH":"That's as far as your games go here.","od.doneMiss":"You missed a move: replay it to lock it in.","od.doneOk":"On to the next line.",
+"ls.trainer":"Opening trainer","ls.again":"Practise again","ls.contL":"Continue","ls.startL":"Start","ls.clock":"See your clock use","ls.review":"Review your games","ls.here":"Start here","ls.lessons":"lessons",
+"ls.skipPz":"Skip ahead: {n}-puzzle check","ls.skipMv":"Know it? {n}-move check","ls.skipPos":"Skip ahead: {n}-position check","ls.lvlHere":"Your level here: about {n}","ls.more":"Learn more","ls.passed":"Check passed","ls.rec":"Recommended",
+"ls.egPz":"Endgame puzzles from real games","ls.pzRange":"Puzzles from 400 to {n}","ls.upTo":"up to {n}","ls.yourCh":"Your chapter: {ch}",
+ /* lesson player */
+"lp.src":"Puzzle rated {r}, from a real game:","lp.srcLink":"Lichess puzzle {id}","lp.mem":"From memory: step {i} of {n}","lp.guided":"Guided: step {i} of {n}","lp.play":"Play it out: step {i} of {n}",
+"lp.goalWin":"Goal: win. Move {m} of {max}; Stockfish plays at depth {d}.","lp.goalDraw":"Goal: hold the draw. Move {m} of {max}; Stockfish plays at depth {d}.","fr.board":"Leaderboard: {tc}",
+"eb.label":"Evaluation {t}","eb.wait":"Evaluation: working it out",
 };
