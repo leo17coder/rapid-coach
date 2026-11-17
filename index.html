@@ -9,7 +9,7 @@
 <link rel="preload" href="vendor/fonts/nunito-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/fredoka-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;if(u.theme&&u.theme!=="system")d.dataset.theme=u.theme;if(u.board)d.dataset.board=u.board}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-17e">
+<link rel="stylesheet" href="style.css?v=2026-11-17f">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -71,6 +71,9 @@
     <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg>Game review</h2><p>Every move of your games checked by Stockfish, with the moments where each game turned.</p></div>
     <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-puzzle"/></svg>Puzzles from your blunders</h2><p>Positions where you went wrong in real games. Find the move you missed.</p></div>
     <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg>Opening trainer</h2><p>Drill the lines you actually reach, with your opponents' real replies and spaced repetition.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-crosshair"/></svg>Tactics lessons</h2><p>Forks, pins, mates and more: puzzle courses from real games, starting at your level and at the tactics you miss.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-graduation-cap"/></svg>Opening lessons</h2><p>Guided lines with a coach note on every key move, for the openings you play as White and Black, plus the traps to know.</p></div>
+    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-flag"/></svg>Endgame lessons</h2><p>From the basic mates to Lucena and Philidor: positions to solve and positions to play out against Stockfish.</p></div>
     <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-circle-help"/></svg>Move explanations</h2><p>See what your move allows and why the better move works, as lines you can step through.</p></div>
     <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-flame"/></svg>Daily streaks</h2><p>A small daily goal, XP for training, badges and records. Never for wins, and you can hide it all.</p></div>
   </div>
@@ -188,7 +191,7 @@
 <section id="v-lessons" hidden>
   <div id="lsHome">
     <div class="ls-head">
-      <div><h1>Lessons</h1><p class="sub">Built around the mistakes in your own games.</p></div>
+      <div><h1>Lessons</h1><p class="sub">Built around the mistakes in your own games, in three tracks: tactics and checkmate patterns, openings, and endgames. From your first game to strong club level.</p></div>
       <div class="ls-level"><label for="lsLevel">Your level</label><select id="lsLevel"></select><span class="small" id="lsLevelNote"></span></div>
     </div>
     <div class="panel ls-prio-panel"><h2>Work on these first</h2><ol class="prio" id="lsPrio"></ol></div>
@@ -384,8 +387,8 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-17e"></script>
+<script src="config.js?v=2026-11-17f"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-17e"></script>
+<script src="app.js?v=2026-11-17f"></script>
 </body>
 </html>

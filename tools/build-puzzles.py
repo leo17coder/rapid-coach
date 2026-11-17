@@ -7,7 +7,8 @@ Source: the Lichess puzzle database (CC0), https://database.lichess.org/#puzzles
   python3 tools/build-puzzles.py lichess_db_puzzle.csv.zst
 
 Writes vendor/lichess-puzzles-<YYYY-MM>/<course>.json, one file per lesson course (op-<opening>.json for the
-"tactics in this opening" chapters of the Openings track, chosen by the OpeningTags column), loaded by the app only when
+"tactics in this opening" chapters of the Openings track, chosen by the OpeningTags column; eg-<course>.json for the
+endgame puzzle chapters of the Endgames track, chosen by the endgame themes), loaded by the app only when
 that course is opened. Each file: {"course": id, "bands": [[puzzle, ...] per rating band]}, a puzzle being
 [lichess id, FEN before the opponent's last move, UCI moves (the first is the opponent's, then the solution),
 rating] plus the mating-pattern tag for the "patterns" course. Selection is deterministic: well-rated
@@ -52,6 +53,21 @@ OPENINGS = {
 }
 
 
+# endgame chapters (Endgames track): Lichess endgame themes, bands as above plus 1800-2200, 30 per band, each puzzle in one file;
+# "tech" also takes general endgame puzzles that carry no specific ending theme (mixed material)
+EG_BANDS = BANDS + [(1800, 2200)]
+EG_PER = 30
+EG_SPEC = {"pawnEndgame", "rookEndgame", "bishopEndgame", "knightEndgame", "queenEndgame", "queenRookEndgame"}
+ENDGAMES = {"kp": ["pawnEndgame"], "rook": ["rookEndgame"], "minor": ["bishopEndgame", "knightEndgame"], "tech": ["queenEndgame", "queenRookEndgame", "mixedEndgame"]}
+
+
+def eg_band(r):
+    for i, (lo, hi) in enumerate(EG_BANDS):
+        if lo <= r < hi:
+            return i, min(SUB - 1, (r - lo) * SUB // (hi - lo))
+    return None, None
+
+
 def op_band(r):
     for i, (lo, hi) in enumerate(OP_BANDS):
         if lo <= r < hi:
@@ -69,6 +85,7 @@ def band_of(r):
 def main(path):
     heaps = {}  # (course, theme, band, sub) -> heap of (plays, id, row)
     oheaps = {}  # (opening course, band, sub) -> heap
+    eheaps = {}  # (endgame course, theme, band, sub) -> heap
     with open(path, "rb") as fh:
         text = io.TextIOWrapper(zstandard.ZstdDecompressor().stream_reader(fh), encoding="utf-8")
         rd = csv.reader(text)
@@ -87,6 +104,18 @@ def main(path):
             if len(moves) < 2 or len(moves) > 8:
                 continue
             th = set(row[ix["Themes"]].split())
+            eb, esub = eg_band(r)
+            if eb is not None and "endgame" in th:
+                tl = th & EG_SPEC or ({"mixedEndgame"} if not th & EG_SPEC else set())
+                item = (plays, row[ix["PuzzleId"]], (row[ix["PuzzleId"]], row[ix["FEN"]], " ".join(moves), r, ""))
+                for eid, tags in ENDGAMES.items():
+                    for t in tags:
+                        if t in tl:
+                            h = eheaps.setdefault((eid, t, eb, esub), [])
+                            if len(h) < KEEP:
+                                heapq.heappush(h, item)
+                            elif item > h[0]:
+                                heapq.heapreplace(h, item)
             ob, osub = op_band(r)
             if ob is not None:
                 tags = row[ix["OpeningTags"]].split()
@@ -149,6 +178,26 @@ def main(path):
         with open(os.path.join(d, cid + ".json"), "w") as f:
             json.dump({"course": cid, "bands": bands}, f, separators=(",", ":"))
     print("total", sum(len(b) for bs in out.values() for b in bs), file=sys.stderr)
+    # endgame courses: eg-<id>.json, bands as EG_BANDS, a puzzle in one endgame file only
+    eused = set()
+    for eid, tags in ENDGAMES.items():
+        bands = []
+        for b in range(len(EG_BANDS)):
+            pools = [sorted(eheaps.get((eid, t, b, s), []), reverse=True) for s in range(SUB) for t in tags]
+            pick = []
+            while len(pick) < EG_PER and any(pools):
+                for p in pools:
+                    while p and p[0][1] in eused:
+                        p.pop(0)
+                    if p and len(pick) < EG_PER:
+                        it = p.pop(0)
+                        eused.add(it[1])
+                        pick.append(it[2])
+            pick.sort(key=lambda x: x[3])
+            bands.append([[i, f, m, r] for (i, f, m, r, t) in pick])
+        print(f"eg-{eid:12s}", [len(b) for b in bands], file=sys.stderr)
+        with open(os.path.join(d, "eg-" + eid + ".json"), "w") as f:
+            json.dump({"course": "eg-" + eid, "bands": bands}, f, separators=(",", ":"))
     # opening courses: one file each (op-<id>.json), bands as above plus 1800-2000; a puzzle may appear in several openings' files
     for oid in OPENINGS:
         bands = []
