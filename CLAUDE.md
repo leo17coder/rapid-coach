@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Rapid Coach: a free chess coach for chess.com and Lichess games, shared with friends and deployed on GitHub Pages at https://leo17coder.github.io/rapid-coach/ (from `main`, repo root). Static site with **no build step, no package manager, no tests, no linter**: `index.html` + `style.css` + `app.js` + `config.js`, a `privacy.html` page, third-party code and data vendored in `vendor/`, and offline builders in `tools/` (`build-puzzles.py` for the puzzle subset, `build-openings.js` for opening names). Optional accounts use Supabase; the database schema is `supabase/migrations/*.sql` (run by hand in the Supabase SQL editor; setup steps in `supabase/README.md`).
+Rapid Coach: a free chess coach for chess.com and Lichess games, shared with friends and deployed on GitHub Pages at https://leo17coder.github.io/rapid-coach/ (from `main`, repo root). Static site with **no build step and no runtime dependencies** (a dev-only `package.json` exists just for the end-to-end tests; no linter): `index.html` + `style.css` + `app.js` + `config.js`, a `privacy.html` page, third-party code and data vendored in `vendor/`, and offline builders in `tools/` (`build-puzzles.py` for the puzzle subset, `build-openings.js` for opening names). Optional accounts use Supabase; the database schema is `supabase/migrations/*.sql` (run by hand in the Supabase SQL editor; setup steps in `supabase/README.md`).
 
 ## Releasing
 
@@ -19,6 +19,16 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
 To check a change, load the page (Playwright/Chromium is available in cloud sessions) and use a real chess.com username.
+
+## Tests and the feature checklist (required before every pull request)
+
+`FEATURES.md` lists everything the app does: the definition of "nothing broken". **Before opening any pull request, run `npm install` (once) and `npm test`, and go through the [manual] items of `FEATURES.md` that your change could affect. Every item must still work.** If a change has to alter or remove a feature, ask Leo first and update `FEATURES.md` in the same pull request. Never weaken, skip or delete a test to make it pass; fix the app instead.
+
+- `tests/run.mjs`: ~25 end-to-end tests in headless Chrome (puppeteer-core, no framework), ~1 minute, fully offline. `tests/lib.mjs` serves the repo, intercepts the network and answers chess.com (`api.chess.com/pub`) and Lichess (`lichess.org/api`) from `tests/fixtures/` (real games, anonymised: `test_player`, `li_friend`), and makes Supabase and the explorer behave as offline. Any request to another host fails the run.
+- The main flow runs in order in one browser profile (onboarding → analysis → Review → Trainer → Progress → Home → Lessons/Openings → Settings → reload → new games → layouts → switch players); two scenarios run in fresh profiles: **V1 data migration** (seeds `tests/fixtures/v1-storage.json`, the exact storage V1 left; rebuild with `tests/tools/make-v1-snapshot.mjs`) and **accounts off** (serves a `config.js` with an empty key).
+- Element selectors live in one `SEL` map at the top of `tests/run.mjs`: **when the UI changes, update `SEL`, not what the tests check.** Tests also rely on the localStorage key contract (`rc.cc:<user>.trainer`, `.base.<tc>`, `.months.<tc>`) and on the read-only test hook below.
+- **Test hook:** with `?test=1` in the URL, `app.js` exposes `window.rcTest` (`state()`, `puzzle()`, `game(id)`; defined just before the boot line). Keep it working when refactoring; it reads state, it never changes it.
+- `npm test -- --only <text>` runs the matching tests plus the main-flow steps they depend on; `--keep-going` continues after a failure. Failures save `tests/failure-N.png`.
 
 ## Decisions to keep
 
