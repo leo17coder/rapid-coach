@@ -498,10 +498,10 @@ $("#oExBtn").onclick=async()=>{if(LiAuth.token()){await LiAuth.disconnect();LiAu
    (what I allowed). Tags (MOT) go with the phase (opening/middlegame/endgame) and, in endgames, the ending type (ENDT).
    Costs are win-% points lost (e.drop), summed per tag and divided by the tagged games. */
 const MT_V=1,MT_GAMES=60,PVAL={p:1,n:3,b:3,r:5,q:9,k:0},FILES="abcdefgh";
-const MOT={mate_missed:{n:"Missed checkmates",to:"fs-mate1"},mate_allowed:{n:"Allowing checkmate",to:"fs-mate1"},backrank:{n:"Back-rank weakness",to:"fs-mate1"},
- hang:{n:"Hanging pieces",to:"fs-save"},material_missed:{n:"Free material left on the board",to:"fs-free"},
- fork_missed:{n:"Missed forks",to:"tp-fork"},fork_allowed:{n:"Allowing forks",to:"tp-fork"},pin_missed:{n:"Missed pins",to:"tp-pin"},skewer_missed:{n:"Missed skewers",to:"tp-skewer"},
- pin_allowed:{n:"Allowing pins and skewers",to:"tp-pin"},tactic_missed:{n:"Other missed tactics",to:"tp-fork"},tactic_allowed:{n:"Other tactics allowed",to:"tp-fork"},positional:{n:"Positional slips",to:null}};
+const MOT={mate_missed:{n:"Missed checkmates",to:"pz-mate2",fs:"fs-mate1"},mate_allowed:{n:"Allowing checkmate",to:"pz-mate1",fs:"fs-mate1"},backrank:{n:"Back-rank weakness",to:"pz-back-rank",fs:"fs-mate1"},
+ hang:{n:"Hanging pieces",to:"pz-hanging",fs:"fs-save"},material_missed:{n:"Free material left on the board",to:"pz-hanging",fs:"fs-free"},
+ fork_missed:{n:"Missed forks",to:"pz-fork"},fork_allowed:{n:"Allowing forks",to:"pz-fork"},pin_missed:{n:"Missed pins",to:"pz-pin"},skewer_missed:{n:"Missed skewers",to:"pz-skewer"},
+ pin_allowed:{n:"Allowing pins and skewers",to:"pz-pin"},tactic_missed:{n:"Other missed tactics",to:"pz-discovered"},tactic_allowed:{n:"Other tactics allowed",to:"pz-discovered"},positional:{n:"Positional slips",to:null}};
 const ENDT={kp:"King and pawn endings",rook:"Rook endings",minor:"Minor-piece endings",queen:"Queen endings",mixed:"Other endings"},PHN={opening:"Opening",middlegame:"Middlegame",endgame:"Endgame"};
 const sqi=s=>[FILES.indexOf(s[0]),+s[1]-1];
 function bMap(fen){const m={},c=new Chess(fen);c.board().forEach((row,r)=>row.forEach((p,f)=>{if(p)m[FILES[f]+(8-r)]=p}));return m}
@@ -548,12 +548,15 @@ const TG={busy:false,async run(){if(this.busy||!P)return;this.busy=true;const ge
  catch(x){}finally{this.busy=false}if(gen===GEN&&done){if(route.cur==="lessons"&&!LP)renderLessons();if(route.cur==="home")renderHome()}}};
 function wkProfile(){const an=GAMES.filter(g=>g.an).slice(-MT_GAMES),tg=an.filter(g=>g.mt&&g.mt.v===MT_V),n=tg.length,T={},PH={opening:{n:0,d:0},middlegame:{n:0,d:0},endgame:{n:0,d:0}},ET={},inc=(o,k,d)=>{const x=o[k]||(o[k]={n:0,d:0});x.n++;x.d+=d};
  for(const g of tg)for(const i in g.mt.e){const x=g.mt.e[i];inc(T,x.t[0],x.d);PH[x.ph].n++;PH[x.ph].d+=x.d;if(x.et)inc(ET,x.et,x.d)}return {n,an:an.length,T,PH,ET}}
+/* where a theme is practised: a puzzle course (its chapter comes from pzRec), or the First steps lesson for new players and beginners until it's done */
+const motTo=k=>{const m=MOT[k];return m.fs&&["new","beg"].includes(lvl())&&!lsDone(m.fs)?m.fs:m.to};
 /* priority list: every weakness with its cost (win-% points per game) and a one-line reason; habits from what Progress measures */
 function lsPriority(){const W=wkProfile(),out=[],n=W.n;if(n<3)return out;const pg=x=>x.d/n,times=k=>k===1?"once":k===2?"twice":k+" times";
- for(const k in W.T){if(k==="positional")continue;const x=W.T[k];out.push({k,name:MOT[k].n,cost:pg(x),to:MOT[k].to,reason:`${times(x.n)} in your last ${n} analysed games, about ${pg(x).toFixed(1)} points a game.`})}
+ for(const k in W.T){if(k==="positional")continue;const x=W.T[k];out.push({k,name:MOT[k].n,cost:pg(x),to:motTo(k),reason:`${times(x.n)} in your last ${n} analysed games, about ${pg(x).toFixed(1)} points a game.`})}
  for(const k in W.ET){const x=W.ET[k];if(x.n>=2)out.push({k:"end_"+k,name:ENDT[k],cost:pg(x)*.8,to:"endgames",reason:`${times(x.n)} you went wrong in ${ENDT[k].toLowerCase()}, about ${pg(x).toFixed(1)} points a game.`})}
  const s=stats(),B=baseSecs(),errs=[];GAMES.filter(g=>g.mt).slice(-MT_GAMES).forEach(g=>{for(const i in g.mt.e)errs.push({g,i:+i,x:g.mt.e[i]})});
- const win=errs.filter(o=>(errorsOf(o.g).find(e=>e.i===o.i)||{}).before>200);if(win.length>=2){const d=win.reduce((a,o)=>a+o.x.d,0)/n;out.push({k:"winning",name:"Letting winning positions slip",cost:d*.6,to:"tp-fork",reason:`${times(win.length)} you went wrong when already clearly winning, about ${d.toFixed(1)} points a game.`})}
+ const win=errs.filter(o=>(errorsOf(o.g).find(e=>e.i===o.i)||{}).before>200);if(win.length>=2){const d=win.reduce((a,o)=>a+o.x.d,0)/n,tc={};win.forEach(o=>{const t=o.x.t[0];if(MOT[t].to)tc[t]=(tc[t]||0)+o.x.d});const top=Object.keys(tc).sort((a,b)=>tc[b]-tc[a])[0];
+  out.push({k:"winning",name:"Letting winning positions slip",cost:d*.6,to:top?motTo(top):"pz-hanging",reason:`${times(win.length)} you went wrong when already clearly winning, about ${d.toFixed(1)} points a game.`})}
  if(s.time!=null&&s.time<B*.5){const quick=errs.filter(o=>{const sp=spent(o.g,o.i);return sp!=null&&sp<10}),d=quick.reduce((a,o)=>a+o.x.d,0)/n;
   if(quick.length)out.push({k:"clock",name:"Playing too fast",cost:d*.7,to:null,reason:`You use ${mmss(s.time)} of ${mmss(B)}; ${times(quick.length)} you erred after under 10 seconds of thought.`})}
  const yr=GAMES.filter(g=>g.ts>Date.now()-365*864e5),om={};yr.forEach(g=>{const k=g.color+"|"+famOf(g.eco);(om[k]=om[k]||[]).push(g)});
@@ -565,6 +568,30 @@ const LVLS=[["new","New to chess"],["beg","Beginner"],["imp","Improver"],["int",
 function lvlAuto(){if(!GAMES.length)return "new";const s=stats();let r=(s.rating||0)-(P.source==="li"?250:0),i=r<400?0:r<800?1:r<1100?2:r<1400?3:4;
  if(s.nAn>=10&&s.errs!=null){if(s.errs>=4&&i>1)i--;else if(s.errs<=1.2&&i>0&&i<4)i++}return LVLS[i][0]}
 const lvl=()=>(LSP.lvl&&LSP.lvl.v)||lvlAuto(),lvlName=id=>(LVLS.find(l=>l[0]===id)||LVLS[1])[1];
+
+/* ---------- PUZZLE COURSES ----------
+   Real-game puzzles from the Lichess puzzle database (CC0): a fixed subset made by tools/build-puzzles.py, vendored one file per
+   course in PZ_DIR and fetched from this site the first time a course is opened. A puzzle is [id, FEN, UCI moves, rating(, pattern)];
+   the first move is the opponent's (played for you), then the solution, where any checkmate also counts. A course has a chapter per
+   rating band (PZB) with three lessons of PZ_N puzzles picked around the course skill (Elo-style, LSP["c:pz-<course>"].v) plus a
+   placement check of PZ_T puzzles from the top of the band. n: the coach note for each lesson; ask: the prompt. */
+const PZ_DIR="vendor/lichess-puzzles-2026-11/",PZ_N=6,PZ_T=4,PZB=[[400,1000,"Up to 1000"],[1000,1200,"1000–1200"],[1200,1400,"1200–1400"],[1400,1600,"1400–1600"],[1600,1800,"1600–1800"]],PZL=[["a","Warm-up",-120],["b","Practice",0],["c","Challenge",120]];
+const PZC=[
+ {id:"hanging",name:"Hanging pieces",desc:"Spot pieces left without a defender, and take them.",ask:"Something is loose. Win it.",n:["Look at every enemy piece and ask: is it defended? Start with the piece that just moved.","Count attackers and defenders. More attackers than defenders means you can take.","The free piece can hide behind a check or a threat. Look at checks first."]},
+ {id:"mate1",name:"Mate in one",desc:"Look at every check and find the one with no way out.",ask:"Checkmate in one move.",n:["Try every check in your head. For each one: can the king run, block or capture?","Count the king's escape squares first. Which check covers them all?","The mating move isn't always the obvious one. Look for checks from far away too."]},
+ {id:"fork",name:"Forks",desc:"One piece, two targets: win material with a double attack.",ask:"Find the fork.",n:["Find a square where one of your pieces attacks two valuable targets at once.","Forks with check are the strongest: the king must move, and the other piece falls.","Sometimes a first move drags a piece onto the fork square."]},
+ {id:"pin",name:"Pins",desc:"Freeze a piece in front of a bigger one, then attack it.",ask:"Use a pin to win material.",n:["Line up a bishop, rook or queen with two enemy pieces, the bigger one behind.","A pinned piece is a sitting target: attack it again, ideally with a pawn.","A pinned piece doesn't really defend. What is it pretending to guard?"]},
+ {id:"skewer",name:"Skewers",desc:"Attack a big piece so the one behind it falls.",ask:"Find the skewer.",n:["Look for the enemy king or queen on a line with another piece behind it.","Checks along open files and diagonals often turn into skewers.","Endgame kings love the centre, and that's where they get skewered."]},
+ {id:"back-rank",name:"Back-rank mate",desc:"Punish a king stuck behind its own pawns.",ask:"The back rank is weak. Find the win.",n:["A king behind three pawns has no air. Can a rook or queen reach its back rank?","If one piece guards the back rank, remove it or lure it away first.","A sacrifice that removes the last defender often mates."]},
+ {id:"mate2",name:"Mate in two",desc:"A forcing first move, then mate.",ask:"Checkmate in two moves.",n:["Start with checks. After each one, does every reply allow mate?","A sacrifice is fine if it forces the king where you want it.","If no check works, look for a quiet move that takes the last escape square."]},
+ {id:"discovered",name:"Discovered attacks",desc:"Move one piece to unleash another.",ask:"Find the discovered attack.",n:["Look for one of your pieces standing between your bishop, rook or queen and an enemy target.","The piece that moves should make a threat of its own: a check or a capture.","A discovered check lets the moving piece go anywhere, even where it can be taken."]},
+ {id:"double-check",name:"Double check",desc:"Check with two pieces at once: the king must run.",ask:"Find the double check.",n:["Look for a discovered check where the moving piece gives check too.","After a double check only a king move helps. Where can it go?","Double check makes sacrifices work: neither checking piece can be taken."]},
+ {id:"deflection",name:"Deflection",desc:"Lure a defender away from its job.",ask:"Lure a defender away and win.",n:["Find the defender: which enemy piece is the only guard of something important?","Attack that defender, or offer it something it must take.","Checks deflect best: they leave no time to think."]},
+ {id:"smothered",name:"Smothered mate",desc:"A knight mates a king boxed in by its own pieces.",ask:"Find the smothered mate.",n:["A king surrounded by its own pieces: a knight check can be mate.","The classic: a queen check forces a rook into the corner, then the knight mates.","Watch the squares f7 and h6 (f2 and h3 for White) when the king has castled."]},
+ {id:"mate3",name:"Mate in three",desc:"Longer forcing lines that end in mate.",ask:"Checkmate in three moves.",n:["Checks keep the opponent's choices small. Follow each one to the end.","Picture where the king goes after each check and which squares are left.","When the checks run out, look for one quiet move that seals the net."]},
+ {id:"patterns",name:"Mating patterns",desc:"Arabian, Anastasia's, Boden's, hook, dovetail and two-bishop mates.",ask:"Find the mate.",n:["Know the shape: a few pieces in a fixed pattern around the king.","Spot the pattern first, then work out how to get your pieces there.","Patterns often hide behind a sacrifice that opens the king."]}];
+const pzCourse=c=>({id:"pz-"+c.id,name:c.name,desc:c.desc,lv:["new","beg","imp","int","club"],pz:c,chapters:PZB.map((b,i)=>({id:`${c.id}-${i+1}`,name:`${c.name} · ${b[2]}`,short:b[2],band:i,pz:c,test:Array(PZ_T).fill(null),
+ lessons:PZL.map(([s,n,o],j)=>({id:`${c.id}-${i+1}-${s}`,name:n,note:c.n[j],off:o,band:i,pz:c,steps:Array(PZ_N).fill(null)}))}))});
 
 /* ---------- LESSON CONTENT ----------
    TRACKS > courses (lv: levels it suits) > chapters (test: placement check) > lessons (steps, page: teaching page).
@@ -603,20 +630,7 @@ const TRACKS=[
     {id:"fs-free",name:"Take free material",steps:[
      {f:"k7/8/8/3b4/8/8/8/3Q2K1 w - - 0 1",s:["d1d5"],x:1,n:"Nothing defends that bishop. Take it.",ok:"A free piece is a big advantage."},
      {f:"k7/8/8/8/8/5n2/8/5RK1 w - - 0 1",s:["f1f3"],x:1,n:"The knight gives check, but it's undefended. Win it.",ok:"Answering a check by taking the checker is often best."}]}]}]},
-  {id:"tp",name:"Tactical patterns",lv:["int","club"],desc:"The tactics that decide most games between 1200 and 1600.",chapters:[
-   {id:"tp-fps",name:"Forks, pins and skewers",test:[
-     {f:"q3k3/8/8/1N6/8/8/8/4K3 w - - 0 1",s:["b5c7"],n:"White to play and win material."},
-     {f:"4k3/8/2r5/8/P7/8/8/4KB2 w - - 0 1",s:["f1b5"],n:"White to play and win material."},
-     {f:"3q4/8/8/3k4/8/8/8/R5K1 w - - 0 1",s:["a1d1"],n:"White to play and win material."}],lessons:[
-    {id:"tp-fork",name:"Knight forks",steps:[
-     {f:"4k3/8/8/1q6/4N3/8/8/4K3 w - - 0 1",s:["e4d6"],n:"A fork attacks two things at once. Find the knight jump that hits king and queen.",ok:"The king must move, and the queen falls."},
-     {f:"r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1",s:["b5c7"],n:"Look for a check that also hits the rook.",ok:"Forks with check are the strongest: no time to save both."}]},
-    {id:"tp-pin",name:"Pins",steps:[
-     {f:"4k3/8/8/4q3/8/8/5K2/R7 w - - 0 1",s:["a1e1"],n:"A pinned piece can't move without exposing something bigger behind it. Pin the queen to the king.",ok:"The queen is stuck: taking the rook costs her."},
-     {f:"4k3/8/2q5/8/P7/8/8/4KB2 w - - 0 1",s:["f1b5"],n:"Pin the queen with your bishop. Your pawn makes taking the bishop expensive.",ok:"Pins win material when the pinned piece is worth more than the attacker."}]},
-    {id:"tp-skewer",name:"Skewers",steps:[
-     {f:"4r3/8/8/4k3/8/8/8/R5K1 w - - 0 1",s:["a1e1"],n:"A skewer is a pin in reverse: check the king, then take what stands behind it.",ok:"After the king steps aside, Rxe8 wins the rook."},
-     {f:"8/1q6/8/3k4/8/8/4B3/6K1 w - - 0 1",s:["e2f3"],n:"Same idea on a diagonal. Check the king and win the queen behind it.",ok:"The king moves and Bxb7 follows."}]}]}]}]},
+  ...PZC.map(pzCourse)]},
  {id:"openings",name:"Openings",icon:"book-open",courses:[],soon:"Opening courses arrive in a later update. Until then, drill the lines you really play in the opening trainer."},
  {id:"endgames",name:"Endgames",icon:"flag",courses:[],soon:"Endgame courses arrive in a later update."}];
 /* teaching pages: the idea in a few sentences, with board diagrams (d: FEN, a: arrows) */
@@ -629,21 +643,105 @@ const PAGES={
  "fs-mate1":[{p:"Checkmate is a check that can't be answered: the king can't move, the check can't be blocked and the checker can't be taken. A king stuck behind its own pawns is a classic target: the back-rank mate."},{d:"6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1",a:[["a1","a8","green"]],c:"Ra8 is mate: the pawns on f7, g7 and h7 take away the king's escape squares."}],
  "fs-save":[{p:"A piece is hanging when it can be taken for free. Before each move, check what your opponent attacks. If a piece is attacked and not defended, move it, defend it, or block the attack."},{d:"k7/8/8/8/3r4/8/3N4/6K1 w - - 0 1",a:[["d4","d2","red"],["d2","f3","green"]],c:"The rook attacks the knight; Nf3 moves it to safety."}],
  "fs-free":[{p:"The other side of the coin: after your opponent moves, check what they left undefended. Taking a free piece is often the best move on the board."},{d:"k7/8/8/3b4/8/8/8/3Q2K1 w - - 0 1",a:[["d1","d5","green"]],c:"Qxd5 wins a bishop for nothing, with check."}],
- "tp-fork":[{p:"A fork is one piece attacking two targets at once. Knights are the classic forkers because their attacks are hard to see. The best forks include a check, so the opponent has no time to save the other piece."},{d:"4k3/8/8/1q6/4N3/8/8/4K3 w - - 0 1",a:[["e4","d6","green"],["d6","e8","red"],["d6","b5","red"]],c:"Nd6+ attacks king and queen."},{p:"To spot forks, look at squares where your knight would attack the king, queen or rooks, and check whether you can get there safely."}],
- "tp-pin":[{p:"A pin attacks a piece that can't move away without exposing something more valuable behind it. Against the king it's an absolute pin: the piece may not move at all. Pin a valuable piece and attack it again, or win it for less."},{d:"4k3/8/8/4q3/8/8/5K2/R7 w - - 0 1",a:[["a1","e1","green"],["e1","e8","red"]],c:"Re1 pins the queen to the king."}],
- "tp-skewer":[{p:"A skewer is a pin in reverse: the more valuable piece is in front. When it moves out of the line (a king must, if it's checked), the piece behind it falls."},{d:"4r3/8/8/4k3/8/8/8/R5K1 w - - 0 1",a:[["a1","e1","green"],["e1","e5","red"],["e5","e8","red"]],c:"Re1+ and then Rxe8."}]};
-const LIDX={},CIDX={};for(const t of TRACKS)for(const co of t.courses)for(const ch of co.chapters){CIDX[ch.id]={t,co,ch};for(const l of ch.lessons)LIDX[l.id]={t,co,ch,l}}
-/* progress: LSP = uk("lessons") = {"l:<lesson>": {s: steps done, d: completed (ms)}, "c:<chapter>": {p: check passed (ms), d: completed (ms)}, lvl: {v}; each with at (ms)} */
-let LSP={},LP=null;
+ // puzzle courses: the idea, diagrams (o: "w" keeps White at the bottom), a worked example from a real game (w: FEN, m: moves, t: a caption per move), a checklist (l)
+ "pz-hanging":[{p:"A piece is hanging when it can be taken for free: it's attacked and nothing defends it. Below 1500, more games are decided by a hanging piece than by anything else, so this is the habit that pays most."},
+  {d:"r5k1/5ppp/8/3n4/8/2N5/5PPP/3R2K1 w - - 0 1",a:[["c3","d5","green"],["d1","d5","green"]],c:"Black's knight on d5 is attacked twice and defended by nothing. It's hanging."},
+  {p:"Count before you take: attackers against defenders. If you attack it more often than it's defended, the capture wins. Take with your least valuable piece first, so you never give back more than you won."},
+  {w:"r3r1k1/1b3p2/p1n2bpp/1p1p4/2pP1N2/NPP4P/P4PP1/R2BR1K1 b - - 1 21",m:["e8e1"],c:"Black to move. White's knight just went from e2 to f4. What did it leave behind?",t:["Rxe1+. The knight was standing between the two rooks. Now the e-file is open and nothing defends White's rook, so Black takes it for free, with check."],src:"WCr0k"},
+  {h:"Every move, ask three questions",l:["What does my opponent's last move attack?","Which of my pieces are undefended?","Which of their pieces are undefended?"]}],
+ "pz-mate1":[{p:"Mate in one starts with one habit: look at every check you have. For each check, ask three questions. Can the king move away? Can the check be blocked? Can the checking piece be taken? Three times no means checkmate."},
+  {d:"k7/1Q6/1K6/8/8/8/8/8 b - - 0 1",o:"w",c:"The queen right next to the king, protected by her own king: a mate you'll give many times."},
+  {p:"Pieces next to the enemy king matter most: they block its escape squares. Count its free squares, then look for the check that covers them all."},
+  {w:"r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4",m:["h5f7"],c:"White to move. A position almost every beginner meets.",t:["Qxf7#. The bishop on c4 protects the queen, so the king can't take her, and Black's own pieces block every escape square."]},
+  {h:"How to find it",l:["List every check, even the silly-looking ones.","For each: can the king run, block or capture?","If one check has no answer, play it."]}],
+ "pz-fork":[{p:"A fork is one piece attacking two things at once. Your opponent can save only one of them. Knights are the champion forkers because their attacks are easy to miss, but any piece can fork, even a pawn or the king."},
+  {d:"4k3/8/8/1q6/4N3/8/8/4K3 w - - 0 1",a:[["e4","d6","green"],["d6","e8","red"],["d6","b5","red"]],c:"Nd6+ attacks the king and the queen. The king must move, and the queen falls."},
+  {d:"4k3/8/8/2n1b3/8/2PP4/8/4K3 w - - 0 1",a:[["d3","d4","green"],["d4","c5","red"],["d4","e5","red"]],c:"Even a pawn can fork: d4 hits both pieces, and only one can escape."},
+  {p:"The best forks come with check, so there's no time to save the other piece. Look for squares where one of your pieces would attack the king and something valuable, then ask: can I get there safely?"},
+  {w:"8/1p4k1/p7/2pp4/7N/2P3rP/PP4P1/6K1 w - - 0 36",m:["h4f5","g7f6","f5g3"],c:"White to move. Black's king and rook are a knight's jump apart.",t:["Nf5+ checks the king and attacks the rook on g3 at the same time.","The king has to move, so Black can't save the rook.","Nxg3 wins the rook."],src:"GhrwM"},
+  {h:"How to find forks",l:["Find the targets: the king, the queen, loose pieces.","Look for one square that attacks two of them.","Check that your piece is safe there, or that the check leaves no time."]}],
+ "pz-pin":[{p:"A pin attacks a piece that can't move away without exposing something more valuable behind it. If the piece behind is the king, the pinned piece isn't allowed to move at all. Bishops, rooks and queens pin along lines."},
+  {d:"rn1qkbnr/ppp2ppp/3p4/4p3/2B1P1b1/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 4",a:[["g4","f3","red"],["f3","d1","red"]],c:"A pin from a real opening: if the knight on f3 moves, Black's bishop takes the queen."},
+  {p:"Pinned pieces are sitting ducks. Attack them again, ideally with a pawn. And remember that a pinned piece doesn't really defend anything."},
+  {w:"5bk1/1p5p/p5p1/4p3/P1p1P3/2R5/6PP/4K3 b - - 1 34",m:["f8b4","e1d1","b4c3"],c:"Black to move. White's rook and king stand on the same diagonal.",t:["Bb4 pins the rook on c3 to the king on e1. The rook can't move away.","Kd1. Wherever the king goes, the rook stays stuck.","Bxc3 wins the rook. At best White could win the bishop back, and a rook is worth more."],src:"uE408"},
+  {h:"How to use pins",l:["Line up your bishop, rook or queen with two enemy pieces.","The piece behind should be worth more than the one in front.","Then pile up on the pinned piece."]}],
+ "pz-skewer":[{p:"A skewer is a pin in reverse: the more valuable piece is in front. When it steps out of the line (a king in check has to), the piece behind it is lost."},
+  {d:"8/1q6/8/3k4/8/8/4B3/6K1 w - - 0 1",a:[["e2","f3","green"],["f3","d5","red"],["d5","b7","red"]],c:"Bf3+ checks the king. Once it moves, Bxb7 takes the queen."},
+  {p:"Skewers live on open lines. Whenever the enemy king or queen shares a file, rank or diagonal with another piece, look for a check or an attack along that line."},
+  {w:"3k2r1/R1p5/8/8/PP6/2PK3p/7b/8 w - - 0 32",m:["a7a8","d8d7","a8g8"],c:"White to move. Black's king and rook share the eighth rank.",t:["Ra8+ checks along the back rank, with the rook on g8 behind the king.","The king must step off the rank.","Rxg8 takes the rook."],src:"EDuVh"},
+  {h:"How to find skewers",l:["Find enemy pieces lined up on a file, rank or diagonal.","Attack the front one, ideally with check.","Make sure your attacking piece can't simply be taken."]}],
+ "pz-back-rank":[{p:"A king behind three unmoved pawns looks safe, but it has no air. If a rook or queen reaches its back rank with check, it's mate. It's the most common checkmate in club games."},
+  {d:"6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1",a:[["a1","a8","green"]],c:"Ra8 is mate: Black's own pawns block every escape square."},
+  {p:"Defenders often guard the back rank, so the trick is to remove or distract them first, sometimes with a big sacrifice. And look after your own king: one pawn move like h3 gives it an escape square."},
+  {w:"r5k1/p4ppp/1pp5/2nn4/8/8/q1P1QPPP/3RRK2 w - - 0 23",m:["e2e8","a8e8","e1e8"],c:"White to move. Only Black's rook guards the back rank.",t:["Qe8+! The queen offers herself on the back rank.","Black has to take: Rxe8 is the only move.","Rxe8#. The pawns on f7, g7 and h7 trap their own king."],src:"USfAZ"},
+  {h:"Check the back rank",l:["Does the enemy king have an escape square?","Can my rook or queen reach its back rank?","Who guards that rank, and can I remove or distract them?"]}],
+ "pz-mate2":[{p:"Mate in two is a forcing first move, then mate. The first move is usually a check or a capture that leaves your opponent only one or two replies, and you need a mate after each of them."},
+  {w:"8/1p2b2p/2p1N1pk/8/8/2K2R2/8/r7 w - - 20 55",m:["f3h3","e7h4","h3h4"],c:"White to move. Black's king is short of squares.",t:["Rh3+. The knight on e6 already covers g5 and g7, so the king can't run.","Black's only move is to block with the bishop.","Rxh4# takes the blocker, and it's mate."],src:"Nu3jq"},
+  {p:"Checks first, then captures, then threats. If a check leaves only one reply, play that reply in your head and look for mate in one again."},
+  {h:"How to find it",l:["Which checks leave only one or two replies?","After each reply, is there a mate in one?","If every reply loses, that's your first move."]}],
+ "pz-discovered":[{p:"A discovered attack happens when one piece moves out of the way and uncovers an attack by the piece behind it. Suddenly two pieces attack at once: the one that moved and the one behind it. When the uncovered attack is a check, it's a discovered check."},
+  {d:"4k3/8/8/3q4/8/8/4N3/4R1K1 w - - 0 1",a:[["e2","c3","green"],["e1","e8","red"],["c3","d5","red"]],c:"Nc3+ uncovers a check from the rook and attacks the queen at the same time."},
+  {w:"r3r1k1/pbp2ppp/1p6/3p4/3P1q2/2P1RP2/PP1Q2PP/5RK1 w - - 0 21",m:["e3e8","a8e8","d2f4"],c:"White to move. White's rook on e3 stands between the queen on d2 and Black's queen on f4.",t:["Rxe8+ takes a rook with check, and moving the rook uncovers the queen on d2: now it attacks Black's queen.","Black must answer the check first: Rxe8.","Qxf4 wins the queen."],src:"9dXnX"},
+  {h:"How to find discovered attacks",l:["Find your pieces standing in front of your own bishop, rook or queen.","Is there an enemy target at the end of that line?","Move the front piece with a threat of its own: a check or a capture."]}],
+ "pz-double-check":[{p:"A double check is a discovered check where the piece that moves gives check too. One move can't block two lines or capture two pieces, so the king has to move. That makes it the most forcing move in chess, and it often ends in mate."},
+  {w:"r2qkb1r/3p1ppp/p7/np1p4/4N3/5N2/PB3PPP/R3R1K1 w kq - 0 15",m:["e4f6"],c:"White to move. The knight on e4 stands between White's rook and Black's king.",t:["Nf6#. The knight checks, and so does the rook it uncovered. Taking the knight would leave the rook's check, and the king has no square to go to: checkmate."],src:"Tgcw5"},
+  {p:"Because only a king move helps, the checking pieces can stand anywhere, even where they could be taken. That's why double check makes daring sacrifices work."},
+  {h:"How to find it",l:["Look for a discovered check first.","Can the moving piece give check too?","Then only king moves are left: count the king's squares."]}],
+ "pz-deflection":[{p:"Deflection drags a defender away from its job. When one enemy piece guards something important, attack it, check it, or offer it something it can't refuse. Once it leaves, whatever it guarded falls."},
+  {d:"2r3k1/5ppp/2q5/1Q6/8/8/5PPP/3R2K1 w - - 0 1",a:[["b5","c6","green"],["d1","d8","blue"]],c:"Black's rook guards both the queen and the back rank. After Qxc6 Rxc6, Rd8 is mate."},
+  {w:"2n5/1KPk4/8/4P2p/7P/8/8/8 w - h6 0 78",m:["e5e6","d7e6","b7c8"],c:"White to move. One black piece is doing an important job.",t:["e6+! Black's king is the only guard of the knight on c8, and this pawn check pulls it away.","Kxe6. The king had to leave d7, and from its new square it can't guard the knight.","Kxc8 wins the knight."],src:"K2I6o"},
+  {h:"How to find deflections",l:["Which enemy piece is the only guard of something important?","Can I attack it, check it, or offer it something it must take?","Once it moves, what falls?"]}],
+ "pz-smothered":[{p:"In a smothered mate a knight checks a king that can't move because its own pieces are all around it. It usually happens with the king in the corner, hemmed in by its rook and pawns."},
+  {d:"6rk/5Npp/8/8/8/8/8/6K1 b - - 0 1",o:"w",c:"Nf7#: the king is boxed in by its own rook and pawns."},
+  {p:"The famous version starts with a queen check on g8: the rook has to take, it fills the king's last free square, and the knight mates on f7. It's called Philidor's legacy."},
+  {w:"r1b3rk/pp3qbp/6p1/2P2pN1/1P6/4P1P1/P4P1P/2B2R1K w - - 0 23",m:["g5f7"],c:"White to move. Black's queen just took on f7. Look at the king in the corner.",t:["Nxf7#. The knight takes the queen with check, and the king can't move: its rook, bishop and pawn fill every square around it."],src:"IPcMx"},
+  {h:"How to find it",l:["Is the enemy king surrounded by its own pieces?","Can a knight give check?","If not yet, can a sacrifice force a piece onto the last free square?"]}],
+ "pz-mate3":[{p:"Mate in three is about staying forcing. A chain of checks keeps your opponent's choices small, so you can follow every line to the end. Picture where the king goes after each check and which squares stay open."},
+  {w:"6k1/5ppp/2p1b3/r2r4/5K2/4P3/2P3PP/1R5R w - - 0 26",m:["b1b8","e6c8","b8c8","d5d8","c8d8"],c:"White to move. Black's king is stuck behind its pawns.",t:["Rb8+ goes for the back rank.","Bc8 blocks.","Rxc8+ takes the blocker, with check again.","Rd8 blocks once more.","Rxd8#. Black has run out of blockers."],src:"C4c57"},
+  {h:"How to find it",l:["Start with checks that leave few replies.","Follow each reply to the end before you move.","If the checks run out, look for one quiet move that takes the last square."]}],
+ "pz-patterns":[{p:"Some mates come up again and again. Learn their shapes and you'll recognise them in your own games, often a move or two before they happen. Just look at each picture for a moment: the puzzles will make them stick."},
+  {d:"7k/7R/5N2/8/8/8/8/6K1 b - - 0 1",o:"w",c:"Arabian mate: the knight guards the rook and the last free square."},
+  {d:"8/4N1pk/8/7R/8/8/8/6K1 b - - 0 1",o:"w",c:"Anastasia's mate: the knight covers g6 and g8, the rook mates along the h-file."},
+  {d:"2kr4/3p4/B7/8/5B2/8/8/6K1 b - - 0 1",o:"w",c:"Boden's mate: two bishops on crossing diagonals against a king that castled long."},
+  {d:"6bk/8/5B2/7K/4B3/8/8/8 b - - 0 1",o:"w",c:"Two-bishop mate: bishops on neighbouring diagonals take every square."},
+  {d:"5r2/6kR/5Np1/6P1/8/8/8/6K1 b - - 0 1",o:"w",c:"Hook mate: the rook is guarded by the knight, and the knight by a pawn."},
+  {d:"5Q2/3bk3/4p2B/8/8/8/8/6K1 b - - 0 1",o:"w",c:"Dovetail mate: the queen right next to the king, the squares behind it blocked by the king's own pieces."},
+  {w:"7k/pp3p2/3rbN1p/4p3/4P3/2r2PR1/P4K1P/8 w - - 0 26",m:["g3g8"],c:"White to move. The knight on f6 is already in place.",t:["Rg8#. An Arabian mate: the knight guards the rook and the h7 square."],src:"XZsR0"}]};
+const LIDX={},CIDX={},COIDX={};for(const t of TRACKS)for(const co of t.courses){COIDX[co.id]={t,co};for(const ch of co.chapters){CIDX[ch.id]={t,co,ch};for(const l of ch.lessons)LIDX[l.id]={t,co,ch,l}}}
+/* progress: LSP = uk("lessons") = {"l:<lesson>": {s: steps done, d: completed (ms)}, "c:<chapter>": {p: check passed (ms), d: completed (ms)},
+   "c:pz-<course>": {v: puzzle skill as text}, lvl: {v}; each with at (ms)} */
+let LSP={},LP=null,PZS={};
 const lsDone=id=>!!(LSP["l:"+id]||{}).d,lsCount=()=>Object.keys(LSP).filter(k=>k.startsWith("l:")&&LSP[k].d).length;
 const saveLSP=k=>{LSP[k].at=Date.now();LS.set(uk("lessons"),LSP);Sync.mark("ls",acct()+"|"+k);Fr.soon()};
 const chDone=ch=>ch.lessons.every(l=>lsDone(l.id)),nextLesson=ch=>ch.lessons.find(l=>!lsDone(l.id))||ch.lessons[0];
+/* puzzle courses: each course file is fetched from this site once; PZS = uk("pzs") {puzzleId: 1 solved cleanly, 2 missed or hinted} stays in this browser */
+const PZD={},savePZS=()=>LS.set(uk("pzs"),PZS);
+async function pzLoad(c){if(!PZD[c.id]){const r=await fetch(PZ_DIR+c.id+".json");if(!r.ok)throw new Error("HTTP "+r.status);PZD[c.id]=(await r.json()).bands}return PZD[c.id]}
+const pzKey=c=>"c:pz-"+c.id,pzSkill=c=>+((LSP[pzKey(c)]||{}).v)||null,pzBand=r=>{const i=PZB.findIndex(b=>r<b[1]);return i<0?PZB.length-1:i},pzMid=i=>(PZB[i][0]+PZB[i][1])/2;
+/* rating on chess.com's scale (Lichess ratings run about 250 higher) */
+function pzR0(){const s=GAMES.length?stats():{};return s.rating?s.rating-(P.source==="li"?250:0):700}
+/* the chapter to work on: the band of the course skill or, before any practice, of the rating (one band higher when the theme
+   never shows up among the mistakes of 8+ tagged games); then the first unfinished chapter from there */
+function pzRec(co,W){const sk=pzSkill(co.pz);let i=pzBand(sk||pzR0());if(!sk&&W&&W.n>=8&&!Object.keys(W.T).some(k=>MOT[k].to===co.id))i=Math.min(i+1,PZB.length-1);
+ return co.chapters.slice(i).find(ch=>!chDone(ch))||co.chapters.find(ch=>!chDone(ch))||null}
+/* Elo-style skill update after a puzzle: res 1 solved first try, .5 with a hint, 0 missed */
+function pzRate(L,st,res){const c=L.x.co.pz,k=pzKey(c),R=pzSkill(c)||pzMid(L.x.ch.band),E=1/(1+Math.pow(10,(st.r-R)/400)),o=LSP[k]||(LSP[k]={});
+ o.v=String(Math.max(400,Math.min(2200,Math.round(R+60*(res-E)))));saveLSP(k)}
+/* next puzzle: in Practice and Challenge one missed earlier comes back first; otherwise the unseen puzzle closest to skill + the lesson's offset */
+function pzPick(L){const l=L.x.l,ch=L.x.ch,pool=PZD[ch.pz.id][ch.band],B=PZB[ch.band],t=Math.max(B[0],Math.min(B[1],(pzSkill(ch.pz)||pzMid(ch.band))+l.off)),free=pool.filter(p=>!L.used.has(p[0]));
+ const miss=l.off>=0&&!L.back&&free.find(p=>PZS[p[0]]===2);if(miss){L.back=1;return miss}
+ const fresh=free.filter(p=>!PZS[p[0]]),c=fresh.length?fresh:free;return c.reduce((a,p)=>Math.abs(p[3]-t)<Math.abs(a[3]-t)?p:a)}
+const pzStep=p=>({f:p[1],m:p[2].split(" "),pz:p[0],r:p[3]}),lsN=L=>L.len||L.steps.length,pzPlay=(c,u)=>{const m=c.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});return m&&{from:m.from,to:m.to}};
+const PNM={p:"pawn",n:"knight",b:"bishop",r:"rook",q:"queen",k:"king"};
 
 /* ---------- LESSONS TAB: priority list, profile, tracks; lesson player; teaching pages ---------- */
-const LB=new Board($("#lboard"),{onMove:(f,t)=>lsMove(f,t),label:"Lesson board"}),LW=new Why($("#lWhy"),LB,new EvalBar($("#lEv")));let PGB=[];
+const LB=new Board($("#lboard"),{onMove:(f,t)=>lsMove(f,t),label:"Lesson board"}),LW=new Why($("#lWhy"),LB,new EvalBar($("#lEv")));let PGB=[],LTK=0;
 function lsView(v){$("#lsHome").hidden=v!=="home";$("#lsPlay").hidden=v!=="play";$("#lsPage").hidden=v!=="page";if(v!=="play")LW.clear();window.scrollTo(0,0)}
-const lsTarget=x=>x&&LIDX[x]?LIDX[x]:null;
-function prioBtn(x,i){const L=lsTarget(x.to);if(L){const p=LSP["l:"+x.to]||{};return `<button class="${i===0?"pri":""}" type="button" data-ls="${x.to}">${p.d?"Practise again":p.s?"Continue":"Start lesson"}</button>`}
+/* a priority target: a lesson id, or a puzzle course, which resolves to its next lesson in the chapter from pzRec */
+function lsTarget(x,W){if(!x)return null;if(LIDX[x])return LIDX[x];const C=COIDX[x];if(!C||!C.co.pz)return null;const ch=pzRec(C.co,W);return ch?{...CIDX[ch.id],l:nextLesson(ch)}:null}
+function prioBtn(x,i,W){const T=lsTarget(x.to,W),cl=i===0?"pri":"";
+ if(T&&T.co.pz)return `<button class="${cl}" type="button" data-ch="${T.ch.id}">${T.ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s)?"Continue":"Start"}: ${esc(T.co.name)} ${esc(T.ch.short)}</button>`;
+ if(T){const p=LSP["l:"+x.to]||{};return `<button class="${cl}" type="button" data-ls="${x.to}">${p.d?"Practise again":p.s?"Continue":"Start lesson"}</button>`}
  if(x.to==="openings")return `<button type="button" data-op="${esc(x.op||"")}">${ic("book-open","sm")}Opening trainer</button>`;
  if(x.to==="endgames")return '<span class="chip">Endgame lessons soon</span>';
  return x.k==="clock"?'<a class="small" href="#progress">See your clock use</a>':'<a class="small" href="#review">Review your games</a>'}
@@ -654,7 +752,7 @@ function renderLessons(){LP=null;lsView("home");const L=lvl(),auto=lvlAuto(),s=s
  // work on these first; beginners get First steps at the top until it's done
  const fsOpen=["new","beg"].includes(L)&&TRACKS[0].courses[0].chapters.some(ch=>!chDone(ch)),fsL=fsOpen?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null;
  const items=(fsL?[{k:"fs",name:"First steps",to:fsL.id,reason:"The basics every game is built on: moves, checkmate and keeping pieces safe."}]:[]).concat(pr).slice(0,5);
- $("#lsPrio").innerHTML=items.length?items.map((x,i)=>`<li class="prio-item${i===0?" top":""}"><span class="prio-n">${i+1}</span><div class="prio-txt"><b>${esc(x.name)}</b><span class="small">${esc(x.reason)}</span></div>${prioBtn(x,i)}</li>`).join("")
+ $("#lsPrio").innerHTML=items.length?items.map((x,i)=>`<li class="prio-item${i===0?" top":""}"><span class="prio-n">${i+1}</span><div class="prio-txt"><b>${esc(x.name)}</b><span class="small">${esc(x.reason)}</span></div>${prioBtn(x,i,W)}</li>`).join("")
   :`<li class="empty">${an.length?pend?"Working out your weak spots from your analysed games…":"Not enough mistakes to rank yet. Nicely played.":"Analyse a few games and your personal list appears here."}</li>`;
  // profile by theme (longer bar = more points lost a game) and strengths
  const rows=Object.entries(W.T).map(([k,x])=>({k,n:MOT[k].n,c:x.d/W.n,cnt:x.n})).sort((a,b)=>b.c-a.c),mx=Math.max(.1,...rows.map(r=>r.c)),bar=(n,c,cnt,col,m)=>`<li><span class="bar-l">${esc(n)}</span><span class="bar-t"><b style="width:${Math.max(3,c/(m||mx)*100)}%;background:${col}"></b></span><span class="bar-v num" title="${cnt} mistakes">${c.toFixed(1)}</span></li>`;
@@ -667,30 +765,58 @@ function renderLessons(){LP=null;lsView("home");const L=lvl(),auto=lvlAuto(),s=s
  $("#lsPhase").innerHTML=W.n?`<ul class="bars">${Object.entries(W.PH).map(([k,x])=>bar(PHN[k],x.d/W.n,x.n,"var(--q-mistake)",pm)).join("")}</ul>`+
   (Object.keys(W.ET).length?`<h3 class="h-small">Endings</h3><ul class="good">${Object.entries(W.ET).sort((a,b)=>b[1].d-a[1].d).map(([k,x])=>`<li>${ic("flag","sm")}${esc(ENDT[k])}: ${x.n} mistake${x.n>1?"s":""}</li>`).join("")}</ul>`:"")
   :'<div class="empty">Phases appear with your profile.</div>';
- // tracks > courses > chapters > lessons
- $("#lsTracks").innerHTML=TRACKS.map(t=>`<div class="track"><h2>${ic(t.icon)}${esc(t.name)}</h2>${t.courses.length?t.courses.map(co=>courseHTML(co,L)).join(""):`<p class="small">${esc(t.soon)}</p>${t.id==="openings"?`<button type="button" data-op="">${ic("book-open","sm")}Open the opening trainer</button>`:""}`}</div>`).join("");
+ // tracks > courses > chapters > lessons; puzzle courses on your priority list are marked "For you" and open
+ const fy=new Set(pr.map(x=>x.to).filter(t=>COIDX[t]));
+ $("#lsTracks").innerHTML=TRACKS.map(t=>`<div class="track"><h2>${ic(t.icon)}${esc(t.name)}</h2>${t.courses.length?t.courses.map((co,i)=>(co.pz&&!t.courses[i-1].pz?`<h3 class="h-small pz-h">Puzzle courses</h3><p class="small">Real positions from the Lichess puzzle database, from easy to hard. Each course has a chapter per rating range; you start at the one that fits you.</p>`:"")+courseHTML(co,L,W,fy)).join(""):`<p class="small">${esc(t.soon)}</p>${t.id==="openings"?`<button type="button" data-op="">${ic("book-open","sm")}Open the opening trainer</button>`:""}`}</div>`).join("");
  if(pend)TG.run()}
-function courseHTML(co,L){const rec=co.lv.includes(L);
+/* placement checks may have one miss in four (none in shorter checks) */
+const lsAllow=n=>n>=4?1:0;
+function courseHTML(co,L,W,fy){if(co.pz)return pzCourseHTML(co,W,fy);const rec=co.lv.includes(L);
  return `<div class="course${rec?" rec":""}"><div class="course-h"><b>${esc(co.name)}</b><span class="chip${rec?" xp":""}">${rec?"Recommended":co.lv.map(lvlName).join(" · ")}</span></div><p class="small">${esc(co.desc)}</p>`+co.chapters.map(ch=>{
   const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch);
   return `<div class="chapter"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.name)}</span><span class="small num">${d}/${ch.lessons.length} lessons</span></div><div class="meter"><b style="width:${d/ch.lessons.length*100}%;background:var(--primary)"></b></div>`+
    `<ul class="ls-list">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<li><button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}</button><span class="small num">${p.s||0}/${l.steps.length}</span>${PAGES[l.id]?`<button class="link small" type="button" data-pg="${l.id}">Learn more</button>`:""}</li>`}).join("")}</ul>`+
    `<div class="row">${done?'<span class="chip gold">'+ic("award","sm")+"Completed</span>":`<button class="${rec?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>`}${ch.test&&!c.p&&!done&&!started?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Take the ${ch.test.length}-puzzle check</button>`:""}${c.p&&!done?'<span class="chip gold">Check passed</span>':""}</div></div>`}).join("")+"</div>"}
+/* a puzzle course: one collapsible card, a dot per chapter, the chapter to start at marked; checks let you skip ahead from there */
+function pzCourseHTML(co,W,fy){const rec=pzRec(co,W),sk=pzSkill(co.pz),nd=co.chapters.filter(chDone).length,f=fy.has(co.id);
+ return `<details class="course pzc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${f?'<span class="chip xp">For you</span>':""}${rec?`<span class="chip">Your chapter: ${esc(rec.short)}</span>`:`<span class="chip gold">${ic("award","sm")}Completed</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
+  `<span class="small">${esc(co.desc)}</span><span class="bands" role="img" aria-label="${nd} of ${co.chapters.length} chapters done">${co.chapters.map(ch=>`<i class="${chDone(ch)?"done":ch===rec?"on":""}"></i>`).join("")}</span></summary>`+
+  `<div class="pz-body"><div class="row"><button type="button" data-pg="${co.id}">${ic("book-open","sm")}Learn the idea</button>${sk?`<span class="small">Your puzzle level here: about <b class="num">${sk}</b></span>`:""}</div>`+
+  co.chapters.map(ch=>{const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch),me=ch===rec;
+   return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?' <span class="chip xp">Start here</span>':""}</span><span class="small num">${d}/${ch.lessons.length} lessons</span></div>`+
+    `<div class="ls-row">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}<span class="small num">${p.s||0}/${PZ_N}</span></button>`}).join("")}</div>`+
+    (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>${!c.p&&rec&&ch.band>=rec.band?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Skip ahead: ${PZ_T}-puzzle check</button>`:""}</div>`)+"</div>"}).join("")+"</div></details>"}
 /* one handler for every lessons button */
 $("#v-lessons").addEventListener("click",e=>{const b=e.target.closest("button[data-ls],button[data-pg],button[data-ch],button[data-test],button[data-op]");if(!b)return;
  if(b.dataset.ls)openLesson(b.dataset.ls);else if(b.dataset.pg)openPage(b.dataset.pg);else if(b.dataset.ch)openLesson(nextLesson(CIDX[b.dataset.ch].ch).id);else if(b.dataset.test)openTest(b.dataset.test);
  else if(b.dataset.op!=null){if(b.dataset.op){OPSEL=b.dataset.op;LS.set(uk("opsel"),OPSEL);OD=null}location.hash="openings"}});
 $("#lsLevel").onchange=()=>{LSP.lvl={v:$("#lsLevel").value};saveLSP("lvl");renderLessons()};
 $("#lBack").onclick=$("#pgBack").onclick=()=>renderLessons();
-/* player: a lesson (steps in order, progress saved) or a placement check (first try counts, pass = chapter complete) */
-function openLesson(id,i){const x=LIDX[id];if(!x)return;const p=LSP["l:"+id]||{};LP={kind:"lesson",x,steps:x.l.steps,i:i!=null?i:p.d?0:Math.min(p.s||0,x.l.steps.length-1),fails:0};lsView("play");lsStep()}
-function openTest(id){const x=CIDX[id];if(!x||!x.ch.test)return;LP={kind:"test",x,steps:x.ch.test,i:0,fails:0};lsView("play");lsStep()}
-function lsStep(){const L=LP,st=L.steps[L.i],c=new Chess(st.f);L.wait=true;LW.clear();LB.flip=c.turn()==="b";LB.set(st.f);
- $("#lCrumb").textContent=`${L.x.t.name} › ${L.x.co.name} › ${L.x.ch.name}`;$("#lTitle").textContent=L.kind==="test"?"Placement check":L.x.l.name;
- $("#lDots").innerHTML=L.steps.map((s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">${L.kind==="test"?"Puzzle":"Step"} ${L.i+1} of ${L.steps.length}</span>`;
- $("#lPrompt").className="verdict v-move";$("#lPrompt").innerHTML=`${ic("target")}<b>${c.turn()==="w"?"White":"Black"} to move.</b> ${esc(st.n)}`;$("#lFeedback").innerHTML="";
- $("#lPage").hidden=!(L.kind==="lesson"&&PAGES[L.x.l.id]);$("#lSkip").hidden=L.kind!=="test"}
-async function lsMove(from,to){const L=LP;if(!L||!L.wait)return;const st=L.steps[L.i],fen=st.f,c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;L.wait=false;
+/* player: a lesson (steps in order, progress saved) or a placement check (first try counts). Puzzle lessons pick each puzzle when
+   it's reached (pzPick); puzzle steps have m (moves: the opponent's setup move, then the solution) and track miss/help. */
+const lsCrumb=L=>`${L.x.t.name} › ${L.x.co.name} › ${L.x.ch.short||L.x.ch.name}`;
+async function openLesson(id,i){const x=LIDX[id];if(!x)return;const p=LSP["l:"+id]||{};
+ const L=LP={kind:"lesson",x,steps:x.l.pz?[]:x.l.steps,len:x.l.steps.length,i:i!=null?i:p.d?0:Math.min(p.s||0,x.l.steps.length-1),fails:0,used:new Set()};lsView("play");
+ if(x.l.pz&&!(await lsLoad(L)))return;lsStep()}
+async function openTest(id){const x=CIDX[id];if(!x||!x.ch.test)return;const L=LP={kind:"test",x,steps:x.ch.pz?[]:x.ch.test,len:x.ch.test.length,i:0,fails:0,used:new Set()};lsView("play");
+ if(x.ch.pz){if(!(await lsLoad(L)))return;const pool=PZD[x.ch.pz.id][x.ch.band];L.steps=[.55,.7,.82,.94].map(f=>pzStep(pool[Math.min(pool.length-1,Math.floor(f*pool.length))]))}lsStep()}
+/* fetch a course's puzzles (from this site); false if that failed or the player left meanwhile */
+async function lsLoad(L){$("#lCrumb").textContent=lsCrumb(L);$("#lTitle").textContent=L.kind==="test"?"Placement check":L.x.l.name;$("#lDots").innerHTML="";$("#lFeedback").innerHTML="";$("#lSrc").hidden=true;
+ $("#lPrompt").className="verdict v-info";$("#lPrompt").innerHTML='<span class="skel" style="width:60%" aria-label="Loading puzzles"></span>';
+ try{await pzLoad(L.x.ch.pz)}catch(e){if(LP===L){$("#lPrompt").className="verdict v-no";$("#lPrompt").innerHTML=`${ic("circle-x")}Couldn't load the puzzles. Check your connection and try again.`}return false}return LP===L}
+const hintBtn=(L,st,t)=>{$("#lFeedback").innerHTML=`<div class="v-actions"><button class="ghost" type="button" id="lHint">${ic("lightbulb","sm")}${t||"Hint"}</button></div>`;$("#lHint").onclick=()=>pzHint(L,st)};
+function lsStep(){const L=LP;if(L.x.l&&L.x.l.pz&&!L.steps[L.i]){const p=pzPick(L);L.used.add(p[0]);L.steps[L.i]=pzStep(p)}
+ const st=L.steps[L.i],n=lsN(L),tk=L.tk=++LTK,c=new Chess(st.f),pz=!!st.m,side=(c.turn()==="w")!==pz?"White":"Black";L.wait=!pz;LW.clear();
+ if(pz){L.k=1;L.c=null;LB.flip=c.turn()==="w";LB.set(st.f);setTimeout(()=>{if(LP!==L||L.tk!==tk)return;const m=pzPlay(c,st.m[0]);L.c=c;LB.set(c.fen(),{last:m});L.wait=true},500)}
+ else{LB.flip=c.turn()==="b";LB.set(st.f)}
+ $("#lCrumb").textContent=lsCrumb(L);$("#lTitle").textContent=L.kind==="test"?"Placement check":L.x.l.name;
+ $("#lDots").innerHTML=Array.from({length:n},(s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">${pz||L.kind==="test"?"Puzzle":"Step"} ${L.i+1} of ${n}</span>`;
+ const ask=pz?(L.kind==="test"?"Find the best move. Only your first try counts.":L.x.l.pz.ask):st.n;
+ $("#lPrompt").className="verdict v-move";$("#lPrompt").innerHTML=`${ic("target")}<b>${side} to move.</b> ${esc(ask)}${pz&&L.kind==="lesson"?`<span class="coach-note">${esc(L.x.l.note)}</span>`:""}`;
+ $("#lFeedback").innerHTML="";if(pz&&L.kind==="lesson")hintBtn(L,st);
+ $("#lSrc").hidden=!pz;if(pz)$("#lSrc").innerHTML=`Puzzle rating ${st.r} · from a real game: <a href="https://lichess.org/training/${encodeURIComponent(st.pz)}" target="_blank" rel="noopener noreferrer">Lichess puzzle ${esc(st.pz)}</a>`;
+ $("#lPage").hidden=!(L.kind==="lesson"&&(PAGES[L.x.l.id]||PAGES[L.x.co.id]));$("#lSkip").hidden=L.kind!=="test"}
+async function lsMove(from,to){const L=LP;if(!L||!L.wait)return;const st=L.steps[L.i];if(st.m)return pzMove(L,st,from,to);const fen=st.f,c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;L.wait=false;
  const u=mv.from+mv.to,g=st.g||"best";LB.set(c.fen(),{last:{from,to}});let ok=false,also=false;
  if(g==="legal")ok=true;else if(g==="check")ok=c.in_check();else if(g==="mate")ok=c.in_checkmate();
  else{ok=[...(st.s||[]),...(st.alt||[])].some(s=>s.slice(0,4)===u);
@@ -698,32 +824,69 @@ async function lsMove(from,to){const L=LP;if(!L||!L.wait)return;const st=L.steps
    try{const sd=fen.split(" ")[1]==="w"?1:-1,t=new Chess(fen);t.move({from:st.s[0].slice(0,2),to:st.s[0].slice(2,4),promotion:st.s[0][4]||"q"});const a=await wEval(t.fen()),b=await wEval(c.fen());if(LP!==L)return;
     if(wp(sd*a.cp)-wp(sd*b.cp)<OP_TOL){ok=true;also=true}}catch(e){}}}
  if(LP!==L)return;Snd.play(ok?"correct":"wrong");if(ok)lsRight(L,mv,also);else lsWrong(L,fen,c,mv,u)}
+/* a puzzle move: the solution move or any checkmate is right; the opponent's reply follows */
+function pzMove(L,st,from,to){const pre=L.c.fen(),c=new Chess(pre),w=st.m[L.k];let mv=c.move({from,to,promotion:"q"});if(!mv)return;L.wait=false;
+ const hit=w.slice(0,4)===from+to;if(hit&&w[4]&&w[4]!==mv.promotion){c.undo();mv=c.move({from,to,promotion:w[4]})}
+ const ok=hit||c.in_checkmate();LB.set(c.fen(),{last:{from,to}});
+ if(!ok){Snd.play("wrong");return pzWrong(L,st,pre,c,mv)}
+ if(c.in_checkmate()||L.k+1>=st.m.length){Snd.play("correct");L.c=new Chess(pre);return L.kind==="test"?lsTestNext(L,true,mv):pzDone(L,st,mv)}
+ $("#lFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}<b>${esc(mv.san)}.</b> Good. Keep going.</div>`;const tk=L.tk;
+ setTimeout(()=>{if(LP!==L||L.tk!==tk)return;const r=pzPlay(c,st.m[L.k+1]);L.k+=2;L.c=c;LB.set(c.fen(),{last:r});L.wait=true;if(L.kind==="lesson")hintBtn(L,st);else $("#lFeedback").innerHTML=""},550)}
+function pzDone(L,st,mv){if(!st.miss)pzRate(L,st,st.help?.5:1);PZS[st.pz]=st.miss||st.help?2:1;savePZS();lsRight(L,mv,false)}
+function pzWrong(L,st,pre,c,mv){if(L.kind==="test"){L.fails++;return lsTestNext(L,false,mv)}
+ if(!st.miss){st.miss=true;pzRate(L,st,0);PZS[st.pz]=2;savePZS()}
+ const w=st.m[L.k],back=()=>LB.set(c.fen(),{last:{from:mv.from,to:mv.to}});
+ $("#lFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}<b>${esc(mv.san)}</b> isn't it. Look again.</div><div class="v-actions"><button type="button" id="lRetry">${ic("rotate-ccw","sm")}Try again</button><button class="ghost" type="button" id="lShow">${ic("eye","sm")}Show me</button></div>`;
+ $("#lRetry").onclick=()=>{LW.clear();LB.set(pre);L.wait=true;hintBtn(L,st)};
+ $("#lShow").onclick=()=>{LW.clear();st.help=2;LB.set(pre,{arrows:[{from:w.slice(0,2),to:w.slice(2,4),c:"green"}]});L.wait=true;$("#lFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}Play the green arrow to carry on.</div>`};
+ LW.show({fen:pre,played:mv.from+mv.to+(mv.promotion||""),best:w,restore:back})}
+/* hints: first the piece to move, then the arrow; a hinted puzzle counts half and comes back later */
+function pzHint(L,st){if(!L.wait||!L.c)return;const w=st.m[L.k],fen=L.c.fen(),p=L.c.get(w.slice(0,2));st.help=(st.help||0)+1;
+ if(st.help===1){LB.set(fen,{hl:w.slice(0,2)});hintBtn(L,st,"Show the move");$("#lFeedback").insertAdjacentHTML("afterbegin",`<div class="verdict v-info">${ic("lightbulb")}Move your ${PNM[p.type]} on ${w.slice(0,2)}.</div>`)}
+ else{LB.set(fen,{arrows:[{from:w.slice(0,2),to:w.slice(2,4),c:"green"}]});$("#lFeedback").innerHTML=`<div class="verdict v-info">${ic("lightbulb")}Play the green arrow.</div>`}}
 function lsChapterDone(ch){const k="c:"+ch.id,c=LSP[k]||(LSP[k]={});if(c.d||!chDone(ch))return;c.d=Date.now();saveLSP(k);gAdd({lc:1});gToast(`Chapter complete: ${ch.name}! +${GX.lc} XP`)}
-function lsRight(L,mv,also){const st=L.steps[L.i],last=L.i===L.steps.length-1;let nx="";
+/* after a puzzle lesson: suggest the next or previous chapter when the skill has left this band */
+function pzShift(L){const ch=L.x.ch,co=L.x.co,i=co.chapters.indexOf(ch),sk=pzSkill(co.pz)||0,B=PZB[ch.band];
+ if(sk>=B[1]+40&&co.chapters[i+1]&&!chDone(co.chapters[i+1]))return {ch:co.chapters[i+1],t:"These are getting easy for you. Ready for the next chapter?"};
+ if(sk&&sk<B[0]-60&&i>0&&!chDone(co.chapters[i-1]))return {ch:co.chapters[i-1],t:"These are tough ones. The previous chapter may suit you better for now."};return null}
+function lsRight(L,mv,also){const st=L.steps[L.i],n=lsN(L),last=L.i===n-1;let nx="",tip="";
  if(L.kind==="lesson"){const k="l:"+L.x.l.id,p=LSP[k]||(LSP[k]={s:0}),fresh=L.i>=(p.s||0);if(fresh)p.s=L.i+1;if(last&&!p.d)p.d=Date.now();saveLSP(k);if(fresh)gAdd({ls:1});if(last)lsChapterDone(L.x.ch);
-  const nl=L.x.ch.lessons[L.x.ch.lessons.indexOf(L.x.l)+1];nx=!last?`<button class="pri" type="button" id="lNext">Next step${ic("arrow-right","sm")}</button>`:nl?`<button class="pri" type="button" id="lNext">Next lesson: ${esc(nl.name)}${ic("arrow-right","sm")}</button>`:`<button class="pri" type="button" id="lNext">Back to lessons</button>`;
-  $("#lFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}<b>${esc(mv.san)}.</b> ${also?"That works just as well. ":""}${esc(st.ok||"Correct.")}${last?` <b>Lesson complete.</b>`:""}</div><div class="v-actions">${nx}<button class="link" type="button" id="lWhyBtn">Why?</button></div>`;
-  $("#lNext").onclick=()=>{if(!last){L.i++;lsStep()}else if(nl)openLesson(nl.id,0);else renderLessons()}}
+  const nl=L.x.ch.lessons[L.x.ch.lessons.indexOf(L.x.l)+1],nch=L.x.co.chapters[L.x.co.chapters.indexOf(L.x.ch)+1],mv2=last&&st.m?pzShift(L):null;
+  const go=!last?["Next "+(st.m?"puzzle":"step"),()=>{L.i++;lsStep()}]:nl?["Next lesson: "+nl.name,()=>openLesson(nl.id,0)]:nch&&L.x.co.pz?["Next chapter: "+nch.short,()=>openLesson(nextLesson(nch).id)]:["Back to lessons",()=>renderLessons()];
+  nx=`<button class="pri" type="button" id="lNext">${esc(go[0])}${ic("arrow-right","sm")}</button>`+(mv2?`<button type="button" id="lAlt">${esc(mv2.ch.short)}</button>`:"");if(mv2)tip=` ${mv2.t}`;
+  const okTxt=st.m?(st.miss?"Solved.":st.help?"Solved with a hint.":"Solved first try!"):st.ok||"Correct.";
+  $("#lFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}<b>${esc(mv.san)}.</b> ${also?"That works just as well. ":""}${esc(okTxt)}${last?` <b>Lesson complete.</b>`:""}${esc(tip)}</div><div class="v-actions">${nx}<button class="link" type="button" id="lWhyBtn">Why?</button></div>`;
+  $("#lNext").onclick=go[1];if(mv2)$("#lAlt").onclick=()=>openLesson(nextLesson(mv2.ch).id)}
  else lsTestNext(L,true,mv);
- const w=$("#lWhyBtn");if(w)w.onclick=()=>{w.remove();LW.show({fen:st.f,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:()=>LB.set(new Chess(st.f).fen())})}}
+ const w=$("#lWhyBtn");if(w)w.onclick=()=>{w.remove();const f=st.m?L.c.fen():st.f;LW.show({fen:f,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:()=>LB.set(new Chess(f).fen())})}}
 function lsWrong(L,fen,c,mv,u){const st=L.steps[L.i],back=()=>LB.set(c.fen(),{last:{from:mv.from,to:mv.to}});
  if(L.kind==="test"){L.fails++;return lsTestNext(L,false,mv)}
  $("#lFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}<b>${esc(mv.san)}</b> isn't it. ${st.g==="mate"?"That doesn't give checkmate.":st.g==="check"?"That isn't check.":"Look again."}</div><div class="v-actions"><button type="button" id="lRetry">${ic("rotate-ccw","sm")}Try again</button><button class="ghost" type="button" id="lShow">${ic("eye","sm")}Show me</button></div>`;
  $("#lRetry").onclick=()=>lsStep();$("#lShow").onclick=async()=>{let b=st.s&&st.s[0];if(!b)try{b=(await wEval(fen)).best}catch(e){}if(b&&LP===L)LB.set(fen,{arrows:[{from:b.slice(0,2),to:b.slice(2,4),c:"green"}]})};
  if(st.g!=="legal"&&st.g!=="check")LW.show({fen,played:u,best:st.s&&st.s[0],restore:back})}
-function lsTestNext(L,ok,mv){const last=L.i===L.steps.length-1,ch=L.x.ch;let html=`<div class="verdict ${ok?"v-ok":"v-no"}">${ic(ok?"circle-check":"circle-x")}<b>${esc(mv.san)}</b> ${ok?"is right.":"isn't it."}`;
+function lsTestNext(L,ok,mv){const n=lsN(L),last=L.i===n-1,ch=L.x.ch,co=L.x.co;let html=`<div class="verdict ${ok?"v-ok":"v-no"}">${ic(ok?"circle-check":"circle-x")}<b>${esc(mv.san)}</b> ${ok?"is right.":"isn't it."}`;
  if(!last){$("#lFeedback").innerHTML=html+`</div><div class="v-actions"><button class="pri" type="button" id="lNext">Next puzzle${ic("arrow-right","sm")}</button></div>`;$("#lNext").onclick=()=>{L.i++;lsStep()};return}
- if(!L.fails){const k="c:"+ch.id,c=LSP[k]||(LSP[k]={});c.p=Date.now();saveLSP(k);ch.lessons.forEach(l=>{const q=LSP["l:"+l.id]||(LSP["l:"+l.id]={s:0});if(!q.d){q.s=l.steps.length;q.d=Date.now();saveLSP("l:"+l.id)}});lsChapterDone(ch);
-  $("#lFeedback").innerHTML=html+` <b>You passed the check:</b> this chapter is marked complete, so you can skip ahead.</div><div class="v-actions"><button class="pri" type="button" id="lNext">Back to lessons</button></div>`;$("#lNext").onclick=()=>renderLessons()}
+ if(L.fails<=lsAllow(n)){const k="c:"+ch.id,c=LSP[k]||(LSP[k]={});c.p=Date.now();saveLSP(k);ch.lessons.forEach(l=>{const q=LSP["l:"+l.id]||(LSP["l:"+l.id]={s:0});if(!q.d){q.s=l.steps.length;q.d=Date.now();saveLSP("l:"+l.id)}});lsChapterDone(ch);
+  if(ch.pz){const sk=LSP[pzKey(ch.pz)]||(LSP[pzKey(ch.pz)]={});if((+sk.v||0)<PZB[ch.band][1]){sk.v=String(PZB[ch.band][1]);saveLSP(pzKey(ch.pz))}}
+  const nch=ch.pz?co.chapters[co.chapters.indexOf(ch)+1]:null;
+  $("#lFeedback").innerHTML=html+` <b>You passed the check</b> (${n-L.fails} of ${n}): this chapter is marked complete, so you can skip ahead.</div><div class="v-actions"><button class="pri" type="button" id="lNext">${nch?`Next chapter: ${esc(nch.short)}`:"Back to lessons"}${ic("arrow-right","sm")}</button></div>`;
+  $("#lNext").onclick=()=>nch?openLesson(nextLesson(nch).id):renderLessons()}
  else{const c=LSP["c:"+ch.id]||(LSP["c:"+ch.id]={});c.t=Date.now();saveLSP("c:"+ch.id);
-  $("#lFeedback").innerHTML=html+` You got ${L.steps.length-L.fails} of ${L.steps.length}. Work through the lessons first; they're short.</div><div class="v-actions"><button class="pri" type="button" id="lNext">Start the first lesson${ic("arrow-right","sm")}</button></div>`;$("#lNext").onclick=()=>openLesson(ch.lessons[0].id,0)}}
-$("#lPage").onclick=()=>{if(LP&&LP.kind==="lesson")openPage(LP.x.l.id)};$("#lSkip").onclick=()=>{if(LP)openLesson(LP.x.ch.lessons[0].id,0)};$("#lRestart").onclick=()=>{if(LP)lsStep()};
-/* teaching page: text and diagrams, then practice */
-function openPage(id){const x=LIDX[id],pg=PAGES[id];if(!x||!pg)return;LP=null;lsView("page");$("#pgCrumb").textContent=`${x.t.name} › ${x.co.name} › ${x.ch.name}`;$("#pgTitle").textContent=x.l.name;
+  $("#lFeedback").innerHTML=html+` You got ${n-L.fails} of ${n}. Work through the lessons first; they're short.</div><div class="v-actions"><button class="pri" type="button" id="lNext">Start the first lesson${ic("arrow-right","sm")}</button></div>`;$("#lNext").onclick=()=>openLesson(ch.lessons[0].id,0)}}
+$("#lPage").onclick=()=>{if(LP&&LP.kind==="lesson")openPage(PAGES[LP.x.l.id]?LP.x.l.id:LP.x.co.id)};$("#lSkip").onclick=()=>{if(LP)openLesson(LP.x.ch.lessons[0].id,0)};$("#lRestart").onclick=()=>{if(LP&&LP.steps[LP.i])lsStep()};
+/* teaching page: text, diagrams, a worked example to step through and a checklist, then practice */
+function openPage(id){const x=LIDX[id]||COIDX[id],pg=PAGES[id];if(!x||!pg)return;LP=null;lsView("page");$("#pgCrumb").textContent=x.ch?`${x.t.name} › ${x.co.name} › ${x.ch.name}`:`${x.t.name} › Puzzle courses`;$("#pgTitle").textContent=x.l?x.l.name:x.co.name;
  PGB.forEach(b=>{const i=BOARDS.indexOf(b);if(i>=0)BOARDS.splice(i,1)});PGB=[];
- $("#pgBody").innerHTML=pg.map((b,k)=>b.p?`<p>${esc(b.p)}</p>`:`<figure class="pg-fig"><div class="boardwrap" id="pgb${k}"></div><figcaption class="small">${esc(b.c||"")}</figcaption></figure>`).join("");
- pg.forEach((b,k)=>{if(!b.d)return;const B=new Board($("#pgb"+k),{label:b.c||"Diagram"});PGB.push(B);B.flip=b.d.split(" ")[1]==="b";B.set(b.d,{arrows:(b.a||[]).map(([f,t,c])=>({from:f,to:t,c}))})});
- $("#pgPractice").onclick=()=>openLesson(id,0)}
+ $("#pgBody").innerHTML=pg.map((b,k)=>b.p?`<p>${esc(b.p)}</p>`:b.l?`<h2 class="h-small">${esc(b.h)}</h2><ul class="pg-list">${b.l.map(t=>`<li>${ic("check","sm")}${esc(t)}</li>`).join("")}</ul>`
+  :b.w?`<figure class="pg-fig pg-ex"><div class="boardwrap" id="pgb${k}"></div><figcaption><p class="pg-cap" id="pgc${k}" aria-live="polite"></p><div class="row"><button class="icon-btn" type="button" id="pgp${k}" aria-label="Previous move">${ic("chevron-left")}</button><span class="small num" id="pgn${k}"></span><button class="pri" type="button" id="pgx${k}">Next move${ic("chevron-right","sm")}</button></div>${b.src?`<span class="small">From a real game: Lichess puzzle ${esc(b.src)}</span>`:""}</figcaption></figure>`
+  :`<figure class="pg-fig"><div class="boardwrap" id="pgb${k}"></div><figcaption class="small">${esc(b.c||"")}</figcaption></figure>`).join("");
+ pg.forEach((b,k)=>{if(!b.d&&!b.w)return;const B=new Board($("#pgb"+k),{label:b.c||"Diagram"});PGB.push(B);
+  if(b.d){B.flip=b.o?b.o==="b":b.d.split(" ")[1]==="b";B.set(b.d,{arrows:(b.a||[]).map(([f,t,c])=>({from:f,to:t,c}))});return}
+  // worked example: step through the moves, a caption for each
+  const c=new Chess(b.w),F=[{fen:c.fen()}];for(const u of b.m){const m=pzPlay(c,u);F.push({fen:c.fen(),last:m})}B.flip=b.w.split(" ")[1]==="b";let j=0;
+  const draw=()=>{const nx=b.m[j];B.set(F[j].fen,{last:F[j].last,arrows:nx?[{from:nx.slice(0,2),to:nx.slice(2,4),c:"green"}]:[]});$("#pgc"+k).textContent=j?b.t[j-1]:b.c;$("#pgn"+k).textContent=`${j}/${b.m.length}`;$("#pgp"+k).disabled=!j;$("#pgx"+k).disabled=j>=b.m.length};
+  $("#pgp"+k).onclick=()=>{if(j){j--;draw()}};$("#pgx"+k).onclick=()=>{if(j<b.m.length){j++;draw()}};draw()});
+ const T=x.l?null:lsTarget(id),pr=$("#pgPractice");pr.hidden=!x.l&&!T;pr.innerHTML=`${T?`Practise: ${esc(T.ch.short)}`:"Practise this"}${ic("arrow-right")}`;pr.onclick=()=>T?openLesson(T.l.id):openLesson(id,0)}
 
 /* ---------- GAMIFICATION (rule-based, from local data; synced as one row per account) ----------
    GS = uk("game") = {days: {"YYYY-MM-DD": {pz, p1, op, ol, rv, rvl, g, n, e}}, badges: {id: ms}, rec: {bw, ls, bb}, set: {int, hide, at}, rev: {gameId: 1}, at}
@@ -807,8 +970,8 @@ function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fa
  const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
  const weak=Object.entries(m).filter(([k,a])=>a.length>=5&&!ost[k]&&score(a)<45).sort((a,b)=>score(a[1])-score(b[1]))[0];
  if(weak)C.push({imp:18,t:`Start practising the ${weak[0].slice(2)} as ${weak[0][0]==="w"?"White":"Black"}`,p:`You score ${Math.round(score(weak[1]))}% in it over ${weak[1].length} games this year.`,xp:5*GX.op,i:"book-open",cta:"Start",act:()=>{OPSEL=weak[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
- const lp=lsPriority().find(x=>lsTarget(x.to)&&!lsDone(x.to)),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:"The basics: moves, checkmate and keeping pieces safe."}:lp;
- if(lx){const L=LIDX[lx.to],left=L.l.steps.length-((LSP["l:"+lx.to]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:`Lesson: ${L.l.name}`,p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:"Start",act:()=>{location.hash="lessons";openLesson(lx.to)}})}
+ const W=wkProfile(),lp=lsPriority().find(x=>{const T=lsTarget(x.to,W);return T&&!lsDone(T.l.id)}),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:"The basics: moves, checkmate and keeping pieces safe."}:lp;
+ if(lx){const T=lsTarget(lx.to,W),left=T.l.steps.length-((LSP["l:"+T.l.id]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:`Lesson: ${T.co.pz?T.ch.name:T.l.name}`,p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:"Start",act:()=>{location.hash="lessons";openLesson(T.l.id)}})}
  // fallbacks so there are always a few things to do
  const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:`Review your game vs ${last.opp}`,p:"Step through it: wins have lessons too.",xp:GX.rv,i:"scan-search",cta:"Review",act:()=>{openGame(last,0);location.hash="review"}});
  const top=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length)[0];
@@ -1151,7 +1314,7 @@ function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}

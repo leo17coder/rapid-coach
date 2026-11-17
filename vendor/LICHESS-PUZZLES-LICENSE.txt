@@ -1,0 +1,15 @@
+Puzzles in vendor/lichess-puzzles-2026-11/
+
+Source: the Lichess puzzle database, https://database.lichess.org/#puzzles
+(file lichess_db_puzzle.csv.zst, downloaded 17 November 2026, 6,193,530 puzzles).
+
+Lichess releases its database exports under the Creative Commons CC0 1.0 Universal
+public domain dedication: https://creativecommons.org/publicdomain/zero/1.0/
+No rights are reserved; this note is a courtesy, not a requirement.
+
+Rapid Coach uses a subset of 2,926 puzzles chosen by tools/build-puzzles.py (popular, often
+played, settled ratings, up to four moves to find, rated 400 to 1800). Each puzzle keeps its
+Lichess puzzle id, FEN, moves and rating; the puzzle can be seen at
+https://lichess.org/training/<id>. Themes and popularity data were used only for selection.
+
+Rapid Coach is not affiliated with Lichess.

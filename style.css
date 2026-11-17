@@ -381,4 +381,17 @@ dialog form{display:grid;gap:var(--s2);margin-bottom:var(--s3)}
 .page{max-width:68ch;display:grid;gap:var(--s3)}.page p{font-size:var(--fs-lg);line-height:1.6;margin:0}.page h1{margin-bottom:0}
 .pg-fig{margin:var(--s2) 0;display:grid;gap:var(--s2);max-width:420px}.pg-fig .boardwrap{max-width:420px}
 .page #pgPractice{justify-self:start;margin-top:var(--s3)}
+/* puzzle courses: one collapsible card per course, a dot per chapter */
+.pzc>summary{list-style:none;cursor:pointer;display:grid;gap:var(--s2);border-radius:var(--r-md)}.pzc>summary::-webkit-details-marker{display:none}
+.pzc>summary:focus-visible{outline:3px solid var(--primary);outline-offset:4px}.pzc[open]>summary{padding-bottom:var(--s2)}
+.chips{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center}.pz-chev{color:var(--muted);transition:transform .15s}.pzc[open] .pz-chev{transform:rotate(90deg)}@media (prefers-reduced-motion:reduce){.pz-chev{transition:none}}
+.bands{display:flex;gap:4px}.bands i{width:32px;height:6px;border-radius:3px;background:var(--border-strong)}.bands i.done{background:var(--success)}.bands i.on{background:var(--primary)}
+.pz-body{display:grid;gap:var(--s3)}.pz-h{margin-top:var(--s4)}
+.chapter.me{border-top-color:var(--primary)}
+.ls-row{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s4)}.ls-row .link{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--text);text-decoration:none;min-height:44px}
+.ls-row .link:hover{color:var(--primary)}.ls-row .ic{color:var(--success)}
+.coach-note{display:block;margin-top:6px;font-weight:400}.coach-note::before{content:"Tip: ";font-weight:700}
+.pg-list{list-style:none;padding:0;margin:0;display:grid;gap:var(--s2)}.pg-list li{display:flex;gap:var(--s2);align-items:flex-start;font-size:var(--fs-lg);line-height:1.5}.pg-list .ic{color:var(--success);margin-top:.3em;flex:none}
+.pg-ex figcaption{display:grid;gap:var(--s2)}.page .pg-cap{font-size:var(--fs-md);line-height:1.5;min-height:4.5em}
+
 
