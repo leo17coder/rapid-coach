@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23a8325e'/%3E%3Crect x='5' y='20' width='7' height='7' rx='1.5' fill='%23f3ecd8'/%3E%3Crect x='12' y='20' width='7' height='7' rx='1.5' fill='%237fa48e'/%3E%3Cpath d='M20.5 4 12 16.5h5.2L15 26l9.5-13.2h-5.3L21.5 4z' fill='%23fff'/%3E%3C/svg%3E">
 <link rel="preload" href="vendor/fonts/nunito-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}");if(u.theme&&u.theme!=="system")document.documentElement.dataset.theme=u.theme}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-17b">
+<link rel="stylesheet" href="style.css?v=2026-11-17c">
 <style>
 .doc{max-width:72ch;margin:0 auto;padding:24px max(16px,4vw) 64px}
 .doc-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:28px}
@@ -25,7 +25,7 @@
 <main class="doc">
 <div class="doc-top"><a class="brand" href="./"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#a8325e"/><rect x="5" y="20" width="7" height="7" rx="1.5" fill="#f3ecd8"/><rect x="12" y="20" width="7" height="7" rx="1.5" fill="#7fa48e"/><path d="M20.5 4 12 16.5h5.2L15 26l9.5-13.2h-5.3L21.5 4z" fill="#fff"/></svg><span>Rapid Coach</span></a><a class="back" href="./"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg>Back to the app</a></div>
 <h1>Privacy</h1>
-<p class="small">Last updated 16 November 2026 (Home tab, daily goal, streaks and badges added)</p>
+<p class="small">Last updated 17 November 2026 (lessons added)</p>
 
 <h2>The short version</h2>
 <ul>
@@ -49,6 +49,7 @@
     <tr><td>Puzzle progress (which puzzles you've seen, solved or missed)</td><td>To continue training on any device</td></tr>
     <tr><td>Opening trainer progress: per position you've drilled, your correct streak, next review date, how often you got it right or wrong, and the move you pinned as your repertoire move; and the date you started practising each opening</td><td>To continue your opening practice on any device, and to compare your results before and after practising</td></tr>
     <tr><td>Training activity for the daily goal: per day, how many puzzles you solved (and how many on the first try), opening positions you got right or learned, games you reviewed, whether you met the goal, and whether you trained late at night or early in the morning; also the badges you earned and when, your personal records, your goal settings, and which games already counted as reviewed</td><td>To show your daily goal, streak, XP, level, badges and records on every device. XP, streaks and levels are worked out from this, not stored separately</td></tr>
+    <tr><td>Lesson progress: per lesson the steps you completed and when you finished it, per chapter when you passed its placement check or completed it, and the level you chose for lessons</td><td>To continue your lessons on any device and keep "lessons completed" on the leaderboard</td></tr>
     <tr><td>Your baselines (rating, time used, errors per game, score, date)</td><td>To measure progress from the same starting point everywhere</td></tr>
   </tbody>
 </table></div>
@@ -58,7 +59,7 @@
 <ul>
   <li>the name you choose to show</li>
   <li>which site you play on (chess.com or Lichess), but not your username there</li>
-  <li>per time control: games analysed, blunders and mistakes per game, median time used per game, puzzles solved, opening positions learned, your XP this week, your current streak, and your rating now and at your baseline</li>
+  <li>per time control: games analysed, blunders and mistakes per game, median time used per game, puzzles solved, opening positions learned, lessons completed, your XP this week, your current streak, and your rating now and at your baseline</li>
 </ul>
 <p>Your friends see your chosen name in their friends list even if you don't share. They never see your email or your games. Switching sharing off deletes your shared stats straight away. When you last switched sharing on or off is recorded, as a record of your choice.</p>
 <p>Not stored: your games, your opponents' names, your IP address (beyond the short-lived logs any web host keeps), or anything about how you use the site.</p>
@@ -92,6 +93,9 @@
   <li>Each explorer request sends Lichess a chess position, the game speed and your rating band, with your token, so Lichess knows which account asked. Lichess's privacy policy applies.</li>
   <li>Results are cached in this browser. <i>Disconnect Lichess</i> deletes the token and the cache here and asks Lichess to revoke the token.</li>
 </ul>
+
+<h2>Lessons and your weakness profile</h2>
+<p>Lesson suggestions are worked out in your browser: Stockfish checks the mistakes in your analysed games and fixed rules sort them by theme (for example hanging pieces or missed forks) and game phase. These tags stay in this browser with your games and are never uploaded. Only your lesson progress and chosen level sync, if you have an account.</p>
 
 <h2>Daily goal, streaks and badges</h2>
 <p>The Home tab's daily goal, streak, XP, levels, badges, weekly challenge and records are worked out in your browser from your own training. They're never given for wins, there are no notifications or emails, and you can hide them all on the Home tab. Without an account they stay in this browser; with an account they sync as described above. The date of your last visit, used for "Since your last visit", stays in this browser only.</p>

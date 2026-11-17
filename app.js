@@ -265,7 +265,7 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
   if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);Fr.soon();AQ.done++;maybeBaseline();
   if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.cur==="home")renderHome()}}
  catch(e){$("#anState").innerHTML=`<div class="verdict v-no">${ic("triangle-alert")}The engine couldn't start in this browser.</div>`}
- AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck()}if(route.cur==="progress")renderProgress();if(route.cur==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
+ AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck();TG.run()}if(route.cur==="progress")renderProgress();if(route.cur==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
 
 /* ---------- TRAINER ---------- */
@@ -492,12 +492,245 @@ function renderExplorer(){const on=!!LiAuth.token();$("#oExNote").textContent=Li
  $("#oExBtn").textContent=on?"Disconnect Lichess":"Connect Lichess"}
 $("#oExBtn").onclick=async()=>{if(LiAuth.token()){await LiAuth.disconnect();LiAuth.msg="Lichess disconnected.";renderExplorer()}else{try{await LiAuth.connect()}catch(e){LiAuth.msg="Couldn't start the Lichess connection in this browser.";renderExplorer()}}};
 
+/* ---------- WEAKNESS PROFILE ----------
+   Each of my mistakes and blunders in the stored analyses is tagged once (cached on the game as g.mt, local only) by fixed
+   rules over two Stockfish lines: my best line from the position (what I missed) and the opponent's best line after my move
+   (what I allowed). Tags (MOT) go with the phase (opening/middlegame/endgame) and, in endgames, the ending type (ENDT).
+   Costs are win-% points lost (e.drop), summed per tag and divided by the tagged games. */
+const MT_V=1,MT_GAMES=60,PVAL={p:1,n:3,b:3,r:5,q:9,k:0},FILES="abcdefgh";
+const MOT={mate_missed:{n:"Missed checkmates",to:"fs-mate1"},mate_allowed:{n:"Allowing checkmate",to:"fs-mate1"},backrank:{n:"Back-rank weakness",to:"fs-mate1"},
+ hang:{n:"Hanging pieces",to:"fs-save"},material_missed:{n:"Free material left on the board",to:"fs-free"},
+ fork_missed:{n:"Missed forks",to:"tp-fork"},fork_allowed:{n:"Allowing forks",to:"tp-fork"},pin_missed:{n:"Missed pins",to:"tp-pin"},skewer_missed:{n:"Missed skewers",to:"tp-skewer"},
+ pin_allowed:{n:"Allowing pins and skewers",to:"tp-pin"},tactic_missed:{n:"Other missed tactics",to:"tp-fork"},tactic_allowed:{n:"Other tactics allowed",to:"tp-fork"},positional:{n:"Positional slips",to:null}};
+const ENDT={kp:"King and pawn endings",rook:"Rook endings",minor:"Minor-piece endings",queen:"Queen endings",mixed:"Other endings"},PHN={opening:"Opening",middlegame:"Middlegame",endgame:"Endgame"};
+const sqi=s=>[FILES.indexOf(s[0]),+s[1]-1];
+function bMap(fen){const m={},c=new Chess(fen);c.board().forEach((row,r)=>row.forEach((p,f)=>{if(p)m[FILES[f]+(8-r)]=p}));return m}
+/* does the piece on `from` attack `to` (geometry and blockers; pawns by capture direction) */
+function attacks(M,from,to){const p=M[from];if(!p||from===to)return false;const [f1,r1]=sqi(from),[f2,r2]=sqi(to),df=f2-f1,dr=r2-r1,a=Math.abs(df),b=Math.abs(dr);
+ if(p.type==="p")return a===1&&dr===(p.color==="w"?1:-1);if(p.type==="n")return a*b===2;if(p.type==="k")return a<=1&&b<=1;
+ if(!((p.type!=="b"&&(!df||!dr))||(p.type!=="r"&&a===b)))return false;const sf=Math.sign(df),sr=Math.sign(dr);
+ for(let k=1;k<Math.max(a,b);k++)if(M[FILES[f1+sf*k]+(r1+sr*k+1)])return false;return true}
+const attackersOf=(M,sq,col)=>Object.keys(M).filter(s=>M[s].color===col&&attacks(M,s,sq));
+/* fork: the piece on t attacks two or more enemy targets worth winning (king, or a piece that is undefended or worth more than the attacker) */
+function isFork(M,t){const p=M[t];if(!p)return false;const opp=p.color==="w"?"b":"w";
+ return Object.keys(M).filter(s=>M[s].color===opp&&attacks(M,t,s)&&(M[s].type==="k"||(PVAL[M[s].type]>=3&&(PVAL[M[s].type]>PVAL[p.type]||!attackersOf(M,s,opp).length)))).length>=2}
+/* pin or skewer along a line from the slider on t: first enemy piece X, then the next piece Y behind it (also enemy) */
+function lineTactic(M,t){const p=M[t];if(!p||!"brq".includes(p.type))return null;const opp=p.color==="w"?"b":"w",[f,r]=sqi(t),D=[];
+ if(p.type!=="b")D.push([1,0],[-1,0],[0,1],[0,-1]);if(p.type!=="r")D.push([1,1],[1,-1],[-1,1],[-1,-1]);
+ for(const [a,b] of D){let X=null;for(let k=1;k<8;k++){const x=f+a*k,y=r+b*k;if(x<0||x>7||y<0||y>7)break;const q=M[FILES[x]+(y+1)];if(!q)continue;
+  if(!X){if(q.color!==opp)break;X=q;continue}if(q.color!==opp)break;const vx=X.type==="k"?100:PVAL[X.type],vy=q.type==="k"?100:PVAL[q.type];
+  if(vy>vx&&vx>=1)return "pin";if(vx>vy&&vy>=3)return "skewer";break}}return null}
+/* play a UCI line (legal moves only), not stopping mid-exchange; material change for `me`, mate at the end, last move */
+function lineEnd(fen,ucis,me,max){const c=new Chess(fen),b0=balOf(matOf(fen),me);let last=null,n=0;
+ for(const u of ucis||[]){if(n>=max&&!(last&&last.captured))break;const m=c.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});if(!m)break;last=m;n++}
+ return {d:balOf(matOf(c.fen()),me)-b0,mate:c.in_checkmate(),fen:c.fen(),last}}
+function phaseOf(fen,ply){const m=matOf(fen),np=k=>["n","b","r","q"].reduce((s,t)=>s+PVAL[t]*m[k][t],0),tot=np("w")+np("b"),q=m.w.q+m.b.q;
+ return tot<=26||(!q&&tot<=32)?"endgame":ply<20&&tot>=52?"opening":"middlegame"}
+function endType(fen){const m=matOf(fen),has=t=>m.w[t]+m.b[t]>0,minor=has("n")||has("b");
+ return !minor&&!has("r")&&!has("q")?"kp":!minor&&has("r")&&!has("q")?"rook":minor&&!has("r")&&!has("q")?"minor":!minor&&!has("r")&&has("q")?"queen":"mixed"}
+/* tags for one mistake e (from errorsOf) given my best line rF and the opponent's best line rA after my move */
+function tagOne(g,e,rF,rA){const F=g._f[e.i],A=g._f[e.i+1],me=F.split(" ")[1],t=[],add=k=>{if(!t.includes(k))t.push(k)};
+ if(e.before>=9000&&e.after<9000)add("mate_missed");
+ if(e.after<=-9000){add("mate_allowed");const l=lineEnd(A,rA,me,40);if(l.mate&&l.last&&"rq".includes(l.last.piece)){const M=bMap(l.fen),k=Object.keys(M).find(s=>M[s].type==="k"&&M[s].color===me);
+  if(k&&k[1]===(me==="w"?"1":"8")&&l.last.to[1]===k[1])add("backrank")}}
+ const la=lineEnd(A,rA,me,8),lf=lineEnd(F,rF,me,8);
+ if(!t.length&&la.d<=-2&&rA&&rA[0]){const r=rA[0],M=bMap(A),to=r.slice(2,4),X=M[to],att=M[r.slice(0,2)];
+  if(X&&X.color===me&&(!attackersOf(M,to,me).length||PVAL[X.type]>PVAL[att.type]))add("hang");
+  else{const c=new Chess(A);c.move({from:r.slice(0,2),to,promotion:r[4]||"q"});const M2=bMap(c.fen());add(isFork(M2,to)?"fork_allowed":lineTactic(M2,to)?"pin_allowed":"tactic_allowed")}}
+ if(!t.length&&lf.d>=2&&rF&&rF[0]){const b=rF[0],M=bMap(F),to=b.slice(2,4),X=M[to],c=new Chess(F);c.move({from:b.slice(0,2),to,promotion:b[4]||"q"});const M2=bMap(c.fen()),lt=lineTactic(M2,to);
+  add(isFork(M2,to)?"fork_missed":lt==="pin"?"pin_missed":lt==="skewer"?"skewer_missed":X&&X.color!==me?"material_missed":"tactic_missed")}
+ if(!t.length)add("positional");const ph=phaseOf(F,e.i);return {t,ph,et:ph==="endgame"?endType(F):null,d:Math.round(e.drop*10)/10}}
+/* background tagger: newest analysed games first, at most MT_GAMES; one engine job at a time behind any analysis */
+const TG={busy:false,async run(){if(this.busy||!P)return;this.busy=true;const gen=GEN;let done=0;
+ try{for(const g of GAMES.filter(g=>g.an).slice(-MT_GAMES).reverse()){if(gen!==GEN)break;if(g.mt&&g.mt.v===MT_V)continue;replay(g);const mt={v:MT_V,e:{}};
+  for(const e of serious(g)){if(gen!==GEN)break;const rF=(await Engine.eval(g._f[e.i],12)).pv,rA=(await Engine.eval(g._f[e.i+1],12)).pv;if(gen!==GEN)break;mt.e[e.i]=tagOne(g,e,rF,rA)}
+  if(gen!==GEN)break;g.mt=mt;DB.put([g]);if(++done%3===0&&route.cur==="lessons"&&!LP)renderLessons()}}
+ catch(x){}finally{this.busy=false}if(gen===GEN&&done){if(route.cur==="lessons"&&!LP)renderLessons();if(route.cur==="home")renderHome()}}};
+function wkProfile(){const an=GAMES.filter(g=>g.an).slice(-MT_GAMES),tg=an.filter(g=>g.mt&&g.mt.v===MT_V),n=tg.length,T={},PH={opening:{n:0,d:0},middlegame:{n:0,d:0},endgame:{n:0,d:0}},ET={},inc=(o,k,d)=>{const x=o[k]||(o[k]={n:0,d:0});x.n++;x.d+=d};
+ for(const g of tg)for(const i in g.mt.e){const x=g.mt.e[i];inc(T,x.t[0],x.d);PH[x.ph].n++;PH[x.ph].d+=x.d;if(x.et)inc(ET,x.et,x.d)}return {n,an:an.length,T,PH,ET}}
+/* priority list: every weakness with its cost (win-% points per game) and a one-line reason; habits from what Progress measures */
+function lsPriority(){const W=wkProfile(),out=[],n=W.n;if(n<3)return out;const pg=x=>x.d/n,times=k=>k===1?"once":k===2?"twice":k+" times";
+ for(const k in W.T){if(k==="positional")continue;const x=W.T[k];out.push({k,name:MOT[k].n,cost:pg(x),to:MOT[k].to,reason:`${times(x.n)} in your last ${n} analysed games, about ${pg(x).toFixed(1)} points a game.`})}
+ for(const k in W.ET){const x=W.ET[k];if(x.n>=2)out.push({k:"end_"+k,name:ENDT[k],cost:pg(x)*.8,to:"endgames",reason:`${times(x.n)} you went wrong in ${ENDT[k].toLowerCase()}, about ${pg(x).toFixed(1)} points a game.`})}
+ const s=stats(),B=baseSecs(),errs=[];GAMES.filter(g=>g.mt).slice(-MT_GAMES).forEach(g=>{for(const i in g.mt.e)errs.push({g,i:+i,x:g.mt.e[i]})});
+ const win=errs.filter(o=>(errorsOf(o.g).find(e=>e.i===o.i)||{}).before>200);if(win.length>=2){const d=win.reduce((a,o)=>a+o.x.d,0)/n;out.push({k:"winning",name:"Letting winning positions slip",cost:d*.6,to:"tp-fork",reason:`${times(win.length)} you went wrong when already clearly winning, about ${d.toFixed(1)} points a game.`})}
+ if(s.time!=null&&s.time<B*.5){const quick=errs.filter(o=>{const sp=spent(o.g,o.i);return sp!=null&&sp<10}),d=quick.reduce((a,o)=>a+o.x.d,0)/n;
+  if(quick.length)out.push({k:"clock",name:"Playing too fast",cost:d*.7,to:null,reason:`You use ${mmss(s.time)} of ${mmss(B)}; ${times(quick.length)} you erred after under 10 seconds of thought.`})}
+ const yr=GAMES.filter(g=>g.ts>Date.now()-365*864e5),om={};yr.forEach(g=>{const k=g.color+"|"+famOf(g.eco);(om[k]=om[k]||[]).push(g)});
+ const wo=Object.entries(om).filter(([,a])=>a.length>=5).map(([k,a])=>({k,a,s:score(a)})).sort((a,b)=>a.s-b.s)[0];
+ if(wo&&wo.s<45)out.push({k:"opening",name:`The ${wo.k.slice(2)} as ${wo.k[0]==="w"?"White":"Black"}`,cost:(50-wo.s)*wo.a.length/Math.max(1,yr.length),to:"openings",op:wo.k,reason:`You score ${Math.round(wo.s)}% in it over ${wo.a.length} games this year.`});
+ return out.filter(o=>o.cost>0).sort((a,b)=>b.cost-a.cost)}
+/* level: rating (Lichess ratings run about 250 higher than chess.com's) nudged by accuracy; the player can override it */
+const LVLS=[["new","New to chess"],["beg","Beginner"],["imp","Improver"],["int","Intermediate"],["club","Club player"]];
+function lvlAuto(){if(!GAMES.length)return "new";const s=stats();let r=(s.rating||0)-(P.source==="li"?250:0),i=r<400?0:r<800?1:r<1100?2:r<1400?3:4;
+ if(s.nAn>=10&&s.errs!=null){if(s.errs>=4&&i>1)i--;else if(s.errs<=1.2&&i>0&&i<4)i++}return LVLS[i][0]}
+const lvl=()=>(LSP.lvl&&LSP.lvl.v)||lvlAuto(),lvlName=id=>(LVLS.find(l=>l[0]===id)||LVLS[1])[1];
+
+/* ---------- LESSON CONTENT ----------
+   TRACKS > courses (lv: levels it suits) > chapters (test: placement check) > lessons (steps, page: teaching page).
+   Step: f FEN, g goal ("best": the move in s, or with tolerance a move just as good; "x":1 means exactly s/alt;
+   "check": any check; "mate": any checkmate; "legal": any legal move), n coach note, ok note after success. */
+const TRACKS=[
+ {id:"tactics",name:"Tactics & checkmate patterns",icon:"crosshair",courses:[
+  {id:"fs",name:"First steps",lv:["new","beg"],desc:"How the pieces move, check and checkmate, and keeping your pieces safe.",chapters:[
+   {id:"fs-moves",name:"How the pieces move",lessons:[
+    {id:"fs-rook",name:"Rook and bishop",steps:[
+     {f:"k7/8/8/p7/8/8/8/R6K w - - 0 1",s:["a1a5"],x:1,n:"The rook moves in straight lines: up, down and sideways. Take the pawn on a5.",ok:"Rooks love open lines."},
+     {f:"7k/8/8/8/8/8/8/R3n2K w - - 0 1",s:["a1e1"],x:1,n:"Sideways works too. Capture the knight.",ok:"Straight along the rank."},
+     {f:"k7/8/8/4n3/8/8/8/B6K w - - 0 1",s:["a1e5"],x:1,n:"The bishop moves diagonally and always stays on its colour. Take the knight.",ok:"Diagonals can be long."}]},
+    {id:"fs-knight",name:"The knight",steps:[
+     {f:"k7/8/8/8/8/2p5/8/1N5K w - - 0 1",s:["b1c3"],x:1,n:"The knight jumps in an L: two squares one way, then one to the side. Take the pawn.",ok:"That's the L."},
+     {f:"k7/8/8/3p4/8/4N3/8/7K w - - 0 1",s:["e3d5"],x:1,n:"Knights jump over anything in the way. Find the L that reaches the pawn.",ok:"Knights are sneaky."}]},
+    {id:"fs-queen",name:"Queen and king",steps:[
+     {f:"7k/8/8/8/8/8/1r6/Q6K w - - 0 1",s:["a1b2"],x:1,n:"The queen moves like a rook and a bishop together. Take the rook.",ok:"The queen is your strongest piece."},
+     {f:"k7/8/8/8/8/8/6p1/7K w - - 0 1",s:["h1g2"],x:1,n:"The king moves one square in any direction. That pawn is giving check: take it with the king.",ok:"The king can capture too, when it's safe."}]},
+    {id:"fs-pawn",name:"Pawns",steps:[
+     {f:"k7/8/8/8/8/8/4P3/4K2R w - - 0 1",s:["e2e4"],x:1,n:"A pawn moves straight forward. On its first move it may go two squares. Push it two.",ok:"Pawns never move backwards."},
+     {f:"k7/8/8/8/3p4/4P3/8/7K w - - 0 1",s:["e3d4"],x:1,n:"Pawns capture one square diagonally forward. Take the black pawn.",ok:"Forward to move, diagonal to capture."}]}]},
+   {id:"fs-check",name:"Check and checkmate",test:[
+     {f:"6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1",g:"mate",n:"Checkmate in one."},{f:"7k/6pp/8/8/8/8/1Q6/K7 w - - 0 1",g:"mate",n:"Checkmate in one."}],lessons:[
+    {id:"fs-givecheck",name:"Check",steps:[
+     {f:"k7/8/8/8/8/8/8/1R5K w - - 0 1",g:"check",n:"Check means attacking the king. Give check with your rook.",ok:"The king must deal with a check at once."},
+     {f:"k5r1/8/8/8/8/8/8/6K1 w - - 0 1",g:"legal",n:"You're in check from the rook. Step out of its line.",ok:"In check, every legal move gets you out of check."},
+     {f:"k5r1/8/8/8/8/7B/8/6K1 w - - 0 1",s:["h3g2"],x:1,n:"You can also block a check. Put your bishop in the way, next to your king so it stays protected.",ok:"Blocking works best when the blocker is defended."}]},
+    {id:"fs-mate1",name:"Checkmate in one",steps:[
+     {f:"6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1",g:"mate",n:"Checkmate is a check with no way out. The king's own pawns trap it: find the mate.",ok:"A back-rank mate."},
+     {f:"k7/8/1K6/8/8/8/7Q/8 w - - 0 1",g:"mate",n:"Your king helps. Find a checkmate with the queen.",ok:"King and queen together."}]}]},
+   {id:"fs-hang",name:"Don't hang pieces",lessons:[
+    {id:"fs-save",name:"Save your piece",steps:[
+     {f:"k7/8/8/8/3r4/8/3N4/6K1 w - - 0 1",s:["d2f3"],alt:["d2b3","d2f1"],x:1,n:"The rook attacks your knight and nothing defends it. Move it to a safe square.",ok:"Before every move, ask: what is attacked?"},
+     {f:"k7/8/8/8/8/2n5/4B3/6K1 w - - 0 1",s:["e2d3"],alt:["e2f3","e2g4","e2h5","e2f1","e2c4","e2a6"],x:1,n:"The knight attacks your bishop. Find a square where it's safe.",ok:"Safe means no enemy piece can take it."}]},
+    {id:"fs-free",name:"Take free material",steps:[
+     {f:"k7/8/8/3b4/8/8/8/3Q2K1 w - - 0 1",s:["d1d5"],x:1,n:"Nothing defends that bishop. Take it.",ok:"A free piece is a big advantage."},
+     {f:"k7/8/8/8/8/5n2/8/5RK1 w - - 0 1",s:["f1f3"],x:1,n:"The knight gives check, but it's undefended. Win it.",ok:"Answering a check by taking the checker is often best."}]}]}]},
+  {id:"tp",name:"Tactical patterns",lv:["int","club"],desc:"The tactics that decide most games between 1200 and 1600.",chapters:[
+   {id:"tp-fps",name:"Forks, pins and skewers",test:[
+     {f:"q3k3/8/8/1N6/8/8/8/4K3 w - - 0 1",s:["b5c7"],n:"White to play and win material."},
+     {f:"4k3/8/2r5/8/P7/8/8/4KB2 w - - 0 1",s:["f1b5"],n:"White to play and win material."},
+     {f:"3q4/8/8/3k4/8/8/8/R5K1 w - - 0 1",s:["a1d1"],n:"White to play and win material."}],lessons:[
+    {id:"tp-fork",name:"Knight forks",steps:[
+     {f:"4k3/8/8/1q6/4N3/8/8/4K3 w - - 0 1",s:["e4d6"],n:"A fork attacks two things at once. Find the knight jump that hits king and queen.",ok:"The king must move, and the queen falls."},
+     {f:"r3k3/8/8/1N6/8/8/8/4K3 w - - 0 1",s:["b5c7"],n:"Look for a check that also hits the rook.",ok:"Forks with check are the strongest: no time to save both."}]},
+    {id:"tp-pin",name:"Pins",steps:[
+     {f:"4k3/8/8/4q3/8/8/5K2/R7 w - - 0 1",s:["a1e1"],n:"A pinned piece can't move without exposing something bigger behind it. Pin the queen to the king.",ok:"The queen is stuck: taking the rook costs her."},
+     {f:"4k3/8/2q5/8/P7/8/8/4KB2 w - - 0 1",s:["f1b5"],n:"Pin the queen with your bishop. Your pawn makes taking the bishop expensive.",ok:"Pins win material when the pinned piece is worth more than the attacker."}]},
+    {id:"tp-skewer",name:"Skewers",steps:[
+     {f:"4r3/8/8/4k3/8/8/8/R5K1 w - - 0 1",s:["a1e1"],n:"A skewer is a pin in reverse: check the king, then take what stands behind it.",ok:"After the king steps aside, Rxe8 wins the rook."},
+     {f:"8/1q6/8/3k4/8/8/4B3/6K1 w - - 0 1",s:["e2f3"],n:"Same idea on a diagonal. Check the king and win the queen behind it.",ok:"The king moves and Bxb7 follows."}]}]}]}]},
+ {id:"openings",name:"Openings",icon:"book-open",courses:[],soon:"Opening courses arrive in a later update. Until then, drill the lines you really play in the opening trainer."},
+ {id:"endgames",name:"Endgames",icon:"flag",courses:[],soon:"Endgame courses arrive in a later update."}];
+/* teaching pages: the idea in a few sentences, with board diagrams (d: FEN, a: arrows) */
+const PAGES={
+ "fs-rook":[{p:"Rooks move any number of squares along a rank (row) or file (column). Bishops move along diagonals, so a bishop that starts on a light square stays on light squares all game."},{d:"k7/8/8/p7/8/8/8/R6K w - - 0 1",a:[["a1","a5","green"],["a1","g1","blue"]],c:"The rook on a1 reaches the whole a-file and the first rank."},{d:"k7/8/8/4n3/8/8/8/B6K w - - 0 1",a:[["a1","e5","green"]],c:"The bishop sweeps the long diagonal."}],
+ "fs-knight":[{p:"The knight moves two squares in one direction and then one square sideways: an L. It is the only piece that can jump over others, which makes it great in crowded positions."},{d:"k7/8/8/8/3N4/8/8/7K w - - 0 1",a:[["d4","e6","green"],["d4","c6","green"],["d4","f5","green"],["d4","f3","green"],["d4","e2","green"],["d4","c2","green"],["d4","b3","green"],["d4","b5","green"]],c:"From the centre a knight reaches eight squares."}],
+ "fs-queen":[{p:"The queen combines the rook and the bishop: any distance, in any straight line. The king moves just one square at a time, in any direction, and can never move into check."},{d:"k7/8/8/8/3Q4/8/8/7K w - - 0 1",a:[["d4","d8","green"],["d4","h8","green"],["d4","a4","green"],["d4","a1","green"]],c:"The queen covers ranks, files and diagonals."}],
+ "fs-pawn":[{p:"Pawns move one square forward, or two on their very first move. They capture one square diagonally forward. A pawn that reaches the last rank becomes a queen (or another piece)."},{d:"k7/8/8/8/3p4/4P3/8/7K w - - 0 1",a:[["e3","d4","green"],["e3","e4","blue"]],c:"Straight to move, diagonal to capture."}],
+ "fs-givecheck":[{p:"A check is an attack on the king. The player in check must get out of it at once, in one of three ways: move the king, block the line, or capture the checking piece."},{d:"k5r1/8/8/8/8/7B/8/6K1 w - - 0 1",a:[["g8","g1","red"],["h3","g2","green"]],c:"The rook checks along the g-file; the bishop blocks on g2, protected by the king."}],
+ "fs-mate1":[{p:"Checkmate is a check that can't be answered: the king can't move, the check can't be blocked and the checker can't be taken. A king stuck behind its own pawns is a classic target: the back-rank mate."},{d:"6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1",a:[["a1","a8","green"]],c:"Ra8 is mate: the pawns on f7, g7 and h7 take away the king's escape squares."}],
+ "fs-save":[{p:"A piece is hanging when it can be taken for free. Before each move, check what your opponent attacks. If a piece is attacked and not defended, move it, defend it, or block the attack."},{d:"k7/8/8/8/3r4/8/3N4/6K1 w - - 0 1",a:[["d4","d2","red"],["d2","f3","green"]],c:"The rook attacks the knight; Nf3 moves it to safety."}],
+ "fs-free":[{p:"The other side of the coin: after your opponent moves, check what they left undefended. Taking a free piece is often the best move on the board."},{d:"k7/8/8/3b4/8/8/8/3Q2K1 w - - 0 1",a:[["d1","d5","green"]],c:"Qxd5 wins a bishop for nothing, with check."}],
+ "tp-fork":[{p:"A fork is one piece attacking two targets at once. Knights are the classic forkers because their attacks are hard to see. The best forks include a check, so the opponent has no time to save the other piece."},{d:"4k3/8/8/1q6/4N3/8/8/4K3 w - - 0 1",a:[["e4","d6","green"],["d6","e8","red"],["d6","b5","red"]],c:"Nd6+ attacks king and queen."},{p:"To spot forks, look at squares where your knight would attack the king, queen or rooks, and check whether you can get there safely."}],
+ "tp-pin":[{p:"A pin attacks a piece that can't move away without exposing something more valuable behind it. Against the king it's an absolute pin: the piece may not move at all. Pin a valuable piece and attack it again, or win it for less."},{d:"4k3/8/8/4q3/8/8/5K2/R7 w - - 0 1",a:[["a1","e1","green"],["e1","e8","red"]],c:"Re1 pins the queen to the king."}],
+ "tp-skewer":[{p:"A skewer is a pin in reverse: the more valuable piece is in front. When it moves out of the line (a king must, if it's checked), the piece behind it falls."},{d:"4r3/8/8/4k3/8/8/8/R5K1 w - - 0 1",a:[["a1","e1","green"],["e1","e5","red"],["e5","e8","red"]],c:"Re1+ and then Rxe8."}]};
+const LIDX={},CIDX={};for(const t of TRACKS)for(const co of t.courses)for(const ch of co.chapters){CIDX[ch.id]={t,co,ch};for(const l of ch.lessons)LIDX[l.id]={t,co,ch,l}}
+/* progress: LSP = uk("lessons") = {"l:<lesson>": {s: steps done, d: completed (ms)}, "c:<chapter>": {p: check passed (ms), d: completed (ms)}, lvl: {v}; each with at (ms)} */
+let LSP={},LP=null;
+const lsDone=id=>!!(LSP["l:"+id]||{}).d,lsCount=()=>Object.keys(LSP).filter(k=>k.startsWith("l:")&&LSP[k].d).length;
+const saveLSP=k=>{LSP[k].at=Date.now();LS.set(uk("lessons"),LSP);Sync.mark("ls",acct()+"|"+k);Fr.soon()};
+const chDone=ch=>ch.lessons.every(l=>lsDone(l.id)),nextLesson=ch=>ch.lessons.find(l=>!lsDone(l.id))||ch.lessons[0];
+
+/* ---------- LESSONS TAB: priority list, profile, tracks; lesson player; teaching pages ---------- */
+const LB=new Board($("#lboard"),{onMove:(f,t)=>lsMove(f,t),label:"Lesson board"}),LW=new Why($("#lWhy"),LB,new EvalBar($("#lEv")));let PGB=[];
+function lsView(v){$("#lsHome").hidden=v!=="home";$("#lsPlay").hidden=v!=="play";$("#lsPage").hidden=v!=="page";if(v!=="play")LW.clear();window.scrollTo(0,0)}
+const lsTarget=x=>x&&LIDX[x]?LIDX[x]:null;
+function prioBtn(x,i){const L=lsTarget(x.to);if(L){const p=LSP["l:"+x.to]||{};return `<button class="${i===0?"pri":""}" type="button" data-ls="${x.to}">${p.d?"Practise again":p.s?"Continue":"Start lesson"}</button>`}
+ if(x.to==="openings")return `<button type="button" data-op="${esc(x.op||"")}">${ic("book-open","sm")}Opening trainer</button>`;
+ if(x.to==="endgames")return '<span class="chip">Endgame lessons soon</span>';
+ return x.k==="clock"?'<a class="small" href="#progress">See your clock use</a>':'<a class="small" href="#review">Review your games</a>'}
+function renderLessons(){LP=null;lsView("home");const L=lvl(),auto=lvlAuto(),s=stats(),B=baseSecs();
+ $("#lsLevel").innerHTML=LVLS.map(([id,n])=>`<option value="${id}"${id===L?" selected":""}>${n}${id===auto?" (suggested)":""}</option>`).join("");
+ $("#lsLevelNote").textContent=GAMES.length?`Suggested from your rating${s.rating?` (${s.rating}${P.source==="li"?" on Lichess":""})`:""}${s.nAn>=10&&s.errs!=null?` and accuracy (${s.errs.toFixed(1)} mistakes a game)`:""}. Change it any time.`:"Suggested because there are no games yet.";
+ const an=GAMES.filter(g=>g.an),pend=an.slice(-MT_GAMES).filter(g=>!(g.mt&&g.mt.v===MT_V)).length,pr=lsPriority().slice(0,5),W=wkProfile();
+ // work on these first; beginners get First steps at the top until it's done
+ const fsOpen=["new","beg"].includes(L)&&TRACKS[0].courses[0].chapters.some(ch=>!chDone(ch)),fsL=fsOpen?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null;
+ const items=(fsL?[{k:"fs",name:"First steps",to:fsL.id,reason:"The basics every game is built on: moves, checkmate and keeping pieces safe."}]:[]).concat(pr).slice(0,5);
+ $("#lsPrio").innerHTML=items.length?items.map((x,i)=>`<li class="prio-item${i===0?" top":""}"><span class="prio-n">${i+1}</span><div class="prio-txt"><b>${esc(x.name)}</b><span class="small">${esc(x.reason)}</span></div>${prioBtn(x,i)}</li>`).join("")
+  :`<li class="empty">${an.length?pend?"Working out your weak spots from your analysed games…":"Not enough mistakes to rank yet. Nicely played.":"Analyse a few games and your personal list appears here."}</li>`;
+ // profile by theme (longer bar = more points lost a game) and strengths
+ const rows=Object.entries(W.T).map(([k,x])=>({k,n:MOT[k].n,c:x.d/W.n,cnt:x.n})).sort((a,b)=>b.c-a.c),mx=Math.max(.1,...rows.map(r=>r.c)),bar=(n,c,cnt,col,m)=>`<li><span class="bar-l">${esc(n)}</span><span class="bar-t"><b style="width:${Math.max(3,c/(m||mx)*100)}%;background:${col}"></b></span><span class="bar-v num" title="${cnt} mistakes">${c.toFixed(1)}</span></li>`;
+ const good=[];if(W.n>=8){[["hang","No hanging pieces"],["fork_missed","No missed forks"],["mate_missed","No missed mates"],["fork_allowed","No forks allowed"]].forEach(([k,t])=>{if(!W.T[k])good.push(`${t} in your last ${W.n} games`)});
+  const ph=Object.entries(W.PH).filter(([,x])=>x.n).sort((a,b)=>a[1].d-b[1].d)[0];if(ph)good.push(`Your strongest phase: the ${ph[0]}`)}
+ if(s.time!=null&&s.time>=B*.5)good.push("You use your clock well");
+ $("#lsProfile").innerHTML=W.n?`<p class="small">From ${W.n} analysed game${W.n>1?"s":""}${pend?` (${pend} more being checked)`:""}. Points lost a game per theme: longer is weaker.</p><ul class="bars">${rows.map(r=>bar(r.n,r.c,r.cnt,r.k==="positional"?"var(--border-strong)":"var(--q-blunder)")).join("")}</ul>`+(good.length?`<h3 class="h-small">Strengths</h3><ul class="good">${good.map(g=>`<li>${ic("circle-check","sm")}${esc(g)}</li>`).join("")}</ul>`:"")
+  :`<div class="empty">${an.length?"Checking your mistakes with Stockfish…":"Your profile appears after a few analysed games."}</div>`;
+ const pm=Math.max(.1,...Object.values(W.PH).map(x=>x.d/Math.max(1,W.n)));
+ $("#lsPhase").innerHTML=W.n?`<ul class="bars">${Object.entries(W.PH).map(([k,x])=>bar(PHN[k],x.d/W.n,x.n,"var(--q-mistake)",pm)).join("")}</ul>`+
+  (Object.keys(W.ET).length?`<h3 class="h-small">Endings</h3><ul class="good">${Object.entries(W.ET).sort((a,b)=>b[1].d-a[1].d).map(([k,x])=>`<li>${ic("flag","sm")}${esc(ENDT[k])}: ${x.n} mistake${x.n>1?"s":""}</li>`).join("")}</ul>`:"")
+  :'<div class="empty">Phases appear with your profile.</div>';
+ // tracks > courses > chapters > lessons
+ $("#lsTracks").innerHTML=TRACKS.map(t=>`<div class="track"><h2>${ic(t.icon)}${esc(t.name)}</h2>${t.courses.length?t.courses.map(co=>courseHTML(co,L)).join(""):`<p class="small">${esc(t.soon)}</p>${t.id==="openings"?`<button type="button" data-op="">${ic("book-open","sm")}Open the opening trainer</button>`:""}`}</div>`).join("");
+ if(pend)TG.run()}
+function courseHTML(co,L){const rec=co.lv.includes(L);
+ return `<div class="course${rec?" rec":""}"><div class="course-h"><b>${esc(co.name)}</b><span class="chip${rec?" xp":""}">${rec?"Recommended":co.lv.map(lvlName).join(" · ")}</span></div><p class="small">${esc(co.desc)}</p>`+co.chapters.map(ch=>{
+  const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch);
+  return `<div class="chapter"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.name)}</span><span class="small num">${d}/${ch.lessons.length} lessons</span></div><div class="meter"><b style="width:${d/ch.lessons.length*100}%;background:var(--primary)"></b></div>`+
+   `<ul class="ls-list">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<li><button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}</button><span class="small num">${p.s||0}/${l.steps.length}</span>${PAGES[l.id]?`<button class="link small" type="button" data-pg="${l.id}">Learn more</button>`:""}</li>`}).join("")}</ul>`+
+   `<div class="row">${done?'<span class="chip gold">'+ic("award","sm")+"Completed</span>":`<button class="${rec?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>`}${ch.test&&!c.p&&!done&&!started?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Take the ${ch.test.length}-puzzle check</button>`:""}${c.p&&!done?'<span class="chip gold">Check passed</span>':""}</div></div>`}).join("")+"</div>"}
+/* one handler for every lessons button */
+$("#v-lessons").addEventListener("click",e=>{const b=e.target.closest("button[data-ls],button[data-pg],button[data-ch],button[data-test],button[data-op]");if(!b)return;
+ if(b.dataset.ls)openLesson(b.dataset.ls);else if(b.dataset.pg)openPage(b.dataset.pg);else if(b.dataset.ch)openLesson(nextLesson(CIDX[b.dataset.ch].ch).id);else if(b.dataset.test)openTest(b.dataset.test);
+ else if(b.dataset.op!=null){if(b.dataset.op){OPSEL=b.dataset.op;LS.set(uk("opsel"),OPSEL);OD=null}location.hash="openings"}});
+$("#lsLevel").onchange=()=>{LSP.lvl={v:$("#lsLevel").value};saveLSP("lvl");renderLessons()};
+$("#lBack").onclick=$("#pgBack").onclick=()=>renderLessons();
+/* player: a lesson (steps in order, progress saved) or a placement check (first try counts, pass = chapter complete) */
+function openLesson(id,i){const x=LIDX[id];if(!x)return;const p=LSP["l:"+id]||{};LP={kind:"lesson",x,steps:x.l.steps,i:i!=null?i:p.d?0:Math.min(p.s||0,x.l.steps.length-1),fails:0};lsView("play");lsStep()}
+function openTest(id){const x=CIDX[id];if(!x||!x.ch.test)return;LP={kind:"test",x,steps:x.ch.test,i:0,fails:0};lsView("play");lsStep()}
+function lsStep(){const L=LP,st=L.steps[L.i],c=new Chess(st.f);L.wait=true;LW.clear();LB.flip=c.turn()==="b";LB.set(st.f);
+ $("#lCrumb").textContent=`${L.x.t.name} › ${L.x.co.name} › ${L.x.ch.name}`;$("#lTitle").textContent=L.kind==="test"?"Placement check":L.x.l.name;
+ $("#lDots").innerHTML=L.steps.map((s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">${L.kind==="test"?"Puzzle":"Step"} ${L.i+1} of ${L.steps.length}</span>`;
+ $("#lPrompt").className="verdict v-move";$("#lPrompt").innerHTML=`${ic("target")}<b>${c.turn()==="w"?"White":"Black"} to move.</b> ${esc(st.n)}`;$("#lFeedback").innerHTML="";
+ $("#lPage").hidden=!(L.kind==="lesson"&&PAGES[L.x.l.id]);$("#lSkip").hidden=L.kind!=="test"}
+async function lsMove(from,to){const L=LP;if(!L||!L.wait)return;const st=L.steps[L.i],fen=st.f,c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;L.wait=false;
+ const u=mv.from+mv.to,g=st.g||"best";LB.set(c.fen(),{last:{from,to}});let ok=false,also=false;
+ if(g==="legal")ok=true;else if(g==="check")ok=c.in_check();else if(g==="mate")ok=c.in_checkmate();
+ else{ok=[...(st.s||[]),...(st.alt||[])].some(s=>s.slice(0,4)===u);
+  if(!ok&&!st.x&&st.s){$("#lFeedback").innerHTML='<div class="skel-wrap" role="status"><span class="sr-only">Checking your move…</span><span class="skel" style="width:55%"></span></div>';
+   try{const sd=fen.split(" ")[1]==="w"?1:-1,t=new Chess(fen);t.move({from:st.s[0].slice(0,2),to:st.s[0].slice(2,4),promotion:st.s[0][4]||"q"});const a=await wEval(t.fen()),b=await wEval(c.fen());if(LP!==L)return;
+    if(wp(sd*a.cp)-wp(sd*b.cp)<OP_TOL){ok=true;also=true}}catch(e){}}}
+ if(LP!==L)return;Snd.play(ok?"correct":"wrong");if(ok)lsRight(L,mv,also);else lsWrong(L,fen,c,mv,u)}
+function lsChapterDone(ch){const k="c:"+ch.id,c=LSP[k]||(LSP[k]={});if(c.d||!chDone(ch))return;c.d=Date.now();saveLSP(k);gAdd({lc:1});gToast(`Chapter complete: ${ch.name}! +${GX.lc} XP`)}
+function lsRight(L,mv,also){const st=L.steps[L.i],last=L.i===L.steps.length-1;let nx="";
+ if(L.kind==="lesson"){const k="l:"+L.x.l.id,p=LSP[k]||(LSP[k]={s:0}),fresh=L.i>=(p.s||0);if(fresh)p.s=L.i+1;if(last&&!p.d)p.d=Date.now();saveLSP(k);if(fresh)gAdd({ls:1});if(last)lsChapterDone(L.x.ch);
+  const nl=L.x.ch.lessons[L.x.ch.lessons.indexOf(L.x.l)+1];nx=!last?`<button class="pri" type="button" id="lNext">Next step${ic("arrow-right","sm")}</button>`:nl?`<button class="pri" type="button" id="lNext">Next lesson: ${esc(nl.name)}${ic("arrow-right","sm")}</button>`:`<button class="pri" type="button" id="lNext">Back to lessons</button>`;
+  $("#lFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}<b>${esc(mv.san)}.</b> ${also?"That works just as well. ":""}${esc(st.ok||"Correct.")}${last?` <b>Lesson complete.</b>`:""}</div><div class="v-actions">${nx}<button class="link" type="button" id="lWhyBtn">Why?</button></div>`;
+  $("#lNext").onclick=()=>{if(!last){L.i++;lsStep()}else if(nl)openLesson(nl.id,0);else renderLessons()}}
+ else lsTestNext(L,true,mv);
+ const w=$("#lWhyBtn");if(w)w.onclick=()=>{w.remove();LW.show({fen:st.f,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:()=>LB.set(new Chess(st.f).fen())})}}
+function lsWrong(L,fen,c,mv,u){const st=L.steps[L.i],back=()=>LB.set(c.fen(),{last:{from:mv.from,to:mv.to}});
+ if(L.kind==="test"){L.fails++;return lsTestNext(L,false,mv)}
+ $("#lFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}<b>${esc(mv.san)}</b> isn't it. ${st.g==="mate"?"That doesn't give checkmate.":st.g==="check"?"That isn't check.":"Look again."}</div><div class="v-actions"><button type="button" id="lRetry">${ic("rotate-ccw","sm")}Try again</button><button class="ghost" type="button" id="lShow">${ic("eye","sm")}Show me</button></div>`;
+ $("#lRetry").onclick=()=>lsStep();$("#lShow").onclick=async()=>{let b=st.s&&st.s[0];if(!b)try{b=(await wEval(fen)).best}catch(e){}if(b&&LP===L)LB.set(fen,{arrows:[{from:b.slice(0,2),to:b.slice(2,4),c:"green"}]})};
+ if(st.g!=="legal"&&st.g!=="check")LW.show({fen,played:u,best:st.s&&st.s[0],restore:back})}
+function lsTestNext(L,ok,mv){const last=L.i===L.steps.length-1,ch=L.x.ch;let html=`<div class="verdict ${ok?"v-ok":"v-no"}">${ic(ok?"circle-check":"circle-x")}<b>${esc(mv.san)}</b> ${ok?"is right.":"isn't it."}`;
+ if(!last){$("#lFeedback").innerHTML=html+`</div><div class="v-actions"><button class="pri" type="button" id="lNext">Next puzzle${ic("arrow-right","sm")}</button></div>`;$("#lNext").onclick=()=>{L.i++;lsStep()};return}
+ if(!L.fails){const k="c:"+ch.id,c=LSP[k]||(LSP[k]={});c.p=Date.now();saveLSP(k);ch.lessons.forEach(l=>{const q=LSP["l:"+l.id]||(LSP["l:"+l.id]={s:0});if(!q.d){q.s=l.steps.length;q.d=Date.now();saveLSP("l:"+l.id)}});lsChapterDone(ch);
+  $("#lFeedback").innerHTML=html+` <b>You passed the check:</b> this chapter is marked complete, so you can skip ahead.</div><div class="v-actions"><button class="pri" type="button" id="lNext">Back to lessons</button></div>`;$("#lNext").onclick=()=>renderLessons()}
+ else{const c=LSP["c:"+ch.id]||(LSP["c:"+ch.id]={});c.t=Date.now();saveLSP("c:"+ch.id);
+  $("#lFeedback").innerHTML=html+` You got ${L.steps.length-L.fails} of ${L.steps.length}. Work through the lessons first; they're short.</div><div class="v-actions"><button class="pri" type="button" id="lNext">Start the first lesson${ic("arrow-right","sm")}</button></div>`;$("#lNext").onclick=()=>openLesson(ch.lessons[0].id,0)}}
+$("#lPage").onclick=()=>{if(LP&&LP.kind==="lesson")openPage(LP.x.l.id)};$("#lSkip").onclick=()=>{if(LP)openLesson(LP.x.ch.lessons[0].id,0)};$("#lRestart").onclick=()=>{if(LP)lsStep()};
+/* teaching page: text and diagrams, then practice */
+function openPage(id){const x=LIDX[id],pg=PAGES[id];if(!x||!pg)return;LP=null;lsView("page");$("#pgCrumb").textContent=`${x.t.name} › ${x.co.name} › ${x.ch.name}`;$("#pgTitle").textContent=x.l.name;
+ PGB.forEach(b=>{const i=BOARDS.indexOf(b);if(i>=0)BOARDS.splice(i,1)});PGB=[];
+ $("#pgBody").innerHTML=pg.map((b,k)=>b.p?`<p>${esc(b.p)}</p>`:`<figure class="pg-fig"><div class="boardwrap" id="pgb${k}"></div><figcaption class="small">${esc(b.c||"")}</figcaption></figure>`).join("");
+ pg.forEach((b,k)=>{if(!b.d)return;const B=new Board($("#pgb"+k),{label:b.c||"Diagram"});PGB.push(B);B.flip=b.d.split(" ")[1]==="b";B.set(b.d,{arrows:(b.a||[]).map(([f,t,c])=>({from:f,to:t,c}))})});
+ $("#pgPractice").onclick=()=>openLesson(id,0)}
+
 /* ---------- GAMIFICATION (rule-based, from local data; synced as one row per account) ----------
    GS = uk("game") = {days: {"YYYY-MM-DD": {pz, p1, op, ol, rv, rvl, g, n, e}}, badges: {id: ms}, rec: {bw, ls, bb}, set: {int, hide, at}, rev: {gameId: 1}, at}
    days counts (local date): pz puzzles solved (first solve only), p1 of them on the first try, op opening positions right on review,
    ol positions that became learned, rv games reviewed (rvl losses), g daily goal met, n/e trained late at night / early.
    XP, streak, freezes, level, weekly challenge and best week are derived from days, so merging devices = per-field max/union. XP is for training only. */
-const GX={pz:10,p1:5,op:3,ol:15,rv:10,g:25},GU={pz:1,op:1,rv:3},GOAL={light:5,normal:10,serious:20},WK_BONUS=100,FZ_MAX=2;
+const GX={pz:10,p1:5,op:3,ol:15,rv:10,ls:5,lc:50,g:25},GU={pz:1,op:1,rv:3,ls:1},GOAL={light:5,normal:10,serious:20},WK_BONUS=100,FZ_MAX=2;
 const LEVELS=[["Pawn",0],["Knight",500],["Bishop",1500],["Rook",3500],["Queen",7000],["King",12000]],ROMAN=["I","II","III","IV","V","VI","VII","VIII","IX","X"];
 const CH=[{t:"Solve 30 puzzles",n:30,k:"pz"},{t:"Get 40 opening positions right",n:40,k:"op"},{t:"Review 3 of your losses",n:3,k:"rvl"},{t:"Meet your daily goal on 5 days",n:5,k:"g"},{t:"Solve 10 puzzles on the first try",n:10,k:"p1"}];
 const dkey=t=>{const d=new Date(t==null?Date.now():t);return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
@@ -527,10 +760,11 @@ const BADGES=[["pz1","First puzzle","Solve a puzzle",c=>c.pz>=1],["pz25","Puzzle
  ["imp_clk","Clock manager","Use at least half your clock per game after starting below that",c=>c.clk],
  ["imp_op","Opening fixed","Score 10+ points more in an opening since you started practising it",c=>c.opUp>=10],
  ["fun_night","Night owl","Train after 11 pm",c=>c.n],["fun_early","Early bird","Train before 7 am",c=>c.e],["fun_wknd","Weekend warrior","Meet your goal on a Saturday and the Sunday after",c=>c.wknd],
+ ["ls1","First lesson","Complete a lesson step",c=>c.ls>=1],["lc1","Chapter done","Complete a lesson chapter",c=>c.lc>=1],["lc5","Scholar","Complete 5 lesson chapters",c=>c.lc>=5],
  ["fun_p1","Sharpshooter","Solve 10 puzzles on the first try in one day",c=>c.p1day>=10],["fun_wk","Challenge accepted","Complete a weekly challenge",c=>c.wkDone]];
 const BICON={pz1:"puzzle",pz25:"puzzle",pz100:"puzzle",pz500:"crown",ol10:"book-open",ol50:"book-open",ol200:"graduation-cap",s3:"flame",s7:"flame",s30:"flame",s100:"flame",rv10:"search",rv50:"search",
- imp_bl:"shield-check",imp_clk:"timer",imp_op:"trending-up",fun_night:"moon",fun_early:"sunrise",fun_wknd:"calendar-check",fun_p1:"crosshair",fun_wk:"trophy"};
-function gCtx(){const c={pz:0,ol:0,rv:0,p1day:0,n:0,e:0,wknd:0},D=GS.days;for(const k in D){const d=D[k];c.pz+=d.pz||0;c.ol+=d.ol||0;c.rv+=d.rv||0;c.p1day=Math.max(c.p1day,d.p1||0);if(d.n)c.n=1;if(d.e)c.e=1;
+ ls1:"graduation-cap",lc1:"graduation-cap",lc5:"graduation-cap",imp_bl:"shield-check",imp_clk:"timer",imp_op:"trending-up",fun_night:"moon",fun_early:"sunrise",fun_wknd:"calendar-check",fun_p1:"crosshair",fun_wk:"trophy"};
+function gCtx(){const c={pz:0,ol:0,rv:0,ls:0,lc:0,p1day:0,n:0,e:0,wknd:0},D=GS.days;for(const k in D){const d=D[k];c.pz+=d.pz||0;c.ls+=d.ls||0;c.lc+=d.lc||0;c.ol+=d.ol||0;c.rv+=d.rv||0;c.p1day=Math.max(c.p1day,d.p1||0);if(d.n)c.n=1;if(d.e)c.e=1;
   if(d.g&&new Date(k+"T12:00:00Z").getUTCDay()===6&&(D[dAdd(k,1)]||{}).g)c.wknd=1}
  const st=gStreak(),s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs();c.best=st.best;c.cur=st.cur;c.wkDone=gWeeks().some(w=>wkSum(w).done);
  c.blDown=b&&b.errs>0&&s.errs!=null&&s.nAn>=b.nAn+10?(b.errs-s.errs)/b.errs:0;c.clk=!!(b&&b.time!=null&&s.time!=null&&b.time<B*.5&&s.time>=B*.5);
@@ -573,13 +807,15 @@ function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fa
  const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
  const weak=Object.entries(m).filter(([k,a])=>a.length>=5&&!ost[k]&&score(a)<45).sort((a,b)=>score(a[1])-score(b[1]))[0];
  if(weak)C.push({imp:18,t:`Start practising the ${weak[0].slice(2)} as ${weak[0][0]==="w"?"White":"Black"}`,p:`You score ${Math.round(score(weak[1]))}% in it over ${weak[1].length} games this year.`,xp:5*GX.op,i:"book-open",cta:"Start",act:()=>{OPSEL=weak[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
+ const lp=lsPriority().find(x=>lsTarget(x.to)&&!lsDone(x.to)),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:"The basics: moves, checkmate and keeping pieces safe."}:lp;
+ if(lx){const L=LIDX[lx.to],left=L.l.steps.length-((LSP["l:"+lx.to]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:`Lesson: ${L.l.name}`,p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:"Start",act:()=>{location.hash="lessons";openLesson(lx.to)}})}
  // fallbacks so there are always a few things to do
  const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:`Review your game vs ${last.opp}`,p:"Step through it: wins have lessons too.",xp:GX.rv,i:"scan-search",cta:"Review",act:()=>{openGame(last,0);location.hash="review"}});
  const top=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length)[0];
  if(C.length<3&&top&&!C.some(c=>/practising/.test(c.t)))C.push({imp:6,t:`Drill your ${top[0].slice(2)} as ${top[0][0]==="w"?"White":"Black"}`,p:`Your most played opening: ${top[1].length} games this year.`,xp:5*GX.op,i:"book-open",cta:"Drill",act:()=>{OPSEL=top[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
  return C.sort((a,b)=>b.imp-a.imp).slice(0,5)}
 function ringSVG(d,goal){const R=42,L=2*Math.PI*R;let off=0,s=`<svg viewBox="0 0 100 100" class="ring" role="img" aria-label="Daily goal ${Math.min(dayU(d),goal)} of ${goal}"><circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border)" stroke-width="10"/>`;
- for(const [k,col] of [["pz","var(--q-blunder)"],["op","var(--q-best)"],["rv","var(--secondary)"]]){const f=Math.min((d[k]||0)*GU[k],Math.max(0,goal-off))/goal;if(f<=0)continue;
+ for(const [k,col] of [["pz","var(--q-blunder)"],["op","var(--q-best)"],["rv","var(--secondary)"],["ls","var(--xp)"]]){const f=Math.min((d[k]||0)*GU[k],Math.max(0,goal-off))/goal;if(f<=0)continue;
   s+=`<circle cx="50" cy="50" r="${R}" fill="none" stroke="${col}" stroke-width="10" stroke-dasharray="${f*L} ${L}" stroke-dashoffset="${-off/goal*L}" transform="rotate(-90 50 50)"/>`;off+=f*goal}
  return s+`<text x="50" y="47" text-anchor="middle" class="ring-n">${Math.min(dayU(d),goal)}/${goal}</text><text x="50" y="63" text-anchor="middle" class="ring-l">${d.g?"goal met":"today"}</text></svg>`}
 function renderHome(){if(!P||!GS)return;const tok=++HOMEtok,hide=GS.set.hide,today=GS.days[dkey()]||{},goal=gGoal(),st=gStreak(),xp=gXP(),lv=gLevel(xp),w=wkSum(wkOf(dkey()));
@@ -592,7 +828,7 @@ function renderHome(){if(!P||!GS)return;const tok=++HOMEtok,hide=GS.set.hide,tod
  // gamification
  $("#hGame").hidden=hide;$("#hBadgesSec").hidden=hide;
  if(!hide){$("#hRing").innerHTML=ringSVG(today,goal);
-  $("#hRingTxt").innerHTML=`<h2>Daily goal</h2><ul class="goal-key"><li><span class="k" style="background:var(--q-blunder)"></span>Puzzles <b>${today.pz||0}</b></li><li><span class="k" style="background:var(--q-best)"></span>Opening positions <b>${today.op||0}</b></li><li><span class="k" style="background:var(--secondary)"></span>Games reviewed <b>${today.rv||0}</b></li></ul><span class="small">A reviewed game counts 3.</span>`;
+  $("#hRingTxt").innerHTML=`<h2>Daily goal</h2><ul class="goal-key"><li><span class="k" style="background:var(--q-blunder)"></span>Puzzles <b>${today.pz||0}</b></li><li><span class="k" style="background:var(--q-best)"></span>Opening positions <b>${today.op||0}</b></li><li><span class="k" style="background:var(--secondary)"></span>Games reviewed <b>${today.rv||0}</b></li><li><span class="k" style="background:var(--xp)"></span>Lesson steps <b>${today.ls||0}</b></li></ul><span class="small">A reviewed game counts 3.</span>`;
   $("#hStreak").innerHTML=`<span class="streak-ic${st.cur?" on":""}" aria-hidden="true">${ic("flame","lg")}</span><div><b class="num">${st.cur}</b> <span class="streak-l">day streak</span><span class="small">${st.fz?`${ic("snowflake","sm")} ${st.fz} freeze${st.fz>1?"s":""} ready`:"A freeze every 7 days"} · best ${Math.max(st.best,GS.rec.ls||0)}</span></div>`;
   $("#hLevel").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("shield-check")}<b>${esc(lv.name)}</b></span><span class="small num">${xp} XP · ${lv.to-xp} to ${esc(lv.next)}</span></div><div class="meter"><b style="width:${Math.round((xp-lv.from)/(lv.to-lv.from)*100)}%;background:var(--xp)"></b></div>`;
   $("#hChallenge").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("trophy")}<b>${esc(w.ch.t)}</b></span><span class="small num">${w.chv}/${w.ch.n} · +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(w.chv/w.ch.n*100)}%;background:var(--gold)"></b></div>`;
@@ -745,7 +981,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
  onAuth(ses){const u=ses&&ses.user;
   if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};Fr.prof=null;acctUI();this.run();Fr.onSignIn()}
   else if(!u&&this.me){this.me=null;Fr.prof=null;acctUI();if(route.cur==="friends")Fr.render()}},
- /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}, op:{"acct|posKey":1}, ops:{"acct|w|<family>":1}, gm:{acct:1}} */
+ /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}, op:{"acct|posKey":1}, ops:{"acct|w|<family>":1}, gm:{acct:1}, ls:{"acct|item":1}} */
  mark(kind,key){if(!SB_ON)return;const o=LS.get("sb.out",{});(o[kind]=o[kind]||{})[key]=1;LS.set("sb.out",o);if(this.me){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),2000)}},
  async run(){if(!this.me||this.busy)return;this.busy=true;this.err="";acctUI();
   try{await this.pull();const k="sb.init."+this.me.id;if(!LS.get(k,0)){this.markAll();LS.set(k,1)}this.busy=false;await this.flush()}
@@ -755,6 +991,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.base\.(\w+)$/);if(m)this.mark("base",m[1]+"|"+m[2]);
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.openings$/);if(m)Object.keys(LS.get(m[1]+".openings",{})).forEach(p=>this.mark("op",m[1]+"|"+p));
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.game$/);if(m)this.mark("gm",m[1]);
+   m=k.match(/^rc\.((?:cc|li):[^.]+)\.lessons$/);if(m)Object.keys(LS.get(m[1]+".lessons",{})).forEach(it=>this.mark("ls",m[1]+"|"+it));
    m=k.match(/^rc\.((?:cc|li):[^.]+)\.opstart$/);if(m)Object.keys(LS.get(m[1]+".opstart",{})).forEach(o=>this.mark("ops",m[1]+"|"+o))}
   if(P)this.mark("la",acct()+"|"+P.tc)},
  async flush(){if(!this.me)return;if(this.busy){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),5000);return}const o=LS.get("sb.out",{});if(!Object.keys(o).some(k=>Object.keys(o[k]).length))return;
@@ -767,10 +1004,11 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
    linked_accounts:keys("la").map(sp).filter(([a,tc])=>ok(a)&&TCS.includes(tc)).map(([a,tc])=>({user_id:uid,account:a,tc})),
    opening_progress:keys("op").map(sp).filter(([a])=>ok(a)).map(([a,pos])=>({a,pos,x:LS.get(a+".openings",{})[pos]})).filter(r=>r.x).map(({a,pos,x})=>({user_id:uid,account:a,pos,streak:x.s||0,due:x.due?new Date(x.due).toISOString():null,correct:x.ok||0,misses:x.miss||0,pinned:x.pin||null,changed_at:x.at||0})),
    gamification:keys("gm").filter(ok).map(a=>({a,g:LS.get(a+".game",null)})).filter(r=>r.g).map(({a,g})=>({user_id:uid,account:a,days:g.days||{},badges:g.badges||{},records:g.rec||{},settings:g.set||{},reviewed:g.rev||{},changed_at:g.at||0})),
+   lesson_progress:keys("ls").map(sp).filter(([a])=>ok(a)).map(([a,it])=>({a,it,x:LS.get(a+".lessons",{})[it]})).filter(r=>r.x).map(({a,it,x})=>({user_id:uid,account:a,item:it,steps:Math.min(200,x.s||0),done_at:x.d?new Date(x.d).toISOString():null,passed_at:x.p?new Date(x.p).toISOString():null,val:x.v||null,changed_at:x.at||0})),
    opening_practice:keys("ops").map(sp).filter(([a])=>ok(a)).map(([a,o])=>({a,o,t:LS.get(a+".opstart",{})[o]})).filter(r=>r.t).map(({a,o,t})=>({user_id:uid,account:a,opening:o,started_at:new Date(t).toISOString()}))};
-  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc",opening_progress:"user_id,account,pos",opening_practice:"user_id,account,opening",gamification:"user_id,account"};
+  const pk={analyses:"user_id,game_id",puzzle_progress:"user_id,account,puzzle_id",baselines:"user_id,account,tc",linked_accounts:"user_id,account,tc",opening_progress:"user_id,account,pos",opening_practice:"user_id,account,opening",gamification:"user_id,account",lesson_progress:"user_id,account,item"};
   // table by table: a failing table keeps only its own changes queued
-  const kind={analyses:"an",puzzle_progress:"pz",baselines:"base",linked_accounts:"la",opening_progress:"op",opening_practice:"ops",gamification:"gm"},bad=[];
+  const kind={analyses:"an",puzzle_progress:"pz",baselines:"base",linked_accounts:"la",opening_progress:"op",opening_practice:"ops",gamification:"gm",lesson_progress:"ls"},bad=[];
   for(const t in rows){try{for(let i=0;i<rows[t].length;i+=200){const {error}=await this.sb.from(t).upsert(rows[t].slice(i,i+200),{onConflict:pk[t]});if(error)throw error}}catch(e){bad.push(kind[t])}}
   if(bad.length){const n=LS.get("sb.out",{});for(const k of bad)if(o[k])n[k]={...o[k],...(n[k]||{})};LS.set("sb.out",n);this.err="Couldn't upload some changes. Retrying in a minute.";clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),60e3)}else this.err="";
   this.busy=false;acctUI()},
@@ -805,11 +1043,17 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   for(const r of gm){const l=LS.get(r.account+".game",null),rem={days:r.days,badges:r.badges,rec:r.records,set:r.settings,rev:r.reviewed,at:+r.changed_at||0},m=gMerge(l||gNew(),rem);
    LS.set(r.account+".game",m);if(gk(m)!==gk(gMerge(gNew(),rem)))this.mark("gm",r.account)}
   hi(gm,"gm");if(P&&gm.length){gLoad();gCheck()}
+  // lessons: steps max, completed/passed earliest, level newest
+  const lr=await this.rows("lesson_progress","account,item,steps,done_at,passed_at,val,changed_at",w.ls),lm={},mn=(a,b)=>a&&b?Math.min(a,b):a||b;
+  for(const r of lr){const m=lm[r.account]||(lm[r.account]=LS.get(r.account+".lessons",{})),l=m[r.item]||{},at=+r.changed_at||0,rd=r.done_at?Date.parse(r.done_at):0,rp=r.passed_at?Date.parse(r.passed_at):0;
+   const n={s:Math.max(l.s||0,r.steps||0),at:Math.max(l.at||0,at)};const d=mn(l.d,rd),p=mn(l.p,rp);if(d)n.d=d;if(p)n.p=p;if(l.t)n.t=l.t;const v=(l.at||0)>=at?l.v||r.val:r.val||l.v;if(v)n.v=v;
+   if((l.s||0)>(r.steps||0)||(l.d&&!rd)||(l.p&&!rp)||(l.v&&(l.at||0)>at))this.mark("ls",r.account+"|"+r.item);m[r.item]=n}
+  for(const a in lm)LS.set(a+".lessons",lm[a]);hi(lr,"ls");if(P&&lr.length)LSP=LS.get(uk("lessons"),{});
   // linked accounts: on a device with no profile yet, open the most recently used one
   const la=await this.rows("linked_accounts","account,tc",w.la);hi(la,"la");LS.set(wk,w);this.pulled=Date.now();
   if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats();if(route.cur==="home")renderHome();Fr.soon()}
   else if(la.length){const r=la[la.length-1],i=r.account.indexOf(":");P={source:r.account.slice(0,i),user:r.account.slice(i+1),tc:r.tc};LS.set("profile",P);enter(false)}},
- async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","opening_progress","opening_practice","gamification","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
+ async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","opening_progress","opening_practice","gamification","lesson_progress","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
   const f=await this.sb.rpc("my_friends");if(f.error)throw f.error;out.friends=f.data;return out},
  async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;Fr.prof=null;LS.set("sb.out",{});acctUI();if(route.cur==="friends")Fr.render()},
  async deleteAccount(){const {error}=await this.sb.rpc("delete_my_account");if(error)throw error;const id=this.me.id;await this.signOut();try{localStorage.removeItem("rc.sb.init."+id);localStorage.removeItem("rc.sb.pull."+id)}catch(e){}}};
@@ -858,7 +1102,7 @@ const Fr={prof:null,_t:null,
   last.forEach(g=>errorsOf(g).forEach(e=>{if(e.mine){if(e.kind==="blunder")bl++;else if(e.kind==="mistake")mi++}}));
   const s=stats(),b=LS.get(uk("base."+P.tc),null);
   return {user_id:Sync.me.id,account:acct(),tc:P.tc,games_analysed:an.length,blunders_per_game:n?bl/n:null,mistakes_per_game:n?mi/n:null,median_time_used:r(s.time),
-   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,openings_learned:opLearned(),...gRow(),rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
+   puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,openings_learned:opLearned(),lessons_completed:lsCount(),...gRow(),rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
  async publish(){if(!Sync.me||!P||!GAMES.length||!ACCT_RE.test(acct()))return;
   try{const pr=await this.profile();if(!pr.share)return;const {error}=await Sync.sb.from("leaderboard_stats").upsert(this.row(),{onConflict:"user_id,account,tc"});if(error)throw error;
    if(route.cur==="friends")await this.board()}catch(e){this.soon(120000)}},
@@ -871,8 +1115,8 @@ const Fr={prof:null,_t:null,
   $("#fBody").innerHTML=rows.length?rows.map(r=>{const d=r.rating_now!=null&&r.rating_base!=null?r.rating_now-r.rating_base:null;
    return `<tr class="${r.is_me?"me":""}"><td>${esc(r.display_name||"(no name)")}${r.is_me?" (you)":""}<span class="src">${esc((SRC[r.source]||{}).name||"")}</span></td>`+
     `<td class="r">${few(r)?"–":num(r.blunders_per_game,2)}</td><td class="r">${few(r)?"–":num(r.mistakes_per_game,2)}</td><td class="r">${mmss(r.median_time_used)}</td>`+
-    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.openings_learned||0}</td><td class="r">${r.xp_week===wkOf(dkey())?r.weekly_xp||0:0}</td><td class="r">${r.streak||0}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
-   :`<tr><td colspan="10" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
+    `<td class="r">${r.puzzles_solved}</td><td class="r">${d==null?"–":(d>0?"+":d<0?"−":"±")+Math.abs(d)}${r.base_date?` <span class="small">since ${esc(r.base_date)}</span>`:""}</td><td class="r">${r.openings_learned||0}</td><td class="r">${r.lessons_completed||0}</td><td class="r">${r.xp_week===wkOf(dkey())?r.weekly_xp||0:0}</td><td class="r">${r.streak||0}</td><td class="r">${r.games_analysed}</td></tr>`}).join("")
+   :`<tr><td colspan="11" class="small">No ${esc(TCL[P.tc])} stats shared yet. Switch on sharing below and send your invite link to friends.</td></tr>`},
  async friends(){const {data,error}=await Sync.sb.rpc("my_friends");if(error)throw error;const L=$("#fList");
   L.innerHTML=(data||[]).length?data.map(f=>`<li><span>${esc(f.display_name||"(no name yet)")}${f.sharing?"":'<span class="small">not sharing</span>'}</span><button class="link" type="button" data-rm="${esc(f.friend_id)}">Remove</button></li>`).join("")
    :'<li class="small">No friends yet. Send them your invite link.</li>';
@@ -900,20 +1144,20 @@ $("#setBtn").onclick=setOpen;$("#setClose").onclick=()=>$("#settings").close();
 applyUI();
 
 /* ---------- routing ---------- */
-function route(){if(!P){show1("start");return}const t=["home","review","trainer","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"home";route.cur=t;show1(t);
+function route(){if(!P){show1("start");return}const t=["home","review","trainer","lessons","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"home";route.cur=t;show1(t);
  document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.t===t)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome()}
+ if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
 function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);$("#hdr").hidden=t==="start";document.body.classList.toggle("has-side",t!=="start");if(t==="start")demoStart();else demoStop()}
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
   first();analyseRecent(fresh?20:Math.max(n,0)?Math.min(n,20):0)}
  catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=`Couldn't load your games from ${SRC[P.source].name}. Try again in a minute.`;$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
- if(!fresh&&!AQ)analyseRecent(5)}
+ if(!fresh&&!AQ)analyseRecent(5);if(!AQ)TG.run()}
 async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
 (async()=>{await DB.open();ALL=await DB.all();(await DB.pend()).forEach(x=>PEND.set(x.id,x.an));await LiAuth.callback();Sync.start();boot()})();
 }

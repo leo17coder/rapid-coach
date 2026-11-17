@@ -8,7 +8,7 @@ Project: `https://ednyucirnrdcsveqlokb.supabase.co`. Make sure it's in an EU reg
 
 SQL Editor → New query → paste all of `migrations/001_sync.sql` → Run. It's safe to run again.
 
-Then do the same with `migrations/002_friends.sql` (friends and the leaderboard), then `migrations/003_openings.sql` (opening trainer progress, and "openings learned" on the leaderboard), then `migrations/004_gamification.sql` (daily goal, streaks, XP and badges, plus weekly XP and streak on the leaderboard), then `migrations/005_keep_alive.sql` (the tiny function the keep-awake job calls).
+Then do the same with `migrations/002_friends.sql` (friends and the leaderboard), then `migrations/003_openings.sql` (opening trainer progress, and "openings learned" on the leaderboard), then `migrations/004_gamification.sql` (daily goal, streaks, XP and badges, plus weekly XP and streak on the leaderboard), then `migrations/005_keep_alive.sql` (the tiny function the keep-awake job calls), then `migrations/006_lessons.sql` (lesson progress, and "lessons completed" on the leaderboard).
 
 Then check Database → Tables: `analyses`, `baselines`, `linked_accounts`, `puzzle_progress`, `profiles`, `friendships` and `leaderboard_stats` should each show "RLS enabled".
 

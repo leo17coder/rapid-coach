@@ -9,7 +9,7 @@
 <link rel="preload" href="vendor/fonts/nunito-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/fredoka-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;if(u.theme&&u.theme!=="system")d.dataset.theme=u.theme;if(u.board)d.dataset.board=u.board}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-17b">
+<link rel="stylesheet" href="style.css?v=2026-11-17c">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -17,7 +17,7 @@
     <a class="brand" href="#home" aria-label="Rapid Coach home"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#a8325e"/><rect x="5" y="20" width="7" height="7" rx="1.5" fill="#f3ecd8"/><rect x="12" y="20" width="7" height="7" rx="1.5" fill="#7fa48e"/><path d="M20.5 4 12 16.5h5.2L15 26l9.5-13.2h-5.3L21.5 4z" fill="#fff"/></svg><span>Rapid Coach</span></a>
     <div class="job" id="job" role="status" hidden><span class="job-spin" aria-hidden="true"></span><span class="job-txt" id="jobTxt"></span><span class="bar"><b id="jobBar"></b></span></div>
   </div>
-  <nav aria-label="Main"><a href="#home" data-t="home"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-house"/></svg><span>Home</span></a><a href="#review" data-t="review"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg><span>Review</span></a><a href="#trainer" data-t="trainer"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-puzzle"/></svg><span>Trainer</span></a><a href="#openings" data-t="openings"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg><span>Openings</span></a><a href="#progress" data-t="progress"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chart-line"/></svg><span>Progress</span></a><a href="#friends" data-t="friends" class="acct-only" hidden><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-users"/></svg><span>Friends</span></a></nav>
+  <nav aria-label="Main"><a href="#home" data-t="home"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-house"/></svg><span>Home</span></a><a href="#review" data-t="review"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg><span>Review</span></a><a href="#trainer" data-t="trainer"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-puzzle"/></svg><span>Trainer</span></a><a href="#lessons" data-t="lessons"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-graduation-cap"/></svg><span>Lessons</span></a><a href="#openings" data-t="openings"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg><span>Openings</span></a><a href="#progress" data-t="progress"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chart-line"/></svg><span>Progress</span></a><a href="#friends" data-t="friends" class="acct-only" hidden><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-users"/></svg><span>Friends</span></a></nav>
   <div class="side-foot">
     <div class="who"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-circle-user-round"/></svg><span id="whoName"></span></div>
     <button class="ghost side-btn" id="switchBtn" type="button" aria-label="Switch account"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-repeat"/></svg><span class="lbl">Switch account</span></button>
@@ -184,6 +184,51 @@
   </div>
 </section>
 
+<!-- LESSONS: priority list, profile and tracks; the lesson player; teaching pages -->
+<section id="v-lessons" hidden>
+  <div id="lsHome">
+    <div class="ls-head">
+      <div><h1>Lessons</h1><p class="sub">Built around the mistakes in your own games.</p></div>
+      <div class="ls-level"><label for="lsLevel">Your level</label><select id="lsLevel"></select><span class="small" id="lsLevelNote"></span></div>
+    </div>
+    <div class="panel ls-prio-panel"><h2>Work on these first</h2><ol class="prio" id="lsPrio"></ol></div>
+    <div class="two" style="margin-top:var(--s5)">
+      <div class="panel"><h2>Your profile</h2><div id="lsProfile"></div></div>
+      <div class="panel"><h2>By phase</h2><div id="lsPhase"></div></div>
+    </div>
+    <div class="tracks" id="lsTracks"></div>
+  </div>
+  <div id="lsPlay" hidden>
+    <p class="small"><button class="link back" type="button" id="lBack"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg>All lessons</button></p>
+    <div class="grid">
+      <div class="board-col">
+        <div class="sess" id="lDots"></div>
+        <div class="board-row"><div class="evalbar" id="lEv" hidden></div><div class="boardwrap" id="lboard"></div></div>
+        <div class="ctl ctl-2"><button type="button" id="lRestart"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-rotate-ccw"/></svg>Restart step</button><button type="button" id="lPage"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg>Learn more</button></div>
+      </div>
+      <div>
+        <p class="small" id="lCrumb"></p>
+        <h1 id="lTitle">Lesson</h1>
+        <div class="coach-card">
+          <div id="lPrompt" class="verdict v-info"><span class="skel" style="width:60%" aria-label="Loading"></span></div>
+          <div id="lFeedback"></div>
+          <div class="why" id="lWhy" aria-live="polite"></div>
+        </div>
+        <p class="small"><button class="link" type="button" id="lSkip" hidden>Skip the check and start the lessons</button></p>
+      </div>
+    </div>
+  </div>
+  <div id="lsPage" hidden>
+    <p class="small"><button class="link back" type="button" id="pgBack"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg>All lessons</button></p>
+    <article class="page">
+      <p class="small" id="pgCrumb"></p>
+      <h1 id="pgTitle">Lesson</h1>
+      <div id="pgBody"></div>
+      <button class="pri lg" type="button" id="pgPractice">Practise this<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-right"/></svg></button>
+    </article>
+  </div>
+</section>
+
 <!-- PROGRESS -->
 <section id="v-progress" hidden>
   <h1 id="pTitle">Progress</h1>
@@ -254,7 +299,7 @@
   </div>
   <div id="fIn" hidden>
     <h2 id="fBoardTitle">Leaderboard</h2>
-    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Openings learned</th><th class="r">XP this week</th><th class="r">Streak</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
+    <div class="fr-board"><table><thead><tr><th>Name</th><th class="r">Blunders / game</th><th class="r">Mistakes / game</th><th class="r">Time used</th><th class="r">Puzzles solved</th><th class="r">Rating since baseline</th><th class="r">Openings learned</th><th class="r">Lessons</th><th class="r">XP this week</th><th class="r">Streak</th><th class="r">Games analysed</th></tr></thead><tbody id="fBody"></tbody></table></div>
     <p class="small" id="fNote">Last 20 analysed games; “–” means fewer than 10 analysed so far. Lower blunders and mistakes are better. Rating change is shown as a difference only, because chess.com and Lichess ratings can't be compared.</p>
     <div class="two" style="margin-top:28px">
       <div class="panel">
@@ -338,8 +383,8 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-17b"></script>
+<script src="config.js?v=2026-11-17c"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-17b"></script>
+<script src="app.js?v=2026-11-17c"></script>
 </body>
 </html>

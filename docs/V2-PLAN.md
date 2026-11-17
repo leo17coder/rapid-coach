@@ -179,3 +179,12 @@ A shared Why panel in the Trainer and the opening drill shows Stockfish's lines 
 - Synced via `004_gamification.sql` (one row per account; merging is per-field max/union); weekly XP and streak on the friends leaderboard, with "You passed X this week!".
 - Start screen: feature blocks, trust points, demo board stepping through a sample explanation, invite banner.
 
+## 7. Tailored lessons (stage 1 of 4 built)
+
+- **Weakness profile:** every mistake/blunder in the newest 60 analysed games is tagged once by fixed rules over two Stockfish lines (my best line, the opponent's best reply line): hanging piece, missed/allowed fork, missed pin/skewer, missed free material, missed/allowed mate, back-rank weakness, other tactics, positional; plus phase and ending type. Tags stay local with the games.
+- **Priority list:** themes and habits (errors when winning, fast play, weakest opening) ranked by win-% points lost per game, each with a one-line reason and a lesson; the top item feeds Home's plan.
+- **Level:** from rating (Lichess −250) and accuracy; "New to chess" and "Beginner" get First steps first; override any time.
+- **Framework:** Lessons tab with tracks > courses > chapters > lessons; guided puzzle steps with coach notes, the Why panel and eval bar; teaching pages; placement checks; local progress synced via `006_lessons.sql`; XP, daily goal, badges, "lessons completed" on the leaderboard.
+- **Sample content:** First steps (moves, check and checkmate, don't hang pieces) and Tactical patterns › Forks, pins and skewers, all validated with Stockfish.
+- **Next stages:** 2 tactics and checkmate patterns, 3 openings, 4 endgames.
+
