@@ -8,7 +8,7 @@ import path from "node:path";
 import { ROOT, CC_USER, LI_USER, CC_RAPID_10, serve, launch, newPage, sleep, waitFor, st, text, visible, goto, tab, clickSquare, seedStorage } from "./lib.mjs";
 
 const SEL = {
-  start: "#v-start", uName: "#uName", srcCc: "#uSrcCc", srcLi: "#uSrcLi", tc: "#uTc", startBtn: "#startBtn", startMsg: "#startMsg", heroBoard: "#heroBoard",
+  start: "#v-start", uName: "#uName", srcCc: "#uSrcCc", srcLi: "#uSrcLi", tc: v => `input[name="uTc"][value="${v}"]`, startBtn: "#startBtn", startMsg: "#startMsg", heroBoard: "#heroBoard",
   who: "#whoName", profBtn: "#profBtn", switchBtn: "#switchBtn", navLink: t => `#hdr nav a[data-t="${t}"], #subnav a[data-t="${t}"]`, nav: "#hdr nav",
   picker: "#gamePick", filter: "#gameFilter", board: "#board", flip: "#flipBtn", navBtn: a => `[data-nav="${a}"]`, evFig: "#evFig", evNow: "#evNow",
   kmCard: "#km button[data-p]", moveBtn: "#moves button[data-p]",
@@ -30,7 +30,7 @@ const setChecked = (page, sel) => page.$eval(sel, e => { e.checked = true; e.dis
 async function onboard(page, user, source = "cc", tc = "600") {
   await waitFor(page, s => !document.querySelector(s).hidden, { label: "start screen", arg: SEL.start });
   await setChecked(page, source === "li" ? SEL.srcLi : SEL.srcCc);
-  await page.select(SEL.tc, tc);
+  await setChecked(page, SEL.tc(tc));
   await page.$eval(SEL.uName, e => { e.value = ""; });
   await page.type(SEL.uName, user);
   await page.click(SEL.startBtn);

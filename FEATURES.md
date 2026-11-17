@@ -16,7 +16,7 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 - [auto] **Start screen** shows the username form and the demo board.
 - [auto] **Unknown username** shows "No … player called …" and stays on the start screen.
 - [auto] **Onboarding** works with any capitalisation of the username and keeps only the chosen time control (blitz games are excluded under 10-minute rapid).
-- [manual] Choosing Lichess, rapid/blitz/bullet, or an invite link (`?invite=…`, shows the invite banner) works from the start screen.
+- [manual] Choosing Lichess, the time control (segmented: Rapid 10 min, All rapid, Blitz, Bullet), the language switch, or an invite link (`?invite=…`, shows the invite banner) works from the start screen.
 - [manual] The demo on the start screen steps through the example on its own, and stops if you click it or have "reduce motion" on.
 
 ## Games and analysis
@@ -50,11 +50,12 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 ## Progress
 - [auto] **Insights, key numbers, charts, endings and openings** all render.
 - [auto] **A baseline is frozen once 10 games are analysed.**
-- [manual] "Reset baseline" sets a new one; change since the baseline is shown on Home and Progress.
+- [manual] "Reset baseline" sets a new one; change since the baseline is shown on Progress.
 
 ## Home and motivation
 - [auto] **Home shows a plan of actions.**
-- [manual] "Since your last visit", the daily goal ring, streak (with freezes), level, weekly challenge, badges, records and toasts work; intensity and "hide" settings are respected; XP only comes from training, never from results.
+- [manual] Home shows, in order: a greeting, today's focus (the top insight with one action), today's plan (top 3, the first one primary), a streak / daily goal / level strip, and the latest game card ("N new games since your last visit"). The strip opens Progress › Trophies.
+- [manual] Progress › Trophies: level and XP, streak (with freezes), the daily goal ring and its size (Light/Normal/Serious), the weekly challenge, badges (earned first, "See all"), records; toasts work; Settings › "Hide streaks, XP and badges" hides them on Home; XP only comes from training, never from results.
 
 ## Players, accounts and friends
 - [auto] **Switch player**: a **Lichess account** loads its own games.

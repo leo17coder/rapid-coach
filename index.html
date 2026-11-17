@@ -10,7 +10,7 @@
 <link rel="preload" href="vendor/fonts/atkinson-next-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/literata-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;d.dataset.theme=u.v3&&u.theme?u.theme:u.theme==="light"?"light":"dark";if(u.board)d.dataset.board=u.board}catch(e){document.documentElement.dataset.theme="dark"}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-18a">
+<link rel="stylesheet" href="style.css?v=2026-11-18b">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -33,106 +33,60 @@
 <header class="tabhead" id="tabHead" hidden><h1 id="tabTitle"></h1><nav class="subnav" id="subnav" aria-label="Sections"></nav></header>
 <!-- ONBOARDING -->
 <section id="v-start" hidden>
+  <div class="start-top"><a class="brand" href="./" data-i18n-attr="aria-label:nav.homeLabel" aria-label="Kibitz home"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 3.5h12a7 7 0 0 1 7 7v6.5a7 7 0 0 1-7 7h-9.2L7.2 29v-5.3A7 7 0 0 1 3 17v-6.5a7 7 0 0 1 7-7z" fill="#7bc55c"/><rect x="10" y="7.5" width="6" height="6" rx="1" fill="#f1ece2"/><rect x="16" y="7.5" width="6" height="6" rx="1" fill="#1d1c1a"/><rect x="10" y="13.5" width="6" height="6" rx="1" fill="#1d1c1a"/><rect x="16" y="13.5" width="6" height="6" rx="1" fill="#f1ece2"/></svg><span>Kibitz</span></a><div class="lang-sw" id="langSw" role="group" aria-label="Language"></div></div>
   <div class="invite" id="inviteBanner" role="status" hidden>
-    <span class="invite-ic"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-users"/></svg></span><div><b>A friend invited you to Kibitz.</b> Enter your chess.com or Lichess username to get started, then sign in to accept the invite and compare your training.</div>
-    <button class="pri" id="invSign" type="button">Sign in to accept</button>
+    <span class="invite-ic"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-users"/></svg></span><div data-i18n-html="start.invite"><b>A friend invited you to Kibitz.</b> Enter your chess.com or Lichess username to get started, then sign in to accept the invite.</div>
+    <button class="pri" id="invSign" type="button" data-i18n="start.inviteBtn">Sign in to accept</button>
   </div>
   <div class="hero">
-    <div>
-      <h1>A coach for your own chess.com and Lichess games</h1>
-      <p>Enter your username. Kibitz pulls your games, checks every move with Stockfish, turns your blunders into puzzles, drills the openings you actually play, and explains why a move is wrong.</p>
+    <div class="hero-txt">
+      <h1 data-i18n="start.h1">A coach for your own chess.com and Lichess games</h1>
+      <p class="lead" data-i18n="start.lead">Kibitz looks over your games afterwards, like a friend at the club: where each game turned, what you missed, and what to train next.</p>
       <form id="startForm">
         <fieldset class="seg">
-          <legend>Where you play</legend>
+          <legend data-i18n="start.where">Where you play</legend>
           <label><input type="radio" name="uSrc" id="uSrcCc" value="cc" checked><span>chess.com</span></label>
           <label><input type="radio" name="uSrc" id="uSrcLi" value="li"><span>Lichess</span></label>
         </fieldset>
         <label for="uName" id="uNameLbl">chess.com username</label>
         <input id="uName" autocomplete="username" autocapitalize="off" spellcheck="false" required placeholder="e.g. magnuscarlsen">
-        <label for="uTc">Games to coach</label>
-        <select id="uTc">
-          <option value="600">Rapid · 10 min</option>
-          <option value="rapid">Rapid · all time controls</option>
-          <option value="blitz">Blitz</option>
-          <option value="bullet">Bullet</option>
-        </select>
-        <button class="pri lg" type="submit" id="startBtn">Get my games<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-right"/></svg></button>
+        <fieldset class="seg seg-4" id="uTc">
+          <legend data-i18n="start.tc">Games to coach</legend>
+          <label><input type="radio" name="uTc" value="600" checked><span data-i18n="start.tc600">Rapid 10 min</span></label>
+          <label><input type="radio" name="uTc" value="rapid"><span data-i18n="start.tcRapid">All rapid</span></label>
+          <label><input type="radio" name="uTc" value="blitz"><span data-i18n="start.tcBlitz">Blitz</span></label>
+          <label><input type="radio" name="uTc" value="bullet"><span data-i18n="start.tcBullet">Bullet</span></label>
+        </fieldset>
+        <button class="pri lg" type="submit" id="startBtn"><span data-i18n="start.go">Get my games</span><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-right"/></svg></button>
         <div class="status" id="startMsg" role="status"></div>
+        <p class="small acct-only" hidden><span data-i18n="start.sync">Use more than one device?</span> <button class="link acctBtn" type="button"><span class="lbl" data-i18n="menu.signin">Sign in to sync</span></button></p>
       </form>
-      <ul class="trust">
-        <li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>Free</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>Open source</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>Runs in your browser</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>No account needed</li><li><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-check"/></svg>No AI, just Stockfish</li>
-      </ul>
-      <ul>
-        <li class="acct-only" hidden>Use more than one device? <button class="link acctBtn" type="button">Sign in to sync</button></li>
-      </ul>
     </div>
-    <div>
-      <div class="boardwrap" id="heroBoard" aria-label="Example: why 5.Nd6+ was a blunder"></div>
-      <div class="why hero-why" id="heroWhy"></div>
-    </div>
+    <figure class="demo">
+      <div class="boardwrap" id="heroBoard" aria-label="Example: why 5.Nd6+ was a blunder" data-i18n-attr="aria-label:start.demoLabel"></div>
+      <figcaption class="why hero-why" id="heroWhy"></figcaption>
+    </figure>
   </div>
-  <div class="features">
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg>Game review</h2><p>Every move of your games checked by Stockfish, with the moments where each game turned.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-puzzle"/></svg>Puzzles from your blunders</h2><p>Positions where you went wrong in real games. Find the move you missed.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-book-open"/></svg>Opening trainer</h2><p>Drill the lines you actually reach, with your opponents' real replies and spaced repetition.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-crosshair"/></svg>Tactics lessons</h2><p>Forks, pins, mates and more: puzzle courses from real games, starting at your level and at the tactics you miss.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-graduation-cap"/></svg>Opening lessons</h2><p>Guided lines with a coach note on every key move, for the openings you play as White and Black, plus the traps to know.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-flag"/></svg>Endgame lessons</h2><p>From the basic mates to Lucena and Philidor: positions to solve and positions to play out against Stockfish.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-circle-help"/></svg>Move explanations</h2><p>See what your move allows and why the better move works, as lines you can step through.</p></div>
-    <div><h2><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-flame"/></svg>Daily streaks</h2><p>A small daily goal, XP for training, badges and records. Never for wins, and you can hide it all.</p></div>
-  </div>
+  <ul class="benefits">
+    <li><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-scan-search"/></svg><div><h2 data-i18n="start.b1t">Every game, reviewed</h2><p data-i18n="start.b1p">Stockfish checks each move on your device, and Kibitz tells you in plain words where the game turned. No AI, just the engine.</p></div></li>
+    <li><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-target"/></svg><div><h2 data-i18n="start.b2t">Training from your mistakes</h2><p data-i18n="start.b2p">Puzzles from your own blunders, plus tactics, opening and endgame lessons pitched at your level.</p></div></li>
+    <li><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-shield-check"/></svg><div><h2 data-i18n="start.b3t">Free and private</h2><p data-i18n="start.b3p">Runs in your browser. No ads, no tracking, no account needed; sign in only if you want to sync devices.</p></div></li>
+  </ul>
 </section>
 
-<!-- HOME (default tab for returning users) -->
+<!-- HOME (default tab for returning users): greeting, today's focus, today's plan, motivation strip, latest game -->
 <section id="v-home" hidden>
-  <h1 id="hHello">Welcome back.</h1>
-  <div class="home">
-    <div class="h-col">
-    <div class="h-plan panel">
-      <h2>Your plan for today</h2>
-      <ol class="plan" id="hPlan"></ol>
-    </div>
-    <div class="h-since panel">
-      <h2 id="hSinceT">Since your last visit</h2>
-      <div id="hSince"></div>
-      <button class="h-swing" id="hSwing" type="button" hidden><div class="boardwrap thumb" id="hThumb"></div><span id="hSwingTxt" class="small"></span></button>
-    </div>
-    <div class="h-actions">
-      <h2>Quick actions</h2>
-      <div class="row"><button id="hSync" type="button">Check for new games</button><button id="hAn" type="button">Analyse 20 more</button><button id="hSwitch" type="button">Switch account</button><button id="hSign" type="button" hidden>Sign in to sync</button></div>
-      <p class="small" id="hNote"></p>
-      <label class="fr-check small"><input type="checkbox" id="hHide"> Hide streaks, XP and badges</label>
-    </div>
-    </div>
-    <div class="h-col">
-    <div class="h-game panel" id="hGame">
-      <div class="goal-row"><div id="hRing"></div><div id="hRingTxt" class="goal-txt"></div></div>
-      <div class="streak" id="hStreak"></div>
-      <div id="hLevel"></div>
-      <div id="hChallenge" style="margin-top:12px"></div>
-      <details class="small" style="margin-top:12px"><summary>Goal settings</summary>
-        <label for="hInt">Daily goal</label>
-        <select id="hInt"><option value="light">Light (5 a day)</option><option value="normal">Normal (10 a day)</option><option value="serious">Serious (20 a day)</option></select>
-      </details>
-    </div>
-    <div class="h-glance">
-      <h2>Progress at a glance</h2>
-      <div class="kpis" id="hGlance"></div>
-      <div id="hInsight"></div>
-    </div>
-    <div class="h-lb panel" id="hLb" hidden>
-      <h2>Friends this week</h2>
-      <div id="hLbBody"></div>
-      <a href="#friends">See the full leaderboard</a>
-    </div>
-    </div>
-    <div class="h-badges" id="hBadgesSec">
-      <h2>Badges</h2>
-      <ul class="badges" id="hBadges"></ul>
-      <h2>Personal records</h2>
-      <ul class="records" id="hRecords"></ul>
-    </div>
-  </div>
+  <h1 id="hHello" class="hello"></h1>
+  <div class="focus" id="hFocus" hidden></div>
+  <section class="h-sec" aria-labelledby="hPlanT">
+    <h2 id="hPlanT" data-i18n="home.plan">Today's plan</h2>
+    <ol class="plan" id="hPlan"></ol>
+  </section>
+  <a class="hstrip" id="hStrip" href="#progress/trophies" hidden></a>
+  <section class="h-sec" aria-labelledby="hLatestT">
+    <div class="sec-head"><h2 id="hLatestT" data-i18n="home.latest">Latest game</h2><a class="small" id="hNew" href="#review"></a></div>
+    <div id="hLatest"></div>
+  </section>
 </section>
 
 <!-- REVIEW -->
@@ -294,6 +248,27 @@
   </div>
 </section>
 
+<!-- TROPHIES (Progress › Trophies): level and XP, streak and daily goal, weekly challenge, badges, records -->
+<section id="v-trophies" hidden>
+  <p class="small tro-hidden" id="tHiddenNote" hidden data-i18n="tro.hiddenNote">Streaks, XP and badges are hidden on Home. You can show them again in Settings.</p>
+  <div class="tro-top">
+    <div class="tro-card" id="trLevel"></div>
+    <div class="tro-card" id="trStreak"></div>
+    <div class="tro-card tro-goal"><div id="hRing"></div><div id="hRingTxt" class="goal-txt"></div></div>
+  </div>
+  <fieldset class="seg seg-3 tro-int"><legend data-i18n="tro.goalSize">Daily goal</legend>
+    <label><input type="radio" name="hInt" value="light"><span data-i18n="tro.light">Light: 5 a day</span></label>
+    <label><input type="radio" name="hInt" value="normal"><span data-i18n="tro.normal">Normal: 10 a day</span></label>
+    <label><input type="radio" name="hInt" value="serious"><span data-i18n="tro.serious">Serious: 20 a day</span></label>
+  </fieldset>
+  <h2 data-i18n="tro.challenge">This week's challenge</h2>
+  <div id="hChallenge" class="tro-challenge"></div>
+  <h2 data-i18n="tro.badges">Badges</h2>
+  <ul class="badges" id="hBadges"></ul>
+  <h2 data-i18n="tro.records">Personal records</h2>
+  <ul class="records" id="hRecords"></ul>
+</section>
+
 <!-- FRIENDS (only with accounts switched on) -->
 <section id="v-friends" hidden>
   <h1>Friends</h1>
@@ -392,9 +367,9 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-18a"></script>
-<script src="i18n/en.js?v=2026-11-18a"></script>
+<script src="config.js?v=2026-11-18b"></script>
+<script src="i18n/en.js?v=2026-11-18b"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-18a"></script>
+<script src="app.js?v=2026-11-18b"></script>
 </body>
 </html>
