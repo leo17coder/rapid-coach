@@ -1808,5 +1808,8 @@ async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});O
  catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=`Couldn't load your games from ${SRC[P.source].name}. Try again in a minute.`;$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
  if(!fresh&&!AQ)analyseRecent(5);if(!AQ)TG.run()}
 async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
+/* Read-only test hook, only with ?test=1 (used by tests/run.mjs; keep it working when refactoring). */
+if(/[?&]test=1(&|$)/.test(location.search))window.rcTest={state:()=>({user:P&&P.user,source:P&&P.source,tc:P&&P.tc,games:GAMES.length,analysed:GAMES.filter(g=>g.an).length,puzzles:PZ.length,queue:!!AQ,cur:CUR&&CUR.id,ply:PLY,flip:RB.flip,route:P?route.cur:"start"}),
+ puzzle:()=>PI&&{id:PI.id,fen:PI.g._f[PI.e.i],best:PI.e.best,flip:TB.flip},game:id=>{const g=GAMES.find(x=>x.id===id);return g&&{id:g.id,result:g.result,color:g.color,moves:g.moves.length,an:!!g.an}}};
 (async()=>{await DB.open();ALL=await DB.all();(await DB.pend()).forEach(x=>PEND.set(x.id,x.an));await LiAuth.callback();Sync.start();boot()})();
 }

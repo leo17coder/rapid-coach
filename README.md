@@ -43,6 +43,17 @@ python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
+## Tests
+
+`FEATURES.md` lists everything the app does. The end-to-end tests check most of it in headless Chrome, offline, against a fake chess.com and Lichess built from real (anonymised) games:
+
+```sh
+npm install   # once (dev only; the site has no runtime dependencies)
+npm test      # about a minute
+```
+
+Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically).
+
 ## Deploy for free
 
 **GitHub Pages:** Settings → Pages → Source: *Deploy from a branch* → `main` / root. The site will be at `https://<user>.github.io/rapid-coach/`.
