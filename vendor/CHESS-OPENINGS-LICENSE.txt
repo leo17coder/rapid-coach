@@ -1,0 +1,13 @@
+Opening names in vendor/chess-openings-2026-11/names.json
+
+Source: lichess-org/chess-openings, https://github.com/lichess-org/chess-openings
+(commit 3ba6b20d31b2e6125cb0e6a2e792f400717d9d39, 5 November 2026).
+
+"As a collection of facts, this data set is in the public domain." It is dedicated under
+Creative Commons CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
+No rights are reserved; this note is a courtesy, not a requirement.
+
+Rapid Coach keeps only the ECO codes and names of the positions that occur in its opening
+lessons (tools/build-openings.js), keyed by position.
+
+Rapid Coach is not affiliated with Lichess.

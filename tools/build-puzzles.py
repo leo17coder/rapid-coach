@@ -6,7 +6,8 @@ Source: the Lichess puzzle database (CC0), https://database.lichess.org/#puzzles
   pip install zstandard
   python3 tools/build-puzzles.py lichess_db_puzzle.csv.zst
 
-Writes vendor/lichess-puzzles-<YYYY-MM>/<course>.json, one file per lesson course, loaded by the app only when
+Writes vendor/lichess-puzzles-<YYYY-MM>/<course>.json, one file per lesson course (op-<opening>.json for the
+"tactics in this opening" chapters of the Openings track, chosen by the OpeningTags column), loaded by the app only when
 that course is opened. Each file: {"course": id, "bands": [[puzzle, ...] per rating band]}, a puzzle being
 [lichess id, FEN before the opponent's last move, UCI moves (the first is the opponent's, then the solution),
 rating] plus the mating-pattern tag for the "patterns" course. Selection is deterministic: well-rated
@@ -37,6 +38,25 @@ COURSES = {
 # scarce courses pick first, so a puzzle tagged with several themes goes where it is needed most
 ORDER = ["patterns", "smothered", "double-check", "back-rank", "skewer", "mate3", "deflection", "discovered", "pin", "mate2", "fork", "hanging", "mate1"]
 KEEP = 6  # candidates kept per (course, theme, band, sub-bin)
+# "tactics in this opening" chapters (opening courses): Lichess OpeningTags families, the side that solves (None: either),
+# 12 puzzles per band from 400 to 2000; "principles" takes early-opening puzzles (theme "opening") of any opening
+OP_BANDS = BANDS + [(1800, 2000)]
+OP_PER = 12
+OPENINGS = {
+    "principles": (None, None),
+    "italian": (["Italian_Game"], None), "ruy": (["Ruy_Lopez"], None), "scotch": (["Scotch_Game"], None),
+    "london": (["London_System"], "w"), "qg": (["Queens_Gambit_Declined", "Queens_Gambit_Accepted", "Slav_Defense", "Semi-Slav_Defense"], "w"),
+    "scandinavian": (["Scandinavian_Defense"], "b"), "caro": (["Caro-Kann_Defense"], "b"), "french": (["French_Defense"], "b"),
+    "sicilian": (["Sicilian_Defense"], "b"), "qgd": (["Queens_Gambit_Declined", "Slav_Defense", "Semi-Slav_Defense"], "b"),
+    "english": (["English_Opening", "Zukertort_Opening", "Reti_Opening"], None),
+}
+
+
+def op_band(r):
+    for i, (lo, hi) in enumerate(OP_BANDS):
+        if lo <= r < hi:
+            return i, min(SUB - 1, (r - lo) * SUB // (hi - lo))
+    return None, None
 
 
 def band_of(r):
@@ -48,6 +68,7 @@ def band_of(r):
 
 def main(path):
     heaps = {}  # (course, theme, band, sub) -> heap of (plays, id, row)
+    oheaps = {}  # (opening course, band, sub) -> heap
     with open(path, "rb") as fh:
         text = io.TextIOWrapper(zstandard.ZstdDecompressor().stream_reader(fh), encoding="utf-8")
         rd = csv.reader(text)
@@ -62,13 +83,31 @@ def main(path):
                 continue
             if pop < 85 or plays < 300 or rdv > 100:
                 continue
-            b, s = band_of(r)
-            if b is None:
-                continue
             moves = row[ix["Moves"]].split()
             if len(moves) < 2 or len(moves) > 8:
                 continue
             th = set(row[ix["Themes"]].split())
+            ob, osub = op_band(r)
+            if ob is not None:
+                tags = row[ix["OpeningTags"]].split()
+                solver = "b" if row[ix["FEN"]].split()[1] == "w" else "w"
+                item = (plays, row[ix["PuzzleId"]], (row[ix["PuzzleId"]], row[ix["FEN"]], " ".join(moves), r, ""))
+                for oid, (fams, side) in OPENINGS.items():
+                    if fams is None:
+                        if "opening" not in th or r >= 1400:
+                            continue
+                    elif not tags or not any(t.startswith(f) for f in fams for t in tags[:1]) and not any(f in t for f in fams for t in tags):
+                        continue
+                    if side and solver != side:
+                        continue
+                    h = oheaps.setdefault((oid, ob, osub), [])
+                    if len(h) < KEEP:
+                        heapq.heappush(h, item)
+                    elif item > h[0]:
+                        heapq.heapreplace(h, item)
+            b, s = band_of(r)
+            if b is None:
+                continue
             for cid, (tags, _, mate_ok) in COURSES.items():
                 if not mate_ok and "mate" in th:
                     continue
@@ -110,6 +149,24 @@ def main(path):
         with open(os.path.join(d, cid + ".json"), "w") as f:
             json.dump({"course": cid, "bands": bands}, f, separators=(",", ":"))
     print("total", sum(len(b) for bs in out.values() for b in bs), file=sys.stderr)
+    # opening courses: one file each (op-<id>.json), bands as above plus 1800-2000; a puzzle may appear in several openings' files
+    for oid in OPENINGS:
+        bands = []
+        for b in range(len(OP_BANDS)):
+            pools = [sorted(oheaps.get((oid, b, s), []), reverse=True) for s in range(SUB)]
+            pick, seen = [], set()
+            while len(pick) < OP_PER and any(pools):
+                for p in pools:
+                    if p and len(pick) < OP_PER:
+                        it = p.pop(0)
+                        if it[1] not in seen:
+                            seen.add(it[1])
+                            pick.append(it[2])
+            pick.sort(key=lambda x: x[3])
+            bands.append([[i, f, m, r] for (i, f, m, r, t) in pick])
+        print(f"op-{oid:12s}", [len(b) for b in bands], file=sys.stderr)
+        with open(os.path.join(d, "op-" + oid + ".json"), "w") as f:
+            json.dump({"course": "op-" + oid, "bands": bands}, f, separators=(",", ":"))
 
 
 if __name__ == "__main__":

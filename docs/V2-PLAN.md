@@ -179,7 +179,7 @@ A shared Why panel in the Trainer and the opening drill shows Stockfish's lines 
 - Synced via `004_gamification.sql` (one row per account; merging is per-field max/union); weekly XP and streak on the friends leaderboard, with "You passed X this week!".
 - Start screen: feature blocks, trust points, demo board stepping through a sample explanation, invite banner.
 
-## 7. Tailored lessons (stages 1-2 of 4 built)
+## 7. Tailored lessons (stages 1-3 of 4 built)
 
 - **Weakness profile:** every mistake/blunder in the newest 60 analysed games is tagged once by fixed rules over two Stockfish lines (my best line, the opponent's best reply line): hanging piece, missed/allowed fork, missed pin/skewer, missed free material, missed/allowed mate, back-rank weakness, other tactics, positional; plus phase and ending type. Tags stay local with the games.
 - **Priority list:** themes and habits (errors when winning, fast play, weakest opening) ranked by win-% points lost per game, each with a one-line reason and a lesson; the top item feeds Home's plan.
@@ -187,5 +187,6 @@ A shared Why panel in the Trainer and the opening drill shows Stockfish's lines 
 - **Framework:** Lessons tab with tracks > courses > chapters > lessons; guided puzzle steps with coach notes, the Why panel and eval bar; teaching pages; placement checks; local progress synced via `006_lessons.sql`; XP, daily goal, badges, "lessons completed" on the leaderboard.
 - **Sample content:** First steps (moves, check and checkmate, don't hang pieces) and Tactical patterns › Forks, pins and skewers, all validated with Stockfish.
 - **Stage 2, tactics & checkmate patterns:** 13 puzzle courses from a vendored CC0 subset of the Lichess puzzle database (2,926 puzzles, 300 KB, one file per course loaded on first use; `tools/build-puzzles.py`). Chapters per rating band (up to 1000 … 1600-1800) with Warm-up, Practice and Challenge lessons of 6 adaptive puzzles (Elo-style skill per course, synced in `lesson_progress`), a 4-puzzle placement check per chapter, hints, the Why panel, and a hand-written teaching page per course with diagrams, a worked example from a real game and a checklist. Placement from rating and weakness profile; the priority list and Home link straight into the chapter. No new SQL.
-- **Next stages:** 3 openings, 4 endgames.
+- **Stage 3, openings:** an opening-principles course plus 11 opening courses for White and Black, 49 hand-written lines (each move checked with Stockfish) with coach notes and trap lines, played guided and then from memory; a 4-move placement check per chapter; a "tactics in this opening" chapter per course from the puzzle database's OpeningTags (another 828 puzzles); a teaching page per opening with a worked example from a real game. Courses for the openings you play (from your games) are marked and start at the chapter for your colour and level; the weakest-opening priority links into its course; "Drill this line" pins the moves in the opening trainer, which then drills the line with spaced repetition. Opening names from lichess-org/chess-openings (CC0). No new SQL.
+- **Next stage:** 4 endgames.
 

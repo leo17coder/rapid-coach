@@ -7,8 +7,10 @@ Lichess releases its database exports under the Creative Commons CC0 1.0 Univers
 public domain dedication: https://creativecommons.org/publicdomain/zero/1.0/
 No rights are reserved; this note is a courtesy, not a requirement.
 
-Rapid Coach uses a subset of 2,926 puzzles chosen by tools/build-puzzles.py (popular, often
-played, settled ratings, up to four moves to find, rated 400 to 1800). Each puzzle keeps its
+Rapid Coach uses a subset chosen by tools/build-puzzles.py (popular, often played, settled
+ratings, up to four moves to find): 2,926 puzzles rated 400 to 1800 for the tactics courses, and
+828 entries rated 400 to 2000 for the "tactics in this opening" chapters (op-*.json, chosen by
+the OpeningTags column). Each puzzle keeps its
 Lichess puzzle id, FEN, moves and rating; the puzzle can be seen at
 https://lichess.org/training/<id>. Themes and popularity data were used only for selection.
 
