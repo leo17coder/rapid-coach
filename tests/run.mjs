@@ -13,6 +13,7 @@ const SEL = {
   card: ".gcard-link[data-g]", chip: v => `#rvChips [data-f="${v}"]`, back: "#rvBack", rvGame: "#rvGame", board: "#board", flip: "#flipBtn", navBtn: a => `[data-nav="${a}"]`, evFig: "#evFig", evNow: "#evNow",
   kmCard: "#km button[data-p]", moveBtn: "#moves button[data-p]",
   tboard: "#tboard", tHint: "#tHint", tShow: "#tShow", tNext: "#tNext", tPrompt: "#tPrompt", tFeedback: "#tFeedback", tOk: "#tFeedback .v-ok", tNo: "#tFeedback .v-no", tWhy: "#tWhy",
+  tSum: "#tSum", tHub: "#tHub", tPlay: "#tPlay", tDone: "#tDone", tMode: m => `#tModes [data-mode="${m}"]`, tAgain: "#tAgain", tBack: "#tBack", tQuit: "#tQuit",
   insights: "#insights", kpis: "#pKpis", charts: ["#ratingFig", "#timeFig", "#errFig"], ends: "#ends", opRows: "#opBody tr", syncBtn: "#syncBtn",
   homePlan: "#hPlan .plan-card", lsTracks: "#lsTracks", oMain: "#oMain", oEmpty: "#oEmpty",
   setBtn: "#setBtn", settings: "#settings", theme: v => `input[name="sTheme"][value="${v}"]`, setClose: "#setClose",
@@ -37,6 +38,11 @@ async function onboard(page, user, source = "cc", tc = "600") {
 }
 const ctx = {}; // values shared between the ordered tests of the main flow
 /** Account actions and settings live in the profile menu: open it, then click the item. */
+/** Next puzzle in the session; when the session is over, start it again. */
+async function nextPz(page) {
+  await page.click(SEL.tNext); await sleep(300);
+  if (await visible(page, SEL.tDone)) { await page.click(SEL.tAgain); await sleep(300); }
+}
 async function menuClick(page, sel) { await page.click(SEL.profBtn); await waitFor(page, s => !document.querySelector(s).closest("[hidden]"), { label: "profile menu open", arg: sel }); await page.click(sel); }
 
 /* ================= main flow (one browser profile, tests run in order) ================= */
@@ -116,8 +122,16 @@ test("Review: keyboard and buttons step through moves, board flips, filters work
   await page.click(SEL.chip("all"));
 });
 
-test("Trainer: a puzzle from your own games appears", async ({ page }) => {
+test("Puzzles: a summary of the last 5 games comes first; the board only after starting", async ({ page }) => {
   await tab(page, "trainer");
+  await waitFor(page, s => document.querySelectorAll(s).length === 5, { label: "5 recent games in the summary", arg: SEL.tSum + " .t-g", timeout: 60000 });
+  assert(/\d/.test(await text(page, SEL.tSum)), "summary has no blunder/mistake counts");
+  assert(!(await visible(page, SEL.tboard)), "the puzzle board shows before a session starts");
+  assert(await page.$(SEL.tMode("recent")) && await page.$(SEL.tMode("warm")), "training choices missing");
+});
+
+test("Trainer: a puzzle from your own games appears", async ({ page }) => {
+  await page.click(SEL.tMode("recent"));
   await waitFor(page, () => !!window.rcTest.puzzle(), { label: "a puzzle", timeout: 60000 });
   assert((await text(page, SEL.tPrompt)).length > 0, "no prompt");
   assert(await page.$eval(SEL.tboard, e => !!e.querySelector("svg")), "puzzle board missing");
@@ -135,13 +149,13 @@ test("Trainer: a wrong move gets feedback and an engine explanation", async ({ p
       await waitFor(page, ([s, san]) => { const t = document.querySelector(s).textContent; return t.includes(san) && t.includes(san.replace(/[+#]/g, "")); }, { label: `Why panel naming the better move ${bestSan}`, arg: [SEL.tWhy, bestSan], timeout: 90000 });
       return;
     }
-    await page.click(SEL.tNext); await sleep(400); // that move was also fine; try the next puzzle
+    await nextPz(page); await sleep(100); // that move was also fine; try the next puzzle
   }
   throw new Error("never saw wrong-move feedback");
 });
 
 test("Trainer: hint and show answer", async ({ page }) => {
-  await page.click(SEL.tNext); await sleep(500);
+  await nextPz(page); await sleep(200);
   const before = await text(page, SEL.tFeedback);
   await page.click(SEL.tHint); await sleep(300);
   assert((await text(page, SEL.tFeedback)) !== before || (await page.$eval(SEL.tboard, e => e.innerHTML.length)) > 0, "hint did nothing");
@@ -150,7 +164,7 @@ test("Trainer: hint and show answer", async ({ page }) => {
 });
 
 test("Trainer: the right move is accepted and remembered after reload", async ({ page, base }) => {
-  await page.click(SEL.tNext); await sleep(500);
+  await nextPz(page); await sleep(200);
   const pz = await page.evaluate(() => window.rcTest.puzzle());
   await clickSquare(page, SEL.tboard, pz.best.slice(0, 2), pz.flip); await clickSquare(page, SEL.tboard, pz.best.slice(2, 4), pz.flip);
   await waitFor(page, s => !!document.querySelector(s), { label: "correct-move feedback", arg: SEL.tOk, timeout: 30000 });
@@ -158,6 +172,22 @@ test("Trainer: the right move is accepted and remembered after reload", async ({
   await goto(page, base, "#trainer");
   const tr = await lsGet(page, `rc.cc:${CC_USER}.trainer`);
   assert(tr && tr[pz.id] && tr[pz.id].ok, "solved puzzle not saved");
+});
+
+test("Puzzles: a session ends with a summary, then Train again or Back to Train", async ({ page }) => {
+  await tab(page, "trainer");
+  if (await visible(page, SEL.tPlay)) await page.click(SEL.tQuit); // the earlier session is still open
+  await waitFor(page, s => !!document.querySelector(s), { label: "warm-up choice", arg: SEL.tMode("warm") });
+  await page.click(SEL.tMode("warm"));
+  await waitFor(page, () => !!window.rcTest.puzzle(), { label: "a puzzle" });
+  for (let i = 0; i < 12 && !(await visible(page, SEL.tDone)); i++) { await page.click(SEL.tShow); await sleep(150); await page.click(SEL.tNext); await sleep(200); }
+  assert(await visible(page, SEL.tDone), "no summary at the end of the session");
+  const nums = (await text(page, SEL.tDone + " .kpis")).match(/\d+/g) || [];
+  assert(nums.length === 3 && +nums[1] > 0, `summary should show solved, missed and best run: ${nums}`);
+  await page.click(SEL.tAgain);
+  await waitFor(page, s => !document.querySelector(s).hidden && !!window.rcTest.puzzle(), { label: "Train again starts a new session", arg: SEL.tPlay });
+  await page.click(SEL.tQuit);
+  await waitFor(page, s => !document.querySelector(s).hidden, { label: "back to the Train hub", arg: SEL.tHub });
 });
 
 test("Progress: insights, key numbers, charts, endings and openings", async ({ page }) => {
