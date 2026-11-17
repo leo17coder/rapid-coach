@@ -15,7 +15,7 @@ const SEL = {
   tboard: "#tboard", tHint: "#tHint", tShow: "#tShow", tNext: "#tNext", tPrompt: "#tPrompt", tFeedback: "#tFeedback", tOk: "#tFeedback .v-ok", tNo: "#tFeedback .v-no", tWhy: "#tWhy",
   tSum: "#tSum", tHub: "#tHub", tPlay: "#tPlay", tDone: "#tDone", tMode: m => `#tModes [data-mode="${m}"]`, tAgain: "#tAgain", tBack: "#tBack", tQuit: "#tQuit",
   insights: "#insights", kpis: "#pKpis", charts: ["#ratingFig", "#timeFig", "#errFig"], ends: "#ends", opRows: "#opBody tr", syncBtn: "#syncBtn",
-  homePlan: "#hPlan .plan-card", lsTracks: "#lsTracks", oMain: "#oMain", oEmpty: "#oEmpty",
+  homePlan: "#hPlan .plan-card", lsTracks: "#lsTracks", oMain: "#oGal", oEmpty: "#oPage", oCard: ".ocard[data-k]", oCol: v => `input[name="oCol"][value="${v}"]`, oPage: "#oPage", oName: "#opName", oDrill: "#oDrill", oPractise: "#opPractise", oPrompt: "#oPrompt",
   setBtn: "#setBtn", settings: "#settings", theme: v => `input[name="sTheme"][value="${v}"]`, setClose: "#setClose",
 };
 const TABS = ["home", "review", "train/puzzles", "train/lessons", "progress", "train/openings"];
@@ -214,6 +214,26 @@ test("Lessons and Openings open", async ({ page }) => {
   await waitFor(page, s => document.querySelector(s).children.length > 0, { label: "lesson tracks", arg: SEL.lsTracks });
   await tab(page, "openings");
   assert((await visible(page, SEL.oMain)) || (await visible(page, SEL.oEmpty)), "openings screen empty");
+});
+
+test("Openings: cards follow the White/Black switch and open an opening page", async ({ page }) => {
+  await tab(page, "openings");
+  const keys = () => page.$$eval(SEL.oCard, as => as.filter(a => a.offsetParent).map(a => a.dataset.k));
+  await page.$eval(SEL.oCol("w"), e => e.click());
+  await waitFor(page, s => document.querySelectorAll(s).length > 5, { label: "opening cards", arg: SEL.oCard });
+  let k = await keys();
+  assert(k.length > 5 && k.every(x => x.startsWith("w|")), `White shows other cards: ${k.slice(0, 5)}`);
+  await page.$eval(SEL.oCol("b"), e => e.click()); await sleep(300);
+  k = await keys();
+  assert(k.length > 5 && k.every(x => x.startsWith("b|")), `Black shows other cards: ${k.slice(0, 5)}`);
+  const mine = await page.$eval("#oMine", e => e.querySelectorAll(".ocard").length);
+  assert(mine > 0, "the player's own Black openings are missing");
+  await page.click(SEL.oCard);
+  await waitFor(page, ([p, n]) => !document.querySelector(p).hidden && document.querySelector(n).textContent.trim().length > 0, { label: "opening page", arg: [SEL.oPage, SEL.oName] });
+  assert(/\d/.test(await text(page, "#oKpis")), "opening page has no stats");
+  await page.click(SEL.oPractise);
+  await waitFor(page, ([d, p]) => !document.querySelector(d).hidden && document.querySelector(p).textContent.trim().length > 0, { label: "opening drill", arg: [SEL.oDrill, SEL.oPrompt], timeout: 30000 });
+  await page.$eval(SEL.oCol("w"), e => e.click());
 });
 
 test("Settings: dark theme applies and is remembered", async ({ page, base }) => {

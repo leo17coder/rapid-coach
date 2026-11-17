@@ -10,7 +10,7 @@
 <link rel="preload" href="vendor/fonts/atkinson-next-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/literata-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;d.dataset.theme=u.v3&&u.theme?u.theme:u.theme==="light"?"light":"dark";if(u.board)d.dataset.board=u.board}catch(e){document.documentElement.dataset.theme="dark"}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-18d">
+<link rel="stylesheet" href="style.css?v=2026-11-18e">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -227,33 +227,58 @@
 
 <!-- OPENING TRAINER (reached from Progress → Openings → Practise) -->
 <section id="v-openings" hidden>
-  <p class="small"><a class="back" href="#progress"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg>Progress</a></p>
-  <div id="oEmpty" hidden><h1>Opening trainer</h1><p class="sub">Play a few more games: an opening needs at least 3 of your games to practise.</p></div>
-  <div class="grid" id="oMain">
-    <div class="board-col">
-      <div class="sess" id="oSess" aria-live="polite"></div>
-      <div class="board-row"><div class="evalbar" id="oEv" hidden></div><div class="boardwrap" id="oboard"></div></div>
-      <div class="ctl ctl-2"><button id="oRestart" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-rotate-ccw"/></svg>Restart line</button><button id="oNext" class="pri" type="button">Next line<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-skip-forward"/></svg></button></div>
+  <!-- gallery: my openings first, then popular ones (vendor/openings-popular-*.json) -->
+  <div id="oGal">
+    <div class="o-top">
+      <div class="seg" role="radiogroup" data-i18n-attr="aria-label:op.colour" aria-label="Colour"><label><input type="radio" name="oCol" value="w" checked><span data-i18n="op.white">As White</span></label><label><input type="radio" name="oCol" value="b"><span data-i18n="op.black">As Black</span></label></div>
     </div>
-    <div>
-      <label class="small" for="oPick">Opening</label>
-      <select id="oPick" style="width:100%;margin:4px 0 14px"></select>
-      <h1 id="oTitle">Opening trainer</h1>
-      <p class="sub">Play your side of the lines you really reach. Opponents reply the way yours did.</p>
-      <div class="coach-card">
-        <div id="oPrompt" class="verdict v-info"><span class="skel" style="width:50%" aria-label="Loading"></span></div>
-        <div id="oFeedback"></div>
-        <div class="why" id="oWhy" aria-live="polite"></div>
+    <div id="oMine"></div>
+    <h2 class="o-h" data-i18n="op.popular">Popular openings</h2>
+    <div class="o-grid" id="oPop"></div>
+    <p class="small o-src" data-i18n="op.src">Order: how often club players choose each opening online, ranked by hand. Names from the lichess-org/chess-openings list (CC0).</p>
+  </div>
+  <!-- one opening: stats, the two ways to train it, weak spots, the Lichess explorer -->
+  <div id="oPage" hidden>
+    <div class="rv-top"><a class="back" href="#train/openings"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg><span data-i18n="op.all">All openings</span></a></div>
+    <div class="op-hero">
+      <div class="op-board" id="opBoard"></div>
+      <div class="op-info">
+        <h2 class="op-name" id="opName"></h2>
+        <p class="o-mv" id="opMoves"></p>
+        <div class="kpis" id="oKpis"></div>
+        <p class="small" id="oEffect"></p>
+        <div class="op-act" id="opAct"></div>
       </div>
-      <div class="kpis" id="oKpis"></div>
-      <p class="small" id="oEffect"></p>
-      <h2>Weak spots</h2>
-      <ol class="op-weak" id="oWeak"></ol>
-      <p class="small">A move counts as right when it's your pinned repertoire move, the engine's move, or within 6 win-percentage points of it. Positions you miss come back sooner; one you get right three reviews in a row counts as learned.</p>
-      <div class="panel" style="margin-top:16px">
-        <h2>More opponent moves</h2>
-        <p class="small" id="oExNote"></p>
-        <button id="oExBtn" type="button">Connect Lichess</button>
+    </div>
+    <div id="opWeakBox">
+      <h2 data-i18n="op.weak">Weak spots</h2>
+      <p class="small" data-i18n="op.weakP">Positions where you often go wrong or score badly. Tap one to practise from there.</p>
+      <div class="o-weak" id="oWeak"></div>
+    </div>
+    <details class="panel op-ex">
+      <summary><span data-i18n="op.exH">More opponent moves from Lichess</span></summary>
+      <p class="small" id="oExNote"></p>
+      <button id="oExBtn" type="button">Connect Lichess</button>
+    </details>
+  </div>
+  <!-- the drill: play my side of the lines I reach -->
+  <div id="oDrill" hidden>
+    <div class="rv-top"><a class="back" id="oBack" href="#train/openings"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg><span id="oBackL"></span></a></div>
+    <div class="grid">
+      <div class="board-col">
+        <div class="sess" id="oSess" aria-live="polite"></div>
+        <div class="board-row"><div class="evalbar" id="oEv" hidden></div><div class="boardwrap" id="oboard"></div></div>
+        <div class="ctl ctl-2"><button id="oRestart" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-rotate-ccw"/></svg><span data-i18n="op.restart">Restart line</span></button><button id="oNext" class="pri" type="button"><span data-i18n="op.nextLine">Next line</span><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-skip-forward"/></svg></button></div>
+      </div>
+      <div>
+        <h2 class="t-title" id="oTitle"></h2>
+        <p class="sub" data-i18n="op.drillP">Play your side of the lines you really reach. Opponents reply the way yours did.</p>
+        <div class="coach-card">
+          <div id="oPrompt" class="verdict v-info"><span class="skel" style="width:50%" aria-label="Loading"></span></div>
+          <div id="oFeedback"></div>
+          <div class="why" id="oWhy" aria-live="polite"></div>
+        </div>
+        <p class="small" data-i18n="op.rule">A move counts as right when it's your pinned repertoire move, the engine's move, or within 6 win-percentage points of it. Positions you miss come back sooner; one you get right three reviews in a row counts as learned.</p>
       </div>
     </div>
   </div>
@@ -378,9 +403,9 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-18d"></script>
-<script src="i18n/en.js?v=2026-11-18d"></script>
+<script src="config.js?v=2026-11-18e"></script>
+<script src="i18n/en.js?v=2026-11-18e"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-18d"></script>
+<script src="app.js?v=2026-11-18e"></script>
 </body>
 </html>

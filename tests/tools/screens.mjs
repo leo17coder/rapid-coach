@@ -32,6 +32,13 @@ for (const r of routes) {
     await page.click(`#tModes [data-mode="${r === "puzzle" ? "recent" : "warm"}"]`); await sleep(800);
     if (r === "pzdone") for (let i = 0; i < 12 && await page.$eval("#tDone", e => e.hidden); i++) { await page.click(i % 2 ? "#tShow" : "#tHint"); await sleep(150); await page.click("#tNext"); await sleep(250); }
   }
+  // "oppage": the page of my most played opening as White; "opdrill": its drill
+  else if (r === "oppage" || r === "opdrill") {
+    await page.evaluate(() => { location.hash = "train/openings"; }); await sleep(800);
+    await page.$eval('input[name="oCol"][value="w"]', e => e.click()); await sleep(300);
+    await page.click("#oMine .ocard"); await sleep(800);
+    if (r === "opdrill") await page.click("#opPractise");
+  }
   else await page.evaluate(h => { location.hash = h; }, r);
   await sleep(1200);
   for (const t of ["dark", "light"]) for (const w of [390, 1440]) await shot(r, w, t);

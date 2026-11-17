@@ -1,4 +1,4 @@
-Opening names in vendor/chess-openings-2026-11/names.json
+Opening names in vendor/chess-openings-2026-11/names.json and vendor/openings-popular-2026-11.json
 
 Source: lichess-org/chess-openings, https://github.com/lichess-org/chess-openings
 (commit 3ba6b20d31b2e6125cb0e6a2e792f400717d9d39, 5 November 2026).
@@ -7,7 +7,12 @@ Source: lichess-org/chess-openings, https://github.com/lichess-org/chess-opening
 Creative Commons CC0 1.0 Universal: https://creativecommons.org/publicdomain/zero/1.0/
 No rights are reserved; this note is a courtesy, not a requirement.
 
-Rapid Coach keeps only the ECO codes and names of the positions that occur in its opening
-lessons (tools/build-openings.js), keyed by position.
+Kibitz keeps only the ECO codes and names of the positions that occur in its opening
+lessons (tools/build-openings.js), keyed by position, and the names of the popular openings
+shown in the Openings gallery (tools/build-popular.cjs).
 
-Rapid Coach is not affiliated with Lichess.
+vendor/openings-popular-2026-11.json: 35 openings for White and 33 for Black. The order is
+ranked by hand by how often club players choose each opening in online games; it is a guide,
+not a measurement. Every line was played with chess.js and named from chess-openings.
+
+Kibitz is not affiliated with Lichess.
