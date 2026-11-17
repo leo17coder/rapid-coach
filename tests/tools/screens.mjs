@@ -39,6 +39,8 @@ for (const r of routes) {
     await page.click("#oMine .ocard"); await sleep(800);
     if (r === "opdrill") await page.click("#opPractise");
   }
+  // "course": the page of the second tactics course
+  else if (r === "course") { await page.evaluate(() => { location.hash = "train/lessons"; }); await sleep(800); await page.click('.lcard[data-co]:nth-of-type(2)'); }
   else await page.evaluate(h => { location.hash = h; }, r);
   await sleep(1200);
   for (const t of ["dark", "light"]) for (const w of [390, 1440]) await shot(r, w, t);

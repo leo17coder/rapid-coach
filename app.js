@@ -553,7 +553,7 @@ function renderOpGal(){const col=LS.get(uk("opcol"),OPSEL?OPSEL[0]:"w");document
  const sh=OPALL?pop:pop.slice(0,12);setHTML($("#oPop"),OPOP?sh.map(o=>opCard(o,col)).join("")+(sh.length<pop.length?`<button type="button" class="o-more" id="oMore">${esc(T("op.more",{n:pop.length-sh.length}))}</button>`:""):`<span class="skel" style="width:40%"></span>`);const mb=$("#oMore");if(mb)mb.onclick=()=>{OPALL=true;renderOpGal()}}
 document.querySelectorAll('input[name="oCol"]').forEach(r=>r.onchange=()=>{LS.set(uk("opcol"),r.value);renderOpGal()});
 /* "Learn the main lines": the lesson course's recommended lesson */
-function opLearn(id){const co=TRACKS[1].courses.find(c=>c.id===id);if(!co)return;const ch=opRec(co)||co.chapters[0];location.hash="train/lessons";openLesson(nextLesson(ch).id)}
+function opLearn(id){if(!COIDX[id])return;LCO=id;LP=null;if(route.sec==="lessons")renderLessons();else location.hash="train/lessons"}
 const opCourseOf=k=>{const p=(OPOP&&OPOP[k[0]]||[]).find(x=>k.slice(2)===x.n);return p&&p.c?(TRACKS[1].courses.find(c=>c.id===p.c)?p.c:null):opCourseFor(k[0],k.slice(2))};
 function renderOpPage(){const k=OVW.k,col=k[0],fam=k.slice(2),gs=OT.games,p=(OPOP&&OPOP[col]||[]).find(x=>x.n===fam),m=gs.length?opDef(gs):p?p.m:(opLines(col,fam)[0]||{m:""}).m.split(" ").slice(0,4).join(" ");
  const c=opFen(m),h=c.history({verbose:true}),last=h[h.length-1];
@@ -1236,7 +1236,7 @@ const PNM={p:"pawn",n:"knight",b:"bishop",r:"rook",q:"queen",k:"king"};
 
 /* ---------- LESSONS TAB: priority list, profile, tracks; lesson player; teaching pages ---------- */
 const LB=new Board($("#lboard"),{onMove:(f,t)=>lsMove(f,t),label:"Lesson board"}),LW=new Why($("#lWhy"),LB,new EvalBar($("#lEv")));let PGB=[],LTK=0;
-function lsView(v){$("#lsHome").hidden=v!=="home";$("#lsPlay").hidden=v!=="play";$("#lsPage").hidden=v!=="page";if(v!=="play")LW.clear();window.scrollTo(0,0)}
+function lsView(v){$("#lsHome").hidden=v!=="home";$("#lsCourse").hidden=v!=="course";$("#lsPlay").hidden=v!=="play";$("#lsPage").hidden=v!=="page";if(v!=="play")LW.clear();window.scrollTo(0,0)}
 /* a priority target: a lesson id, or a puzzle course, which resolves to its next lesson in the chapter from pzRec */
 function lsTarget(x,W){if(!x)return null;if(LIDX[x])return LIDX[x];const C=COIDX[x];if(!C||!(C.co.pz||C.co.op||C.co.eg))return null;const ch=C.co.pz?pzRec(C.co,W):C.co.op?opRec(C.co):egRec(C.co);return ch?{...CIDX[ch.id],l:nextLesson(ch)}:null}
 /* endgame courses: the course for an ending type, and the chapter to start at: the first unfinished lesson chapter whose range
@@ -1257,15 +1257,27 @@ function prioBtn(x,i,W){const T=lsTarget(x.to,W),cl=i===0?"pri":"";
  if(T){const p=LSP["l:"+x.to]||{};return `<button class="${cl}" type="button" data-ls="${x.to}">${p.d?"Practise again":p.s?"Continue":"Start lesson"}</button>`}
  if(x.to==="openings")return `<button type="button" data-op="${esc(x.op||"")}">${ic("book-open","sm")}Opening trainer</button>`;
  return x.k==="clock"?'<a class="small" href="#progress">See your clock use</a>':'<a class="small" href="#review">Review your games</a>'}
-function renderLessons(){LP=null;lsView("home");const L=lvl(),auto=lvlAuto(),s=stats(),B=baseSecs();
- $("#lsLevel").innerHTML=LVLS.map(([id,n])=>`<option value="${id}"${id===L?" selected":""}>${n}${id===auto?" (suggested)":""}</option>`).join("");
- $("#lsLevelNote").textContent=GAMES.length?`Suggested from your rating${s.rating?` (${s.rating}${P.source==="li"?" on Lichess":""})`:""}${s.nAn>=10&&s.errs!=null?` and accuracy (${s.errs.toFixed(1)} mistakes a game)`:""}. Change it any time.`:"Suggested because there are no games yet.";
- const an=GAMES.filter(g=>g.an),pend=an.slice(-MT_GAMES).filter(g=>!(g.mt&&g.mt.v===MT_V)).length,pr=lsPriority().slice(0,5),W=wkProfile();
+/* Lessons home: track switch (Tactics / Endgames; opening courses open from Openings), level chips, the top 3 priorities,
+   a grid of course cards (progress ring, "For you"), the weakness profile behind a disclosure; a course opens its own page (LCO). */
+let LCO=null;
+const coRec=(co,W)=>co.pz?pzRec(co,W):co.op?opRec(co):co.eg?egRec(co):co.chapters.find(ch=>!chDone(ch))||null;
+const ring=(p,lbl)=>{const r=20,c=2*Math.PI*r;return `<svg class="ring" viewBox="0 0 48 48" role="img" aria-label="${esc(lbl)}"><circle cx="24" cy="24" r="${r}" fill="none" stroke="var(--sunken)" stroke-width="6"/>${p>0?"":"<!--"}<circle cx="24" cy="24" r="${r}" fill="none" stroke="${p>=1?"var(--gold)":"var(--primary)"}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${(c*p).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 24 24)"/>${p>0?"":"-->"}<text x="24" y="28.5" text-anchor="middle">${Math.round(p*100)}%</text></svg>`};
+function coCard(co,W,fy){const nd=co.chapters.filter(chDone).length,n=co.chapters.length,rec=coRec(co,W),f=fy.has(co.id);
+ return `<button type="button" class="lcard${f?" fy":""}" data-co="${co.id}">${ring(nd/n,T("ls.ringL",{d:nd,n}))}<span class="lcard-t"><span class="lcard-h"><b>${esc(co.name)}</b>${f?`<span class="chip xp">${esc(T("ls.forYou"))}</span>`:""}</span><span class="lcard-d">${esc(co.desc)}</span><span class="lcard-m">${rec?esc(T(nd?"ls.next":"ls.startAt",{ch:rec.short||rec.name})):`${ic("award","sm")}${esc(T("ls.done"))}`}</span></span></button>`}
+function renderCourse(id,W){const C=COIDX[id];if(!C){LCO=null;return renderLessons()}const co=C.co,L=lvl(),nd=co.chapters.filter(chDone).length,n=co.chapters.length,rec=coRec(co,W);
+ const fy=new Set([co.id]);lsView("course");
+ $("#coHead").innerHTML=`${ring(nd/n,T("ls.ringL",{d:nd,n}))}<div><p class="small">${esc(C.t.name)}</p><h2 class="co-name">${esc(co.name)}</h2><p class="co-desc">${esc(co.desc)}</p><div class="op-act">${rec?`<button class="pri lg" type="button" data-ch="${rec.id}">${ic("play")}${esc(T(rec.lessons.some(l=>(LSP["l:"+l.id]||{}).s)?"ls.cont":"ls.start",{ch:rec.short||rec.name}))}</button>`:`<span class="chip gold">${ic("award","sm")}${esc(T("ls.done"))}</span>`}${PAGES[co.id]?`<button class="lg" type="button" data-pg="${co.id}">${ic("book-open")}${esc(T("ls.idea"))}</button>`:""}</div></div>`;
+ $("#lsCoBody").innerHTML=courseHTML(co,L,W,fy).replace(/^<details /,"<details open ")}
+function renderLessons(){LP=null;const W=wkProfile();if(LCO)return renderCourse(LCO,W);lsView("home");const L=lvl(),auto=lvlAuto(),s=stats(),B=baseSecs(),tr=LS.get("lsTrack","tactics");
+ document.querySelectorAll('input[name="lsTrack"]').forEach(r=>r.checked=r.value===tr);
+ $("#lsLevel").innerHTML=LVLS.map(([id,n])=>`<button type="button" class="lvl-chip" role="radio" aria-checked="${id===L}" data-lv="${id}">${esc(n)}${id===auto?`<span class="sr-only"> (${esc(T("ls.suggested"))})</span><i aria-hidden="true">•</i>`:""}</button>`).join("");
+ $("#lsLevelNote").textContent=(GAMES.length?T("ls.lvlNote",{lv:lvlName(auto)})+(s.rating?" "+T("ls.lvlRating",{r:s.rating}):""):T("ls.lvlNone"))+" "+T("ls.lvlChange");
+ const an=GAMES.filter(g=>g.an),pend=an.slice(-MT_GAMES).filter(g=>!(g.mt&&g.mt.v===MT_V)).length,pr=lsPriority().slice(0,5);
  // work on these first; beginners get First steps at the top until it's done
  const fsOpen=["new","beg"].includes(L)&&TRACKS[0].courses[0].chapters.some(ch=>!chDone(ch)),fsL=fsOpen?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null;
- const items=(fsL?[{k:"fs",name:"First steps",to:fsL.id,reason:"The basics every game is built on: moves, checkmate and keeping pieces safe."}]:[]).concat(pr).slice(0,5);
+ const items=(fsL?[{k:"fs",name:"First steps",to:fsL.id,reason:"The basics every game is built on: moves, checkmate and keeping pieces safe."}]:[]).concat(pr).slice(0,3);
  $("#lsPrio").innerHTML=items.length?items.map((x,i)=>`<li class="prio-item${i===0?" top":""}"><span class="prio-n">${i+1}</span><div class="prio-txt"><b>${esc(x.name)}</b><span class="small">${esc(x.reason)}</span></div>${prioBtn(x,i,W)}</li>`).join("")
-  :`<li class="empty">${an.length?pend?"Working out your weak spots from your analysed games…":"Not enough mistakes to rank yet. Nicely played.":"Analyse a few games and your personal list appears here."}</li>`;
+  :`<li class="empty">${esc(T(an.length?pend?"ls.prioWait":"ls.prioClean":"ls.prioNone"))}</li>`;
  // profile by theme (longer bar = more points lost a game) and strengths
  const rows=Object.entries(W.T).map(([k,x])=>({k,n:MOT[k].n,c:x.d/W.n,cnt:x.n})).sort((a,b)=>b.c-a.c),mx=Math.max(.1,...rows.map(r=>r.c)),bar=(n,c,cnt,col,m)=>`<li><span class="bar-l">${esc(n)}</span><span class="bar-t"><b style="width:${Math.max(3,c/(m||mx)*100)}%;background:${col}"></b></span><span class="bar-v num" title="${cnt} mistakes">${c.toFixed(1)}</span></li>`;
  const good=[];if(W.n>=8){[["hang","No hanging pieces"],["fork_missed","No missed forks"],["mate_missed","No missed mates"],["fork_allowed","No forks allowed"]].forEach(([k,t])=>{if(!W.T[k])good.push(`${t} in your last ${W.n} games`)});
@@ -1277,9 +1289,10 @@ function renderLessons(){LP=null;lsView("home");const L=lvl(),auto=lvlAuto(),s=s
  $("#lsPhase").innerHTML=W.n?`<ul class="bars">${Object.entries(W.PH).map(([k,x])=>bar(PHN[k],x.d/W.n,x.n,"var(--q-mistake)",pm)).join("")}</ul>`+
   (Object.keys(W.ET).length?`<h3 class="h-small">Endings</h3><ul class="good">${Object.entries(W.ET).sort((a,b)=>b[1].d-a[1].d).map(([k,x])=>`<li>${ic("flag","sm")}${esc(ENDT[k])}: ${x.n} mistake${x.n>1?"s":""}</li>`).join("")}</ul>`:"")
   :'<div class="empty">Phases appear with your profile.</div>';
- // tracks > courses > chapters > lessons; puzzle courses on your priority list are marked "For you" and open
- const fy=new Set(pr.map(x=>x.to).filter(t=>COIDX[t]));TRACKS[1].courses.forEach(co=>{const p=opPlays(co);if(p.w+p.b>=3)fy.add(co.id)});
- $("#lsTracks").innerHTML=TRACKS.map(t=>`<div class="track"><h2>${ic(t.icon)}${esc(t.name)}</h2>${t.id==="tactics"?`<p class="small">First steps for new players, then puzzle courses on every common tactic and mating pattern, from real games, up to about 1800.</p>`:""}${t.id==="endgames"?`<p class="small">The endings every player needs, from the basic mates to Lucena and Philidor: short lessons with positions to solve and positions to play out against Stockfish, plus endgame puzzles from real games up to about 2200. Courses for the endings you go wrong in are marked.</p>`:""}${t.id==="openings"?`<p class="small">Guided lines with a coach note on every key move, the traps to know, and tactics from real games in each opening. Courses for the openings you play are marked and open.</p><p><button type="button" data-op="">${ic("book-open","sm")}Opening trainer: drill the lines you really play</button></p>`:""}${t.courses.length?t.courses.map((co,i)=>(co.pz&&!t.courses[i-1].pz?`<h3 class="h-small pz-h">Puzzle courses</h3><p class="small">Real positions from the Lichess puzzle database, from easy to hard. Each course has a chapter per rating range; you start at the one that fits you.</p>`:"")+courseHTML(co,L,W,fy)).join(""):`<p class="small">${esc(t.soon)}</p>${t.id==="openings"?`<button type="button" data-op="">${ic("book-open","sm")}Open the opening trainer</button>`:""}`}</div>`).join("");
+ // course cards of the chosen track; courses on the priority list (and endings I go wrong in) are marked "For you"
+ const fy=new Set(pr.map(x=>x.to).filter(t=>COIDX[t]));if(fsOpen)fy.add(TRACKS[0].courses[0].id);
+ const t=TRACKS.find(x=>x.id===tr)||TRACKS[0];
+ $("#lsTracks").innerHTML=`<p class="small ls-tdesc">${esc(T(t.id==="endgames"?"ls.egDesc":"ls.tacDesc"))}</p>`+t.courses.map(co=>coCard(co,W,fy)).join("");
  if(pend)TG.run()}
 /* placement checks may have one miss in four (none in shorter checks) */
 const lsAllow=n=>n>=4?1:0;
@@ -1318,10 +1331,11 @@ function egCourseHTML(co,fy){const rec=egRec(co),f=fy.has(co.id),nd=co.chapters.
   `<span class="small">${esc(co.desc)}</span><span class="bands" role="img" aria-label="${nd} of ${co.chapters.length} chapters done">${co.chapters.map(ch=>`<i class="${chDone(ch)?"done":ch===rec?"on":""}"></i>`).join("")}</span></summary>`+
   `<div class="pz-body">${co.chapters.filter(ch=>!ch.pz).map(chH).join("")}${pc.length?`<h3 class="h-small">Endgame puzzles from real games${sk?` <span class="small">· your level here: about <b class="num">${sk}</b></span>`:""}</h3>`+pc.map(chH).join(""):""}</div></details>`}
 /* one handler for every lessons button */
-$("#v-lessons").addEventListener("click",e=>{const b=e.target.closest("button[data-ls],button[data-pg],button[data-ch],button[data-test],button[data-op]");if(!b)return;
- if(b.dataset.ls)openLesson(b.dataset.ls);else if(b.dataset.pg)openPage(b.dataset.pg);else if(b.dataset.ch)openLesson(nextLesson(CIDX[b.dataset.ch].ch).id);else if(b.dataset.test)openTest(b.dataset.test);
+$("#v-lessons").addEventListener("click",e=>{const b=e.target.closest("button[data-ls],button[data-pg],button[data-ch],button[data-test],button[data-op],button[data-co],button[data-lv]");if(!b)return;
+ if(b.dataset.co){LCO=b.dataset.co;renderLessons()}else if(b.dataset.lv){LSP.lvl={v:b.dataset.lv};saveLSP("lvl");renderLessons()}else if(b.dataset.ls)openLesson(b.dataset.ls);else if(b.dataset.pg)openPage(b.dataset.pg);else if(b.dataset.ch)openLesson(nextLesson(CIDX[b.dataset.ch].ch).id);else if(b.dataset.test)openTest(b.dataset.test);
  else if(b.dataset.op!=null){if(b.dataset.op)opGo(b.dataset.op,true);else location.hash="train/openings"}});
-$("#lsLevel").onchange=()=>{LSP.lvl={v:$("#lsLevel").value};saveLSP("lvl");renderLessons()};
+$("#coBack").onclick=()=>{LCO=null;renderLessons()};
+document.querySelectorAll('input[name="lsTrack"]').forEach(r=>r.onchange=()=>{LS.set("lsTrack",r.value);renderLessons()});
 $("#lBack").onclick=$("#pgBack").onclick=()=>renderLessons();
 /* player: a lesson (steps in order, progress saved) or a placement check (first try counts). Puzzle lessons pick each puzzle when
    it's reached (pzPick); puzzle steps have m (moves: the opponent's setup move, then the solution) and track miss/help. */
@@ -1968,7 +1982,7 @@ function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;OTC.clear();LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;LCO=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;OTC.clear();LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=T("start.noGames",{tc:T("tc."+P.tc),u:P.user,site:SRC[P.source].name});$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}

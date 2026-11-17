@@ -216,6 +216,19 @@ test("Lessons and Openings open", async ({ page }) => {
   assert((await visible(page, SEL.oMain)) || (await visible(page, SEL.oEmpty)), "openings screen empty");
 });
 
+test("Lessons: course cards follow the track switch and open a course page", async ({ page }) => {
+  await tab(page, "lessons");
+  await page.$eval('input[name="lsTrack"][value="endgames"]', e => e.click()); await sleep(200);
+  const eg = await page.$$eval(".lcard[data-co]", bs => bs.map(b => b.dataset.co));
+  await page.$eval('input[name="lsTrack"][value="tactics"]', e => e.click()); await sleep(200);
+  const tac = await page.$$eval(".lcard[data-co]", bs => bs.map(b => b.dataset.co));
+  assert(eg.length >= 3 && tac.length >= 10 && !eg.some(x => tac.includes(x)), `track switch shows the wrong courses: ${eg} / ${tac}`);
+  await page.click(`.lcard[data-co="${tac[1]}"]`);
+  await waitFor(page, () => !document.querySelector("#lsCourse").hidden && document.querySelectorAll("#lsCoBody button[data-ls]").length > 0, { label: "course page with lessons" });
+  await page.click("#coBack");
+  await waitFor(page, () => !document.querySelector("#lsHome").hidden, { label: "back to the lessons home" });
+});
+
 test("Openings: cards follow the White/Black switch and open an opening page", async ({ page }) => {
   await tab(page, "openings");
   const keys = () => page.$$eval(SEL.oCard, as => as.filter(a => a.offsetParent).map(a => a.dataset.k));

@@ -10,7 +10,7 @@
 <link rel="preload" href="vendor/fonts/atkinson-next-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/literata-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;d.dataset.theme=u.v3&&u.theme?u.theme:u.theme==="light"?"light":"dark";if(u.board)d.dataset.board=u.board}catch(e){document.documentElement.dataset.theme="dark"}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-18e">
+<link rel="stylesheet" href="style.css?v=2026-11-18f">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -159,16 +159,26 @@
 <!-- LESSONS: priority list, profile and tracks; the lesson player; teaching pages -->
 <section id="v-lessons" hidden>
   <div id="lsHome">
-    <div class="ls-head">
-      <div><h1>Lessons</h1><p class="sub">Built around the mistakes in your own games, in three tracks: tactics and checkmate patterns, openings, and endgames. From your first game to strong club level.</p></div>
-      <div class="ls-level"><label for="lsLevel">Your level</label><select id="lsLevel"></select><span class="small" id="lsLevelNote"></span></div>
+    <div class="ls-top">
+      <div class="seg ls-seg" role="radiogroup" data-i18n-attr="aria-label:ls.track" aria-label="Track"><label><input type="radio" name="lsTrack" value="tactics" checked><span data-i18n="ls.tactics">Tactics</span></label><label><input type="radio" name="lsTrack" value="endgames"><span data-i18n="ls.endgames">Endgames</span></label></div>
+      <div class="ls-lvl"><span class="ls-lvl-l" id="lsLevelL" data-i18n="ls.level">Your level</span><div class="lvl-chips" id="lsLevel" role="radiogroup" aria-labelledby="lsLevelL"></div></div>
     </div>
-    <div class="panel ls-prio-panel"><h2>Work on these first</h2><ol class="prio" id="lsPrio"></ol></div>
-    <div class="two" style="margin-top:var(--s5)">
-      <div class="panel"><h2>Your profile</h2><div id="lsProfile"></div></div>
-      <div class="panel"><h2>By phase</h2><div id="lsPhase"></div></div>
-    </div>
-    <div class="tracks" id="lsTracks"></div>
+    <p class="small" id="lsLevelNote"></p>
+    <div class="panel ls-prio-panel"><h2 data-i18n="ls.first">Work on these first</h2><ol class="prio" id="lsPrio"></ol></div>
+    <div class="ls-grid" id="lsTracks"></div>
+    <p class="small ls-opnote"><span data-i18n="ls.opNote">Opening lessons are on each opening's page in Openings.</span> <button class="link" type="button" data-co="principles" data-i18n="ls.opPrinciples">New to openings? Start with the opening principles</button></p>
+    <details class="ls-wk">
+      <summary data-i18n="ls.wk">See your weakness profile</summary>
+      <div class="two">
+        <div class="panel"><h2 data-i18n="ls.profile">Your profile</h2><div id="lsProfile"></div></div>
+        <div class="panel"><h2 data-i18n="ls.phase">By phase</h2><div id="lsPhase"></div></div>
+      </div>
+    </details>
+  </div>
+  <div id="lsCourse" hidden>
+    <div class="rv-top"><button class="link back" type="button" id="coBack"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg><span data-i18n="ls.all">All lessons</span></button></div>
+    <div class="co-head" id="coHead"></div>
+    <div id="lsCoBody"></div>
   </div>
   <div id="lsPlay" hidden>
     <p class="small"><button class="link back" type="button" id="lBack"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg>All lessons</button></p>
@@ -403,9 +413,9 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-18e"></script>
-<script src="i18n/en.js?v=2026-11-18e"></script>
+<script src="config.js?v=2026-11-18f"></script>
+<script src="i18n/en.js?v=2026-11-18f"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-18e"></script>
+<script src="app.js?v=2026-11-18f"></script>
 </body>
 </html>

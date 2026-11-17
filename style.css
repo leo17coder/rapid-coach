@@ -536,3 +536,30 @@ dialog form{display:grid;gap:var(--s2);margin-bottom:var(--s3)}
 .op-ex{margin-top:var(--s5)}.op-ex summary{cursor:pointer;font-weight:700;min-height:28px}
 @media(max-width:700px){.op-hero{grid-template-columns:1fr}.op-board{max-width:300px}}
 .o-more{grid-column:1/-1;justify-self:start}
+
+/* ---------- Train › Lessons: home, course cards, course page ---------- */
+.ls-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--s3) var(--s5);margin-bottom:var(--s2)}
+.ls-seg{min-width:min(100%,300px)}
+.ls-lvl{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}.ls-lvl-l{font-weight:700;font-size:var(--fs-sm);color:var(--muted)}
+.lvl-chips{display:flex;flex-wrap:wrap;gap:var(--s1)}
+.lvl-chip{min-height:44px;padding:0 var(--s3);border-radius:var(--r-pill);font-size:var(--fs-sm);font-weight:700;color:var(--muted);background:var(--surface);border:1.5px solid var(--border-strong)}
+.lvl-chip i{font-style:normal;color:var(--gold);margin-left:4px}
+.lvl-chip[aria-checked=true]{color:var(--primary);background:var(--primary-soft);border-color:var(--primary)}
+#lsLevelNote{margin:0 0 var(--s4)}
+.ls-grid{display:grid;gap:var(--s3);grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));margin-top:var(--s5)}
+.ls-tdesc{grid-column:1/-1;margin:0}
+.lcard{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:56px minmax(0,1fr);gap:var(--s3);align-items:start;padding:var(--s4);border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--border);transition:border-color var(--t-fast)}
+.lcard:hover{border-color:var(--border-strong)}.lcard:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.lcard.fy{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));background:var(--raised)}
+.lcard-t{display:grid;gap:var(--s1);min-width:0}.lcard-h{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s2)}.lcard-h b{font:600 var(--fs-md)/1.3 var(--f-display)}
+.lcard-d{color:var(--muted);font-size:var(--fs-sm);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.lcard-m{display:flex;align-items:center;gap:var(--s1);font-size:var(--fs-sm);font-weight:700}
+.ring{width:56px;height:56px}.ring text{font:800 11px var(--f-ui);fill:var(--text)}
+.ls-opnote{margin:var(--s4) 0 0}
+.ls-wk{margin-top:var(--s5)}.ls-wk>summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;color:var(--primary)}
+.ls-wk .two{margin-top:var(--s3)}
+.co-head{display:grid;grid-template-columns:72px minmax(0,1fr);gap:var(--s4);align-items:start;margin-bottom:var(--s5)}.co-head .ring{width:72px;height:72px}
+.co-head p.small{margin:0}.co-name{margin:0 0 var(--s1);font-size:var(--fs-2xl)}.co-desc{margin:0;color:var(--muted);max-width:65ch}
+#lsCoBody .course>summary,#lsCoBody .course>.course-h,#lsCoBody .course>.course-h+p.small{display:none}
+#lsCoBody .course{background:none;border:0;padding:0}
+#lsCoBody .pz-body>.row:first-child:has(button[data-pg]){display:none}
