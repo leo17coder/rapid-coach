@@ -147,10 +147,11 @@ function applyI18n(root){(root||document).querySelectorAll("[data-i18n]").forEac
  (root||document).querySelectorAll("[data-i18n-attr]").forEach(e=>e.dataset.i18nAttr.split(";").forEach(p=>{const [a,k]=p.split(":");e.setAttribute(a,T(k))}));document.documentElement.lang=LANG}
 LANG=langPick();
 /* dates: "Today, 14:32", "Yesterday", "Sun 15 Nov, 14:32" (year only when it isn't this year) */
+const LOC=()=>LANG==="en"?"en-GB":LANG;
 const dayKey=d=>d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate();
 function fmtDay(ts){const d=new Date(ts),n=new Date(),y=new Date(n-864e5);if(dayKey(d)===dayKey(n))return T("date.today");if(dayKey(d)===dayKey(y))return T("date.yesterday");
- return new Intl.DateTimeFormat(LANG,{weekday:"short",day:"numeric",month:"short",...(d.getFullYear()!==n.getFullYear()?{year:"numeric"}:{})}).format(d)}
-const fmtTime=ts=>new Intl.DateTimeFormat(LANG,{hour:"2-digit",minute:"2-digit"}).format(new Date(ts)),fmtWhen=ts=>fmtDay(ts)+", "+fmtTime(ts);
+ return new Intl.DateTimeFormat(LOC(),{weekday:"short",day:"numeric",month:"short",...(d.getFullYear()!==n.getFullYear()?{year:"numeric"}:{})}).format(d)}
+const fmtTime=ts=>new Intl.DateTimeFormat(LOC(),{hour:"2-digit",minute:"2-digit"}).format(new Date(ts)),fmtWhen=ts=>fmtDay(ts)+", "+fmtTime(ts);
 const RM=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
 const ic=(n,c)=>`<svg class="ic${c?" "+c:""}" aria-hidden="true" focusable="false"><use href="vendor/icons.svg#i-${n}"/></svg>`;
 function applyUI(){const d=document.documentElement;d.dataset.theme=UI.theme;d.dataset.board=UI.board;BOARDS.forEach(b=>b.draw())}
@@ -333,11 +334,13 @@ Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.
 /* draw a sentence and lines ({title, c: "red"|"green", x: {fen, L}, lab: {t}}); also used by the start screen's demo */
 Why.prototype.render=function(say,lines){this.lines=lines;this.cur=null;
  this.el.innerHTML=`<p class="why-say">${esc(say)}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${l.title}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
-  `<p class="why-moves">${wMoves(l.x.fen,l.x.L.slice(0,WHY_SHOW)).map((m,k)=>`${m.num?`<span class="num">${m.num}</span> `:""}<button class="why-mv" type="button" data-k="${k+1}">${esc(m.san)}</button>`).join(" ")}</p>`+
-  `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">${ic("chevron-left","sm")}Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward${ic("chevron-right","sm")}</button><button class="link" type="button" data-a="reset">Back to the position</button></div></div>`).join("");
- this.el.querySelectorAll(".why-line").forEach(d=>{const i=+d.dataset.i;d.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>this.step(i,+b.dataset.k));
-  d.querySelector('[data-a="back"]').onclick=()=>this.step(i,(this.cur&&this.cur.i===i?this.cur.k:1)-1);d.querySelector('[data-a="fwd"]').onclick=()=>this.step(i,(this.cur&&this.cur.i===i?this.cur.k:0)+1);
-  d.querySelector('[data-a="reset"]').onclick=()=>this.reset()})};
+  `<p class="why-moves">${wMoves(l.x.fen,l.x.L.slice(0,WHY_SHOW)).map((m,k)=>`${m.num?`<span class="num">${m.num}</span> `:""}<button class="why-mv" type="button" data-k="${k+1}">${esc(m.san)}</button>`).join(" ")}</p></div>`).join("")+
+  // one control row for all lines: it steps through the line last clicked (the better line to begin with)
+  `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">${ic("chevron-left","sm")}Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward${ic("chevron-right","sm")}</button><button class="link" type="button" data-a="reset">Back to the position</button></div>`;
+ this.el.querySelectorAll(".why-line").forEach(d=>{const i=+d.dataset.i;d.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>this.step(i,+b.dataset.k))});
+ const li=()=>this.cur?this.cur.i:this.lines.length-1;
+ this.el.querySelector('[data-a="back"]').onclick=()=>this.step(li(),(this.cur?this.cur.k:1)-1);this.el.querySelector('[data-a="fwd"]').onclick=()=>this.step(li(),(this.cur?this.cur.k:0)+1);
+ this.el.querySelector('[data-a="reset"]').onclick=()=>this.reset()};
 /* show line i after k plies: last move highlighted, arrow for the next move */
 Why.prototype.step=function(i,k){const l=this.lines[i];if(!l)return;const L=l.x.L.slice(0,WHY_SHOW);k=Math.max(0,Math.min(L.length,k));this.cur={i,k};this.b.lock=true;
  const m=L[k-1],nx=L[k],fen=k?m.fen:l.x.fen;this.b.set(fen,{last:m?{from:m.from,to:m.to}:null,arrows:nx?[{from:nx.from,to:nx.to,c:l.c}]:[]});
@@ -1458,104 +1461,143 @@ const gRow=()=>({weekly_xp:GS?wkSum(wkOf(dkey())).xp:0,xp_week:wkOf(dkey()),stre
 function lbPassed(rows){const wk=wkOf(dkey()),xp=r=>r.xp_week===wk?r.weekly_xp||0:0,me=rows.find(r=>r.is_me);if(!me)return [];const mine=xp(me),ahead=rows.filter(r=>!r.is_me&&xp(r)>mine).map(r=>r.display_name||"?");
  const prev=LS.get(uk("lbseen"),null),out=prev&&prev.wk===wk?prev.ahead.filter(n=>!ahead.includes(n)&&rows.some(r=>(r.display_name||"?")===n)):[];LS.set(uk("lbseen"),{wk,ahead});return out}
 
+/* ---------- GAME CARDS (Home's latest game, the Review list) ----------
+   A card shows when, the result and how, colours, opponent and ratings, opening and time control, a small board of the
+   decisive position and one sentence that sums the game up, built from fixed rules over the analysis (gameStory). */
+/* a static board picture (no input): FEN, orientation, {last: {from,to}, arrow: {from,to,c}} */
+function miniBoard(fen,flip,o){o=o||{};const B=new Chess(fen).board(),F="abcdefgh",xy=sq=>{let f=F.indexOf(sq[0]),r=8-+sq[1];return flip?[7-f,7-r]:[f,r]};let s="";
+ for(let r=0;r<8;r++)for(let f=0;f<8;f++){const [x,y]=flip?[7-f,7-r]:[f,r];s+=`<rect x="${x}" y="${y}" width="1" height="1" style="fill:var(${(r+f)%2?"--sq-d":"--sq-l"})"/>`}
+ if(o.last)for(const sq of [o.last.from,o.last.to]){const [x,y]=xy(sq);s+=`<rect x="${x}" y="${y}" width="1" height="1" style="fill:var(--hl-last)"/>`}
+ const src=p=>`vendor/pieces/${UI.pieces==="bold"?"bold":"cburnett"}/${p.color}${p.type.toUpperCase()}.svg`;
+ for(let r=0;r<8;r++)for(let f=0;f<8;f++){const p=B[r][f];if(!p)continue;const [x,y]=flip?[7-f,7-r]:[f,r];s+=`<image href="${src(p)}" x="${x}" y="${y}" width="1" height="1"/>`}
+ if(o.arrow){const [x1,y1]=xy(o.arrow.from),[x2,y2]=xy(o.arrow.to),dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy)||1,ux=dx/L,uy=dy/L,ex=x2+.5-ux*.32,ey=y2+.5-uy*.32,c=`var(--ar-${o.arrow.c||"red"})`;
+  s+=`<line x1="${x1+.5}" y1="${y1+.5}" x2="${ex}" y2="${ey}" stroke="${c}" stroke-width=".17" stroke-linecap="round" opacity=".9"/><path d="M${x2+.5} ${y2+.5} L${ex-uy*.26} ${ey+ux*.26} L${ex+uy*.26} ${ey-ux*.26}Z" fill="${c}" opacity=".9"/>`}
+ return `<svg class="mini" viewBox="0 0 8 8"${o.label?` role="img" aria-label="${esc(o.label)}"`:' aria-hidden="true"'}>${s}</svg>`}
+const mvTxt=(g,i)=>mvLabel(i)+g.moves[i];
+/* the result in words: "Won by checkmate", "Lost, you left the game", "Draw by repetition" */
+function resultLine(g){const h=g.how,r=g.result;if(r==="draw")return T("res.draw."+({agreed:"agreed",repetition:"rep",stalemate:"stale",insufficient:"ins","50move":"fifty",timevsinsufficient:"timeIns"}[h]||"x"));
+ const k={checkmated:"mate",resigned:"resign",timeout:"time",abandoned:"left"}[h]||"x";return T(`res.${r}.${k}`)}
+/* one sentence that sums the game up, and the ply of the position worth showing */
+function gameStory(g){if(!g.an)return {t:T("story.none"),p:null};replay(g);const sd=g.color==="w"?1:-1,n=g.an.ev.length-1,ev=p=>sd*(g.an.ev[p]==null?0:g.an.ev[p]),er=errorsOf(g);
+ const mine=er.filter(e=>e.mine&&e.kind!=="inacc"),theirs=er.filter(e=>!e.mine&&e.kind!=="inacc"),end=ev(n),evs=g.an.ev.map((_,p)=>ev(p)),mx=Math.max(...evs),mn=Math.min(...evs);
+ const S=(k,v,p)=>({t:T("story."+k,v),p:p==null?null:p});
+ if(g.result==="loss"&&g.how==="timeout")return S(end>=150?"timeBetter":end<=-150?"timeWorse":"time",null,null);
+ if(g.result==="loss"&&g.how==="abandoned")return S(end>=150?"leftBetter":end<=-150?"leftWorse":"left");
+ if(g.result==="win"&&g.how==="timeout"&&end<=-150)return S("theirTime");
+ const slip=mine.find(e=>e.before>=200&&e.after<120);
+ if(slip&&g.result!=="win")return S("slip",{mv:mvTxt(g,slip.i)},slip.i);
+ if(g.result==="win"){const gift=theirs.find(e=>-e.before<=80&&-e.after>=200);
+  if(!mine.length)return S(g.how==="checkmated"?"cleanMate":"clean",null,gift?gift.i:null);
+  if(mn<=-200&&mine.some(e=>e.after<=-200))return S("comeback",null,mine[mine.length-1].i);
+  if(gift)return S("gift",{n:Math.floor(gift.i/2)+1},gift.i);
+  return mine.length===1?S("winSlip",{mv:mvTxt(g,mine[0].i)},mine[0].i):S("winMessy",{n:mine.length},mine[0].i)}
+ if(g.result==="loss"){const big=mine.filter(e=>e.kind==="blunder").sort((a,b)=>b.drop-a.drop)[0];
+  if(big&&big.before>-150)return S("oneBlunder",{mv:mvTxt(g,big.i)},big.i);
+  if(!mine.length)return S("noMistakes");
+  return S("slips",{n:mine.length},mine[0].i)}
+ if(mx>=200)return S("drawWin",null,slip?slip.i:null);if(mn<=-200)return S("drawSaved");return S("drawEven")}
+/* the card itself; opts.compact for small lists */
+function gameCard(g){const st=gameStory(g),flip=g.color==="b";replay(g);const p=st.p,fen=p==null?g._f[g.moves.length]:g._f[p],m=p==null?g._m[g.moves.length-1]:g._m[p];
+ const board=miniBoard(fen,flip,p==null?{last:m?{from:m.from,to:m.to}:null}:{arrow:{from:m.from,to:m.to,c:"red"}}),col=T(g.color==="w"?"card.white":"card.black");
+ return `<article class="gcard ${g.result}"><div class="gcard-board">${board}</div><div class="gcard-body">`+
+  `<div class="gcard-top"><b class="gcard-res"><span class="dot" aria-hidden="true"></span>${esc(resultLine(g))}</b><span class="small num">${esc(fmtWhen(g.ts))}</span></div>`+
+  `<p class="gcard-who">${T("card.vs",{col,opp:esc(g.opp),oppR:g.oppR||"?",myR:g.myR||"?"})}</p><p class="small gcard-op">${esc(famOf(g.eco))}, ${esc(tcName(g.tc))}</p>`+
+  `<p class="story">${esc(st.t)}</p>`+
+  `<a class="gcard-link" href="#review" data-g="${esc(g.id)}"><span class="sr-only">${esc(T("card.open",{res:resultLine(g),opp:g.opp}))}</span></a>`+
+  (g.an?"":`<button class="gcard-an" type="button" data-an="${esc(g.id)}">${ic("cpu","sm")}${esc(T("card.analyse"))}</button>`)+`</div></article>`}
+const tcName=tc=>{const {base,inc}=tcParts(tc);return T(inc?"card.tcInc":"card.tc",{min:Math.round(base/60),inc})};
+/* one delegated handler for every game card on the page */
+document.addEventListener("click",e=>{const a=e.target.closest(".gcard-link[data-g]"),an=e.target.closest(".gcard-an[data-an]");
+ if(an){e.preventDefault();const g=GAMES.find(x=>x.id===an.dataset.an);if(g){queue([g],true);an.disabled=true;an.textContent=T("card.queued")}return}
+ if(a){e.preventDefault();const g=GAMES.find(x=>x.id===a.dataset.g);if(g){const s=gameStory(g);openGame(g,s.p!=null?s.p:keyPly(g));location.hash="review"}}});
+/* where a game view should open: the first key moment, else the start */
+const keyPly=g=>{const e=g.an?serious(replay(g))[0]:null;return e?e.i:0};
+
 /* ---------- HOME ---------- */
-const HTB=new Board($("#hThumb"),{label:"Biggest swing"});let HOMEtok=0,HSW=null;
+let HOMEtok=0;
 function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen),un=GAMES.filter(g=>!g.an).length,now=Date.now();
- const due=Object.values(OPS).filter(x=>x.due&&x.due<=now).length,loss=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an),pl=(n,w)=>n+" "+w+(n===1?"":"s");
- if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:`Retry ${pl(n,"puzzle")} you missed`,p:"Positions where you went wrong before. Getting them right is the fastest way to fix a habit.",xp:n*GX.pz,go:"#trainer",i:"rotate-ccw",cta:"Retry"})}
- if(due){const n=Math.min(due,10);C.push({imp:26+due*2,t:`Review ${pl(n,"opening position")}`,p:"They're due today. Missed ones come back sooner.",xp:n*GX.op,go:"#openings",i:"book-open",cta:"Review"})}
- if(loss&&!GS.rev[loss.id]){const e=errorsOf(replay(loss)).filter(x=>x.mine).sort((a,b)=>b.drop-a.drop)[0];
-  C.push({imp:28,t:`Review your loss vs ${loss.opp}`,p:e?`The game turned on move ${mvLabel(e.i)} ${loss.moves[e.i]} (${evTxt(e.before)} → ${evTxt(e.after)}).`:"Step through it and see where it turned.",xp:GX.rv,i:"scan-search",cta:"Review",act:()=>{openGame(loss,e?e.i:0);location.hash="review"}})}
- if(fresh.length){const n=Math.min(fresh.length,5);C.push({imp:20,t:`Solve ${pl(n,"new puzzle")} from your games`,p:"Every one is a position you got wrong in a real game.",xp:n*GX.pz,go:"#trainer",i:"puzzle",cta:"Solve"})}
- if(un){const n=Math.min(un,20);C.push({imp:15+n,t:`Analyse ${pl(n,"new game")}`,p:"Analysis finds your mistakes and turns them into puzzles.",xp:null,i:"cpu",cta:"Analyse",act:()=>{analyseRecent(20);renderHome()}})}
+ const due=Object.values(OPS).filter(x=>x.due&&x.due<=now).length,loss=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an);
+ if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:TP("plan.retry",n),p:T("plan.retryP"),xp:n*GX.pz,go:"#train/puzzles",i:"rotate-ccw",cta:T("plan.retryGo")})}
+ if(due){const n=Math.min(due,10);C.push({imp:26+due*2,t:TP("plan.due",n),p:T("plan.dueP"),xp:n*GX.op,go:"#train/openings",i:"book-open",cta:T("plan.dueGo")})}
+ if(loss&&!GS.rev[loss.id]){const s=gameStory(loss);C.push({imp:28,t:T("plan.loss",{opp:loss.opp}),p:s.t,xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>{openGame(loss,s.p!=null?s.p:keyPly(loss));location.hash="review"}})}
+ if(fresh.length){const n=Math.min(fresh.length,5);C.push({imp:20,t:TP("plan.fresh",n),p:T("plan.freshP"),xp:n*GX.pz,go:"#train/puzzles",i:"puzzle",cta:T("plan.freshGo")})}
+ if(un){const n=Math.min(un,20);C.push({imp:15+n,t:TP("plan.analyse",n),p:T("plan.analyseP"),xp:null,i:"cpu",cta:T("plan.analyseGo"),act:()=>{analyseRecent(20);renderHome()}})}
  const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
+ const colN=k=>T(k[0]==="w"?"card.asWhite":"card.asBlack");
  const weak=Object.entries(m).filter(([k,a])=>a.length>=5&&!ost[k]&&score(a)<45).sort((a,b)=>score(a[1])-score(b[1]))[0];
- if(weak)C.push({imp:18,t:`Start practising the ${weak[0].slice(2)} as ${weak[0][0]==="w"?"White":"Black"}`,p:`You score ${Math.round(score(weak[1]))}% in it over ${weak[1].length} games this year.`,xp:5*GX.op,i:"book-open",cta:"Start",act:()=>{OPSEL=weak[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
- const W=wkProfile(),lp=lsPriority().find(x=>{const T=lsTarget(x.to,W);return T&&!lsDone(T.l.id)}),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:"The basics: moves, checkmate and keeping pieces safe."}:lp;
- if(lx){const T=lsTarget(lx.to,W),left=T.l.steps.length-((LSP["l:"+T.l.id]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:`Lesson: ${T.co.pz||T.co.op||T.co.eg?T.ch.name+(T.co.eg&&!T.ch.pz?": "+T.l.name:""):T.l.name}`,p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:"Start",act:()=>{location.hash="lessons";openLesson(T.l.id)}})}
+ if(weak)C.push({imp:18,t:T("plan.weakOp",{op:weak[0].slice(2),col:colN(weak[0])}),p:T("plan.weakOpP",{s:Math.round(score(weak[1])),n:weak[1].length}),xp:5*GX.op,i:"book-open",cta:T("plan.weakOpGo"),act:()=>{OPSEL=weak[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="train/openings"}});
+ const W=wkProfile(),lp=lsPriority().find(x=>{const T=lsTarget(x.to,W);return T&&!lsDone(T.l.id)}),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:T("plan.firstSteps")}:lp;
+ if(lx){const Tg=lsTarget(lx.to,W),left=Tg.l.steps.length-((LSP["l:"+Tg.l.id]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:T("plan.lesson",{name:Tg.co.pz||Tg.co.op||Tg.co.eg?Tg.ch.name+(Tg.co.eg&&!Tg.ch.pz?": "+Tg.l.name:""):Tg.l.name}),p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:T("plan.lessonGo"),act:()=>{location.hash="train/lessons";openLesson(Tg.l.id)}})}
  // fallbacks so there are always a few things to do
- const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:`Review your game vs ${last.opp}`,p:"Step through it: wins have lessons too.",xp:GX.rv,i:"scan-search",cta:"Review",act:()=>{openGame(last,0);location.hash="review"}});
+ const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:T("plan.game",{opp:last.opp}),p:T("plan.gameP"),xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>{openGame(last,keyPly(last));location.hash="review"}});
  const top=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length)[0];
- if(C.length<3&&top&&!C.some(c=>/practising/.test(c.t)))C.push({imp:6,t:`Drill your ${top[0].slice(2)} as ${top[0][0]==="w"?"White":"Black"}`,p:`Your most played opening: ${top[1].length} games this year.`,xp:5*GX.op,i:"book-open",cta:"Drill",act:()=>{OPSEL=top[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"}});
+ if(C.length<3&&top&&!C.some(c=>c.i==="book-open"))C.push({imp:6,t:T("plan.drill",{op:top[0].slice(2),col:colN(top[0])}),p:TP("plan.drillP",top[1].length),xp:5*GX.op,i:"book-open",cta:T("plan.drillGo"),act:()=>{OPSEL=top[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="train/openings"}});
  return C.sort((a,b)=>b.imp-a.imp).slice(0,5)}
-function ringSVG(d,goal){const R=42,L=2*Math.PI*R;let off=0,s=`<svg viewBox="0 0 100 100" class="ring" role="img" aria-label="Daily goal ${Math.min(dayU(d),goal)} of ${goal}"><circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border)" stroke-width="10"/>`;
- for(const [k,col] of [["pz","var(--q-blunder)"],["op","var(--q-best)"],["rv","var(--secondary)"],["ls","var(--xp)"]]){const f=Math.min((d[k]||0)*GU[k],Math.max(0,goal-off))/goal;if(f<=0)continue;
+function ringSVG(d,goal,small){const R=42,L=2*Math.PI*R;let off=0,s=`<svg viewBox="0 0 100 100" class="ring${small?" sm":""}" role="img" aria-label="${esc(T("tro.ringLabel",{n:Math.min(dayU(d),goal),goal}))}"><circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border)" stroke-width="10"/>`;
+ for(const [k,col] of [["pz","var(--q-blunder)"],["op","var(--q-best)"],["rv","var(--info)"],["ls","var(--gold)"]]){const f=Math.min((d[k]||0)*GU[k],Math.max(0,goal-off))/goal;if(f<=0)continue;
   s+=`<circle cx="50" cy="50" r="${R}" fill="none" stroke="${col}" stroke-width="10" stroke-dasharray="${f*L} ${L}" stroke-dashoffset="${-off/goal*L}" transform="rotate(-90 50 50)"/>`;off+=f*goal}
- return s+`<text x="50" y="47" text-anchor="middle" class="ring-n">${Math.min(dayU(d),goal)}/${goal}</text><text x="50" y="63" text-anchor="middle" class="ring-l">${d.g?"goal met":"today"}</text></svg>`}
-function renderHome(){if(!P||!GS)return;const tok=++HOMEtok,hide=GS.set.hide,today=GS.days[dkey()]||{},goal=gGoal(),st=gStreak(),xp=gXP(),lv=gLevel(xp),w=wkSum(wkOf(dkey()));
- const hr=new Date().getHours();$("#hHello").textContent=`${hr<5?"Late session":hr<12?"Good morning":hr<18?"Good afternoon":"Good evening"}, ${P.user}.`;
- // plan
- const C=planCards();
- $("#hPlan").innerHTML=C.length?C.map((c,i)=>`<li class="plan-card${i===0?" top":""}"><span class="plan-ic" aria-hidden="true">${ic(c.i||"target")}</span><div class="plan-txt"><b>${esc(c.t)}</b><p>${esc(c.p)}</p></div><div class="plan-go">${!hide&&c.xp?`<span class="xp">${ic("zap","sm")}+${c.xp} XP</span>`:""}<button class="${i===0?"pri":""}" type="button" data-plan="${i}">${esc(c.cta||"Open")}</button></div></li>`).join("")
-  :'<li class="small">Nothing urgent. Play a few games and check back.</li>';
+ return s+(small?"":`<text x="50" y="47" text-anchor="middle" class="ring-n">${Math.min(dayU(d),goal)}/${goal}</text><text x="50" y="63" text-anchor="middle" class="ring-l">${esc(T(d.g?"tro.goalMet":"tro.today"))}</text>`)+"</svg>"}
+/* today's focus: the single most useful insight, with the action that trains it */
+function focusOf(){const ins=insights()[0];if(!ins)return null;return ins}
+function renderHome(){if(!P||!GS)return;++HOMEtok;const hide=GS.set.hide,today=GS.days[dkey()]||{},goal=gGoal(),st=gStreak(),xp=gXP(),lv=gLevel(xp);
+ const hr=new Date().getHours();$("#hHello").textContent=T(hr<5?"home.late":hr<12?"home.morning":hr<18?"home.afternoon":"home.evening",{name:P.user});
+ // today's focus: one sentence, one action
+ const f=focusOf();$("#hFocus").hidden=!f;if(f){$("#hFocus").innerHTML=`<h2 class="focus-k">${esc(T("home.focus"))}</h2><p class="focus-t">${esc(f.t)}</p><a class="btn-link" href="${f.go||"#train/puzzles"}">${esc(f.cta||T("home.focusGo"))}${ic("arrow-right","sm")}</a>`}
+ // today's plan: the top three, the first one is the main action
+ const C=planCards().slice(0,3);
+ $("#hPlan").innerHTML=C.length?C.map((c,i)=>`<li class="plan-card${i===0?" top":""}"><span class="plan-ic" aria-hidden="true">${ic(c.i||"target")}</span><div class="plan-txt"><b>${esc(c.t)}</b><p>${esc(c.p)}</p></div><div class="plan-go">${!hide&&c.xp?`<span class="xp">+${fmtN(c.xp)} XP</span>`:""}<button class="${i===0?"pri":"ghost"}" type="button" data-plan="${i}">${esc(c.cta||T("plan.open"))}</button></div></li>`).join("")
+  :`<li class="empty-line">${esc(T("plan.none"))}</li>`;
  $("#hPlan").querySelectorAll("[data-plan]").forEach(b=>b.onclick=()=>{const c=C[+b.dataset.plan];if(c.go)location.hash=c.go.slice(1);else c.act()});
- // gamification
- $("#hGame").hidden=hide;$("#hBadgesSec").hidden=hide;
- if(!hide){$("#hRing").innerHTML=ringSVG(today,goal);
-  $("#hRingTxt").innerHTML=`<h2>Daily goal</h2><ul class="goal-key"><li><span class="k" style="background:var(--q-blunder)"></span>Puzzles <b>${today.pz||0}</b></li><li><span class="k" style="background:var(--q-best)"></span>Opening positions <b>${today.op||0}</b></li><li><span class="k" style="background:var(--secondary)"></span>Games reviewed <b>${today.rv||0}</b></li><li><span class="k" style="background:var(--xp)"></span>Lesson steps <b>${today.ls||0}</b></li></ul><span class="small">A reviewed game counts 3.</span>`;
-  $("#hStreak").innerHTML=`<span class="streak-ic${st.cur?" on":""}" aria-hidden="true">${ic("flame","lg")}</span><div><b class="num">${st.cur}</b> <span class="streak-l">day streak</span><span class="small">${st.fz?`${ic("snowflake","sm")} ${st.fz} freeze${st.fz>1?"s":""} ready`:"A freeze every 7 days"} · best ${Math.max(st.best,GS.rec.ls||0)}</span></div>`;
-  $("#hLevel").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("shield-check")}<b>${esc(lv.name)}</b></span><span class="small num">${xp} XP · ${lv.to-xp} to ${esc(lv.next)}</span></div><div class="meter"><b style="width:${Math.round((xp-lv.from)/(lv.to-lv.from)*100)}%;background:var(--xp)"></b></div>`;
-  $("#hChallenge").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("trophy")}<b>${esc(w.ch.t)}</b></span><span class="small num">${w.chv}/${w.ch.n} · +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(w.chv/w.ch.n*100)}%;background:var(--gold)"></b></div>`;
-  $("#hBadges").innerHTML=BADGES.map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}" title="${esc(how)}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?"Earned "+dkey(GS.badges[id]):esc(how)}</span></li>`).join("");
-  const R=GS.rec;$("#hRecords").innerHTML=`<li>${ic("zap")}<div><b class="num">${R.bw||0}</b> XP<span class="small">best week</span></div></li><li>${ic("flame")}<div><b class="num">${Math.max(R.ls||0,st.best)}</b> days<span class="small">longest streak</span></div></li><li>${ic("shield-check")}<div><b class="num">${R.bb==null?"—":R.bb.toFixed(1)}</b><span class="small">fewest blunders + mistakes per game</span></div></li>`}
- $("#hInt").value=GS.set.int||"normal";$("#hHide").checked=!!hide;
- // since last visit
- const nw=SEEN0?GAMES.filter(g=>g.ts>SEEN0):GAMES.slice(-5),W=nw.filter(g=>g.result==="win").length,D=nw.filter(g=>g.result==="draw").length;
- $("#hSinceT").textContent=SEEN0?`Since your last visit (${dkey(SEEN0)})`:"Your latest games";
- let big=null;const rows=nw.slice().reverse().slice(0,6).map(g=>{const e=g.an?errorsOf(replay(g)).filter(x=>x.mine&&x.kind!=="inacc").sort((a,b)=>b.drop-a.drop)[0]:null;if(e&&(!big||e.drop>big.e.drop))big={g,e};
-  return `<li><span class="res ${g.result}">${g.result==="win"?"W":g.result==="loss"?"L":"D"}</span> vs ${esc(g.opp)} <span class="small">${esc(famOf(g.eco))}</span><br><span class="small">${!g.an?"Not analysed yet":e?`Worst moment: ${mvLabel(e.i)} ${esc(g.moves[e.i])} (${evTxt(e.before)} → ${evTxt(e.after)})`:"No serious mistakes"}</span></li>`});
- $("#hSince").innerHTML=nw.length?`<p class="small">${nw.length} game${nw.length>1?"s":""}: ${W} won, ${D} drawn, ${nw.length-W-D} lost · ${GAMES.filter(g=>g.an).length} of ${GAMES.length} analysed${AQ?" (analysing now)":""}</p><ul class="since">${rows.join("")}</ul>`:`<p class="small">No new games yet. ${GAMES.filter(g=>g.an).length} of ${GAMES.length} games analysed.</p>`;
- $("#hSwing").hidden=!big;HSW=big;if(big){const g=big.g,e=big.e,m=g._m[e.i];HTB.flip=g.color==="b";HTB.set(g._f[e.i],{arrows:[{from:m.from,to:m.to,c:"red"}].concat(e.best?[{from:e.best.slice(0,2),to:e.best.slice(2,4),c:"green"}]:[])});
-  $("#hSwingTxt").textContent=`Biggest swing: ${mvLabel(e.i)} ${g.moves[e.i]} vs ${g.opp}, ${evTxt(e.before)} → ${evTxt(e.after)}. Open it in Review.`}
- // at a glance
- const s=stats(),b=LS.get(uk("base."+P.tc),null),B=baseSecs(),arr=(v,bv,goodUp,f)=>bv==null||v==null||/^[0.]+%?$/.test(f(Math.abs(v-bv)))?"":`<span class="${(v>bv)===goodUp?"up-good":"up-bad"}">${ic(v>bv?"arrow-up":"arrow-down","sm")} ${f(Math.abs(v-bv))}</span>`;
- const tGood=b&&b.time!=null&&s.time!=null?Math.abs(s.time-B*.7)<Math.abs(b.time-B*.7):true;
- $("#hGlance").innerHTML=[["Rating",s.rating??"—",arr(s.rating,b&&b.rating,true,Math.round)],["Blunders + mistakes / game",s.errs==null?"—":s.errs.toFixed(1),arr(s.errs,b&&b.errs,false,x=>x.toFixed(1))],
-  ["Median time used",mmss(s.time),b&&b.time!=null&&s.time!=null&&Math.abs(s.time-b.time)>=1?`<span class="${tGood?"up-good":"up-bad"}">${ic(s.time>b.time?"arrow-up":"arrow-down","sm")} ${mmss(Math.abs(s.time-b.time))}</span>`:""],
-  ["Score, last 30",s.score==null?"—":Math.round(s.score)+"%",arr(s.score,b&&b.score,true,x=>Math.round(x)+"%")]].map(([l,v,a])=>`<div class="kpi"><b class="num">${v}</b>${l}<s>${a||"&nbsp;"}</s></div>`).join("")+
-  `<p class="small" style="grid-column:1/-1">${b?`Arrows compare with your baseline from ${b.date}.`:"Arrows appear once your baseline is set (after 10 analysed games)."}</p>`;
- const ins=insights(),eff=Object.entries(LS.get(uk("opstart"),{})).map(([k,t])=>opEffect(k,t)).filter(Boolean).sort((a,b)=>(b.a-b.b)-(a.a-a.b))[0];
- $("#hInsight").innerHTML=(ins[0]?`<div class="ins ${ins[0].c}"><b>${esc(ins[0].t)}</b><p>${esc(ins[0].p)}</p></div>`:"")+(eff&&!(ins[0]&&/practising/.test(ins[0].t))?`<p class="small">Since practising the ${esc(eff.fam)}: ${Math.round(eff.a)}% (was ${Math.round(eff.b)}%).</p>`:"");
- $("#hSign").hidden=!SB_ON||!!Sync.me;
- // mini leaderboard
- $("#hLb").hidden=true;if(SB_ON&&Sync.me)(async()=>{try{const pr=await Fr.profile();if(!pr.share||tok!==HOMEtok)return;const {data,error}=await Sync.sb.rpc("friends_leaderboard",{p_tc:P.tc});if(error||tok!==HOMEtok)return;
-  const wk=wkOf(dkey()),xpOf=r=>r.xp_week===wk?r.weekly_xp||0:0,rows=(data||[]).slice().sort((a,b)=>xpOf(b)-xpOf(a)),me=rows.findIndex(r=>r.is_me),top=rows.slice(0,3);if(me>2)top.push(rows[me]);
-  const pass=lbPassed(data||[]);if(!rows.length)return;$("#hLb").hidden=false;
-  $("#hLbBody").innerHTML=(pass.length?`<p class="verdict v-ok">${ic("party-popper")}You passed ${esc(pass.join(" and "))} this week!</p>`:"")+`<ol class="mini-lb">${top.map(r=>`<li class="${r.is_me?"me":""}"><span class="rank">${rows.indexOf(r)+1}</span><span class="who-n">${esc(r.display_name||"(no name)")}${r.is_me?" (you)":""}</span><span class="num">${ic("zap","sm")}${xpOf(r)} · ${ic("flame","sm")}${r.streak||0}</span></li>`).join("")}</ol>`}catch(e){}})()}
-$("#hInt").onchange=()=>{GS.set={...GS.set,int:$("#hInt").value,at:Date.now()};const d=GS.days[dkey()];if(d&&!d.g&&dayU(d)>=gGoal())d.g=1;gSave();renderHome()};
-$("#hHide").onchange=()=>{GS.set={...GS.set,hide:$("#hHide").checked,at:Date.now()};gSave();renderHome()};
-$("#hSwing").onclick=()=>{if(HSW){openGame(HSW.g,HSW.e.i);location.hash="review"}};
-$("#hSync").onclick=async()=>{$("#hSync").disabled=true;$("#hNote").textContent="Checking…";try{const n=await sync();$("#hNote").textContent=n?`${n} new game${n>1?"s":""} found.`:"No new games.";if(n)analyseRecent(n)}catch(e){$("#hNote").textContent=`Couldn't reach ${SRC[P.source].name}. Try again in a minute.`}$("#hSync").disabled=false;renderHome()};
-$("#hAn").onclick=()=>{analyseRecent(20);$("#hNote").textContent="Analysing up to 20 more games; see the bar at the top.";renderHome()};
-$("#hSwitch").onclick=()=>$("#switchBtn").click();$("#hSign").onclick=()=>acctOpen();
+ // streak, daily goal and level in one strip (details on Progress › Trophies)
+ $("#hStrip").hidden=hide;if(!hide)$("#hStrip").innerHTML=(st.cur?`<span class="hs-item">${ic("flame")}<b class="num">${fmtN(st.cur)}</b> ${esc(TP("home.streakLbl",st.cur))}</span>`:`<span class="hs-item">${ic("flame")}${esc(T("home.streakStart"))}</span>`)+`<span class="hs-item">${ringSVG(today,goal,true)}<span>${esc(T("home.goal",{n:fmtN(Math.min(dayU(today),goal)),goal:fmtN(goal)}))}</span></span><span class="hs-item">${ic("shield-check")}<b>${esc(lv.name)}</b>${xp?` <span class="num">${fmtN(xp)} XP</span>`:""}</span><span class="hs-more">${esc(T("home.trophies"))}${ic("chevron-right","sm")}</span>`;
+ // latest game, as in Review
+ const g=GAMES[GAMES.length-1],nw=SEEN0?GAMES.filter(x=>x.ts>SEEN0).length:0;
+ $("#hNew").textContent=nw>1?TP("home.newGames",nw):T("home.allGames");
+ $("#hLatest").innerHTML=g?gameCard(g):`<p class="empty-line">${esc(T("home.noGames"))}</p>`}
+
+/* ---------- TROPHIES (Progress › Trophies) ---------- */
+function renderTrophies(){if(!P||!GS)return;const today=GS.days[dkey()]||{},goal=gGoal(),st=gStreak(),xp=gXP(),lv=gLevel(xp),w=wkSum(wkOf(dkey()));
+ $("#tHiddenNote").hidden=!GS.set.hide;
+ $("#trLevel").innerHTML=`<span class="tro-ic">${ic("shield-check","lg")}</span><div><b class="tro-big">${esc(lv.name)}</b><span class="small num">${esc(T("tro.xpTo",{xp:fmtN(xp),left:fmtN(lv.to-xp),next:lv.next}))}</span><div class="meter"><b style="width:${Math.round((xp-lv.from)/(lv.to-lv.from)*100)}%;background:var(--gold)"></b></div></div>`;
+ $("#trStreak").innerHTML=`<span class="tro-ic${st.cur?" on":""}">${ic("flame","lg")}</span><div><b class="tro-big num">${esc(TP("home.streakDays",st.cur))}</b><span class="small">${esc(st.fz?TP("tro.freezes",st.fz):T("tro.freezeEvery"))}</span><span class="small">${esc(T("tro.best",{n:fmtN(Math.max(st.best,GS.rec.ls||0))}))}</span></div>`;
+ $("#hRing").innerHTML=ringSVG(today,goal);
+ $("#hRingTxt").innerHTML=`<b>${esc(T("tro.goalToday"))}</b><ul class="goal-key"><li><span class="k" style="background:var(--q-blunder)"></span>${esc(T("tro.kPz"))} <b>${today.pz||0}</b></li><li><span class="k" style="background:var(--q-best)"></span>${esc(T("tro.kOp"))} <b>${today.op||0}</b></li><li><span class="k" style="background:var(--info)"></span>${esc(T("tro.kRv"))} <b>${today.rv||0}</b></li><li><span class="k" style="background:var(--gold)"></span>${esc(T("tro.kLs"))} <b>${today.ls||0}</b></li></ul>`;
+ document.querySelectorAll('[name="hInt"]').forEach(r=>r.checked=r.value===(GS.set.int||"normal"));
+ $("#hChallenge").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("trophy")}<b>${esc(w.ch.t)}</b></span><span class="small num">${fmtN(w.chv)} / ${fmtN(w.ch.n)}, +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(Math.min(1,w.chv/w.ch.n)*100)}%;background:var(--gold)"></b></div>`;
+ const earned=BADGES.filter(([id])=>GS.badges[id]),locked=BADGES.filter(([id])=>!GS.badges[id]);
+ const show=earned.concat(locked.slice(0,Math.max(4,8-earned.length)));$("#hBadges").innerHTML=show.map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?esc(T("tro.earned",{d:fmtDay(GS.badges[id])})):esc(how)}</span></li>`).join("")+(show.length<BADGES.length?`<li class="badge-more"><button class="ghost" type="button" id="badgeAll">${esc(T("tro.allBadges",{n:BADGES.length}))}</button></li>`:"");
+ const ba=$("#badgeAll");if(ba)ba.onclick=()=>{$("#hBadges").innerHTML=earned.concat(locked).map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?esc(T("tro.earned",{d:fmtDay(GS.badges[id])})):esc(how)}</span></li>`).join("")};
+ const R=GS.rec;$("#hRecords").innerHTML=`<li>${ic("zap")}<div><b class="num">${fmtN(R.bw||0)} XP</b><span class="small">${esc(T("tro.bestWeek"))}</span></div></li><li>${ic("flame")}<div><b class="num">${esc(TP("home.streakDays",Math.max(R.ls||0,st.best)))}</b><span class="small">${esc(T("tro.longest"))}</span></div></li><li>${ic("shield-check")}<div><b class="num">${R.bb==null?"—":fmtN(R.bb,{maximumFractionDigits:1,minimumFractionDigits:1})}</b><span class="small">${esc(T("tro.fewest"))}</span></div></li>`}
+document.querySelectorAll('[name="hInt"]').forEach(r=>r.onchange=()=>{GS.set={...GS.set,int:r.value,at:Date.now()};const d=GS.days[dkey()];if(d&&!d.g&&dayU(d)>=gGoal())d.g=1;gSave();renderTrophies()});
 
 /* ---------- PROGRESS + rule-based insights ---------- */
 function stats(){const G=GAMES,recent=G.slice(-30),an=G.filter(g=>g.an),lastAn=an.slice(-20);
  const tu=recent.map(timeUsed).filter(x=>x!=null),errs=lastAn.map(g=>serious(g).length);
  return {rating:G.length?G[G.length-1].myR:null,time:median(tu),errs:errs.length?errs.reduce((a,b)=>a+b,0)/errs.length:null,score:score(recent),nAn:an.length}}
 function maybeBaseline(){if(LS.get(uk("base."+P.tc),null))return;const s=stats();if(s.nAn>=10){LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10)});Sync.mark("base",acct()+"|"+P.tc)}}
+/* insights: fixed rules, plain words; each has a short title t, a paragraph p, and where to train it (go, cta) */
 function insights(){const G=GAMES,yr=G.filter(g=>g.ts>Date.now()-365*864e5),an=G.filter(g=>g.an).slice(-50),out=[];const B=baseSecs();
  if(!an.length&&!yr.length)return out;
  const errs=[];an.forEach(g=>{replay(g);const all=errorsOf(g);all.filter(e=>e.mine&&e.kind!=="inacc").forEach(e=>errs.push({g,e,prev:all.find(o=>o.i===e.i-1&&!o.mine&&o.kind!=="inacc")}))});
- const tu=G.slice(-30).map(timeUsed).filter(x=>x!=null),med=median(tu);
- if(med!=null&&med<B*.5){const plenty=errs.filter(o=>o.g.clocks&&o.g.clocks[o.e.i]>B*.3).length,think=median(errs.map(o=>spent(o.g,o.e.i)).filter(x=>x!=null));
-  out.push({w:10,c:"hi",t:`You use only ${mmss(med)} of your ${Math.round(B/60)} minutes`,p:`${errs.length?`${Math.round(plenty/errs.length*100)}% of your blunders and mistakes came with plenty of time left, after a median of ${think}s thought. `:""}Aim to use ${mmss(B*.7)}: spend the extra time checking your opponent's checks, captures and threats before every move.`})}
- if(errs.length>=5){const win=errs.filter(o=>o.e.before>200).length;if(win/errs.length>=.35)out.push({w:9,c:"hi",t:"You let winning positions slip",p:`${win} of your ${errs.length} blunders and mistakes in the last ${an.length} analysed games came when you were already clearly winning. When you're ahead, slow down and look for your opponent's counterplay before cashing in.`})}
- const unp=errs.filter(o=>o.prev).length;if(unp>=3)out.push({w:8,c:"hi",t:"You don't punish their blunders",p:`${unp} times your opponent blundered and your reply let them off the hook. After every opponent move, ask: what did that move leave undefended?`});
- const mates=errs.filter(o=>o.e.after<=-9000||(o.e.before>=9000&&o.e.after<9000)).length;if(mates>=2)out.push({w:7,c:"hi",t:"Mate blind spots",p:`${mates} times you allowed or missed a forced mate. Before each move, check every check available — to you and to your opponent.`});
+ const tu=G.slice(-30).map(timeUsed).filter(x=>x!=null),med=median(tu),colN=c=>T(c==="w"?"card.white":"card.black"),I=(w,c,k,v,go,cta)=>out.push({w,c,t:T("ins."+k+".t",v),p:T("ins."+k+".p",v),go,cta:T(cta)});
+ const lastLoss=G.slice().reverse().find(g=>g.result==="loss");
+ if(med!=null&&med<B*.5){const plenty=errs.filter(o=>o.g.clocks&&o.g.clocks[o.e.i]>B*.3).length;
+  I(10,"hi","time",{used:mmss(med),min:Math.round(B/60),aim:mmss(B*.7),pct:errs.length?Math.round(plenty/errs.length*100):0},"#review","ins.goReview")}
+ if(errs.length>=5){const win=errs.filter(o=>o.e.before>200).length;if(win/errs.length>=.35)I(9,"hi","slip",{n:win,all:errs.length,games:an.length},"#train/puzzles","ins.goPuzzles")}
+ const unp=errs.filter(o=>o.prev).length;if(unp>=3)I(8,"hi","punish",{n:unp},"#train/puzzles","ins.goPuzzles");
+ const mates=errs.filter(o=>o.e.after<=-9000||(o.e.before>=9000&&o.e.after<9000)).length;if(mates>=2)I(7,"hi","mates",{n:mates},"#train/lessons","ins.goLessons");
  if(errs.length>=8){const ph={opening:0,middlegame:0,endgame:0};errs.forEach(o=>{const m=o.e.i/2+1;ph[m<=12?"opening":m<=30?"middlegame":"endgame"]++});const top=Object.entries(ph).sort((a,b)=>b[1]-a[1])[0];
-  if(top[1]/errs.length>=.45)out.push({w:5,c:"",t:`Most errors happen in the ${top[0]}`,p:`${top[1]} of ${errs.length} serious errors came in the ${top[0]} (${top[0]==="opening"?"moves 1–12":top[0]==="middlegame"?"moves 13–30":"move 31 onwards"}).${top[0]==="opening"?" Learning the plans behind your two main openings will pay off quickly.":top[0]==="endgame"?" Basic king-and-pawn and rook endings are worth an hour a week.":" Tactics puzzles are the fastest fix."}`})}
- const losses=yr.filter(g=>g.result==="loss");if(losses.length>=10){const to=losses.filter(g=>g.how==="timeout").length;if(to/losses.length>=.2)out.push({w:8,c:"hi",t:"You lose on time",p:`${to} of your ${losses.length} losses in the last year were on time. Set a rough budget: about a third of your clock for the first 15 moves.`})}
+  if(top[1]/errs.length>=.45)I(5,"","ph_"+top[0],{n:top[1],all:errs.length},top[0]==="opening"?"#train/openings":top[0]==="endgame"?"#train/lessons":"#train/puzzles",top[0]==="opening"?"ins.goOpenings":top[0]==="endgame"?"ins.goLessons":"ins.goPuzzles")}
+ const losses=yr.filter(g=>g.result==="loss");if(losses.length>=10){const to=losses.filter(g=>g.how==="timeout").length;if(to/losses.length>=.2)I(8,"hi","onTime",{n:to,all:losses.length},"#review","ins.goReview")}
  const op={};yr.forEach(g=>{const k=g.color+"|"+famOf(g.eco);(op[k]=op[k]||[]).push(g)});const ops=Object.entries(op).filter(([,a])=>a.length>=15).map(([k,a])=>({k,n:a.length,s:score(a)}));
  const worst=ops.slice().sort((a,b)=>a.s-b.s)[0],best=ops.slice().sort((a,b)=>b.s-a.s)[0];
- if(worst&&worst.s<44)out.push({w:6,c:"hi",t:`Fix your ${worst.k.split("|")[1]}`,p:`As ${worst.k[0]==="w"?"White":"Black"} it scores ${Math.round(worst.s)}% over ${worst.n} games this year. Review your losses in it, or switch to a line you understand better.`});
- if(best&&best.s>58)out.push({w:3,c:"ok",t:`Your ${best.k.split("|")[1]} works`,p:`${Math.round(best.s)}% over ${best.n} games as ${best.k[0]==="w"?"White":"Black"} this year. Keep steering towards it.`});
- const long=yr.filter(g=>g.moves.length>=120);if(long.length>=10){const d=score(yr)-score(long);if(d>=10)out.push({w:5,c:"",t:"Long games cost you",p:`You score ${Math.round(score(long))}% in games past move 60, against ${Math.round(score(yr))}% overall. Endgame technique is a cheap source of rating points.`})}
- const w=yr.filter(g=>g.color==="w"),b=yr.filter(g=>g.color==="b");if(w.length>=30&&b.length>=30){const d=score(w)-score(b);if(Math.abs(d)>=8)out.push({w:4,c:"",t:`Weaker with ${d>0?"Black":"White"}`,p:`${Math.round(score(w))}% with White vs ${Math.round(score(b))}% with Black over the last year.`})}
- const ost=LS.get(uk("opstart"),{});for(const k in ost){const e=opEffect(k,ost[k]);if(e)out.push({w:6.5,c:e.a>=e.b?"ok":"",t:`Since practising the ${e.fam} you score ${Math.round(e.a)}% (was ${Math.round(e.b)}%)`,
-  p:`As ${e.col==="w"?"White":"Black"}: ${e.na} games since you started on ${e.date}, against ${e.nb} games in the year before.${e.a>=e.b?" Keep drilling it.":" Keep at it: the weak spots in the opening trainer show where the points go."}`})}
- if(!out.length&&an.length>=10)out.push({w:1,c:"ok",t:"No big leaks right now",p:"Nothing stands out across your recent games. Keep doing puzzles from your own mistakes and review every loss."});
- return out.sort((a,b)=>b.w-a.w).slice(0,5)}
+ if(worst&&worst.s<44)I(6,"hi","worstOp",{op:worst.k.split("|")[1],col:colN(worst.k[0]),s:Math.round(worst.s),n:worst.n},"#train/openings","ins.goOpenings");
+ if(best&&best.s>58)I(3,"ok","bestOp",{op:best.k.split("|")[1],col:colN(best.k[0]),s:Math.round(best.s),n:best.n},"#train/openings","ins.goOpenings");
+ const long=yr.filter(g=>g.moves.length>=120);if(long.length>=10){const d=score(yr)-score(long);if(d>=10)I(5,"","long",{s:Math.round(score(long)),all:Math.round(score(yr))},"#train/lessons","ins.goLessons")}
+ const w=yr.filter(g=>g.color==="w"),b=yr.filter(g=>g.color==="b");if(w.length>=30&&b.length>=30){const d=score(w)-score(b);if(Math.abs(d)>=8)I(4,"","colour",{col:colN(d>0?"b":"w"),w:Math.round(score(w)),b:Math.round(score(b))},"#train/openings","ins.goOpenings")}
+ const ost=LS.get(uk("opstart"),{});for(const k in ost){const e=opEffect(k,ost[k]);if(e)I(6.5,e.a>=e.b?"ok":"",e.a>=e.b?"effUp":"effDown",{op:e.fam,a:Math.round(e.a),b:Math.round(e.b),col:colN(e.col),na:e.na,nb:e.nb,d:fmtDay(Date.parse(e.date))},"#train/openings","ins.goOpenings")}
+ if(!out.length&&an.length>=10)I(1,"ok","none",{},"#train/puzzles","ins.goPuzzles");
+ void lastLoss;return out.sort((a,b)=>b.w-a.w).slice(0,5)}
 function chart(el,pts,o){const draw=()=>{const W=el.clientWidth||500,H=el.clientHeight||260,pad={l:44,r:10,t:10,b:24};if(pts.length<2){el.innerHTML='<div class="empty" style="height:100%;display:grid;place-items:center">Not enough games yet</div>';return}
  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y).concat(o.goal!=null?[o.goal]:[]),x0=Math.min(...xs),x1=Math.max(...xs),y0=o.y0!=null?o.y0:Math.min(...ys),y1=Math.max(...ys)+(o.pad||0);
  const X=x=>pad.l+(x1===x0?.5:(x-x0)/(x1-x0))*(W-pad.l-pad.r),Y=y=>pad.t+(1-(y-y0)/((y1-y0)||1))*(H-pad.t-pad.b);
@@ -1610,12 +1652,15 @@ function demoStop(){clearInterval(demoT);demoT=null}
 function inviteBanner(on){$("#inviteBanner").hidden=!on}
 $("#invSign").onclick=()=>acctOpen();
 const srcPick=()=>(document.querySelector('input[name="uSrc"]:checked')||{}).value||"cc";
-function srcLabel(){const s=srcPick();$("#uNameLbl").textContent=SRC[s].name+" username";$("#uName").placeholder=s==="li"?"e.g. thibault":"e.g. magnuscarlsen"}
+function srcLabel(){const s=srcPick();$("#uNameLbl").textContent=T("start.user",{site:SRC[s].name});$("#uName").placeholder=s==="li"?"thibault":"magnuscarlsen"}
+/* the language switch on the start screen (also in Settings) */
+function langSw(){$("#langSw").setAttribute("aria-label",T("start.lang"));$("#langSw").innerHTML=LANGS.filter(l=>I18N[l]).map(l=>`<button type="button" class="ghost" data-lang="${l}" lang="${l}"${l===LANG?' aria-pressed="true"':' aria-pressed="false"'} title="${esc(I18N[l]["lang.name"]||l)}">${l.toUpperCase()}</button>`).join("")}
+$("#langSw").onclick=e=>{const b=e.target.closest("[data-lang]");if(b){setLang(b.dataset.lang);langSw();srcLabel()}};
 document.querySelectorAll('input[name="uSrc"]').forEach(r=>r.onchange=()=>{srcLabel();LS.set("lastSrc",srcPick())});
-$("#startForm").onsubmit=async e=>{e.preventDefault();const u=$("#uName").value.trim().toLowerCase(),tc=$("#uTc").value,s=srcPick(),nm=SRC[s].name;if(!u)return;
- $("#startBtn").disabled=true;$("#startMsg").textContent=`Looking you up on ${nm}…`;
+$("#startForm").onsubmit=async e=>{e.preventDefault();const u=$("#uName").value.trim().toLowerCase(),tc=(document.querySelector('input[name="uTc"]:checked')||{}).value||"600",s=srcPick(),nm=SRC[s].name;if(!u)return;
+ $("#startBtn").disabled=true;$("#startMsg").textContent=T("start.lookup",{site:nm});
  try{const p=s==="li"?await api(`${LI}/api/user/${encodeURIComponent(u)}`,liOpts()):await api(`https://api.chess.com/pub/player/${encodeURIComponent(u)}`);if(p&&p.disabled)throw new Error("notfound")}
- catch(x){$("#startMsg").textContent=x.message==="notfound"?`No ${nm} player called “${u}”.`:`Couldn't reach ${nm}. Check your connection and try again.`;$("#startBtn").disabled=false;return}
+ catch(x){$("#startMsg").textContent=x.message==="notfound"?T("start.notFound",{site:nm,u}):T("start.noReach",{site:nm});$("#startBtn").disabled=false;return}
  P={source:s,user:u,tc};LS.set("profile",P);await enter(true)};
 $("#switchBtn").onclick=()=>{GEN++;Engine.q.length=0;LS.set("profile",null);P=null;location.hash="";boot()};
 
@@ -1820,16 +1865,16 @@ applyUI();
 /* ---------- routing ---------- */
 /* routes: the hash path -> the section it shows. Four tabs (home, review, train, progress); Train and Progress have sections.
    route.cur is the path ("train/puzzles"); route.sec the section ("trainer"). Links from before the redesign redirect. */
-const ROUTES={home:"home",review:"review","train/puzzles":"trainer","train/openings":"openings","train/lessons":"lessons",progress:"progress","progress/friends":"friends"};
+const ROUTES={home:"home",review:"review","train/puzzles":"trainer","train/openings":"openings","train/lessons":"lessons",progress:"progress","progress/trophies":"trophies","progress/friends":"friends"};
 const OLDR={trainer:"train/puzzles",openings:"train/openings",lessons:"train/lessons",friends:"progress/friends","progress/overview":"progress"};
-const SUBS={train:[["train/puzzles","train.puzzles"],["train/openings","train.openings"],["train/lessons","train.lessons"]],progress:[["progress","progress.overview"],["progress/friends","progress.friends","friends"]]};
+const SUBS={train:[["train/puzzles","train.puzzles"],["train/openings","train.openings"],["train/lessons","train.lessons"]],progress:[["progress","progress.overview"],["progress/trophies","progress.trophies"],["progress/friends","progress.friends","friends"]]};
 function tabHead(top){const h=$("#tabHead"),sub=SUBS[top];h.hidden=!sub;if(!sub)return;$("#tabTitle").textContent=T(top+".title");
  $("#subnav").setAttribute("aria-label",T("nav.sections"));$("#subnav").innerHTML=sub.filter(x=>x[2]!=="friends"||SB_ON).map(([p,k,t])=>`<a href="#${p}"${t?` data-t="${t}"`:""}${route.cur===p?' aria-current="page"':""}>${esc(T(k))}</a>`).join("")}
 function route(){if(!P){show1("start");return}let h=decodeURIComponent(location.hash.slice(1));
  if(h==="train")h=LS.get("trainSec","train/puzzles");if(OLDR[h]){h=OLDR[h];history.replaceState(null,"","#"+h)}
  if(h==="progress/friends"&&!SB_ON)h="progress";if(!ROUTES[h])h="home";const t=ROUTES[h],top=h.split("/")[0];route.cur=h;route.sec=t;if(top==="train")LS.set("trainSec",h);show1(t);tabHead(top);
  document.querySelectorAll("#hdr nav a").forEach(a=>{if(a.dataset.t===top)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
+ if(t==="progress")renderProgress();if(t==="trophies")renderTrophies();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
 function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);if(t==="start")$("#tabHead").hidden=true;$("#hdr").hidden=t==="start";document.body.classList.toggle("has-side",t!=="start");if(t==="start")demoStart();else demoStop()}
 window.addEventListener("hashchange",route);
 
@@ -1837,11 +1882,11 @@ window.addEventListener("hashchange",route);
 async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
- try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
+ try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=T("start.noGames",{tc:T("tc."+P.tc),u:P.user,site:SRC[P.source].name});$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
   first();analyseRecent(fresh?20:Math.max(n,0)?Math.min(n,20):0)}
- catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=`Couldn't load your games from ${SRC[P.source].name}. Try again in a minute.`;$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
+ catch(e){if(fresh&&!GAMES.length){$("#startMsg").textContent=T("start.loadFail",{site:SRC[P.source].name});$("#startBtn").disabled=false;P=null;LS.set("profile",null);route()}else job("sync",null)}
  if(!fresh&&!AQ)analyseRecent(5);if(!AQ)TG.run()}
-async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
+async function boot(){const ls=document.querySelector(`input[name="uSrc"][value="${LS.get("lastSrc","cc")}"]`);if(ls)ls.checked=true;srcLabel();langSw();$("#startBtn").disabled=false;$("#startMsg").textContent="";if(!P){route();$("#uName").focus();return}await enter(false)}
 /* Read-only test hook, only with ?test=1 (used by tests/run.mjs; keep it working when refactoring). */
 if(/[?&]test=1(&|$)/.test(location.search))window.rcTest={state:()=>({user:P&&P.user,source:P&&P.source,tc:P&&P.tc,games:GAMES.length,analysed:GAMES.filter(g=>g.an).length,puzzles:PZ.length,queue:!!AQ,cur:CUR&&CUR.id,ply:PLY,flip:RB.flip,route:P?route.cur:"start"}),
  puzzle:()=>PI&&{id:PI.id,fen:PI.g._f[PI.e.i],best:PI.e.best,flip:TB.flip},game:id=>{const g=GAMES.find(x=>x.id===id);return g&&{id:g.id,result:g.result,color:g.color,moves:g.moves.length,an:!!g.an}}};
