@@ -217,9 +217,9 @@ Board.prototype.draw=function(anim){const c=new Chess(this.fen),B=c.board(),F="a
  if(anim){const im=this.host.querySelector(`image[data-sq="${anim.to}"]`);if(im){const [x1,y1]=this.sqXY(anim.from),[x2,y2]=this.sqXY(anim.to);im.style.transition="none";im.style.transform=`translate(${x1-x2}px,${y1-y2}px)`;im.getBoundingClientRect();requestAnimationFrame(()=>{im.style.transition="";im.style.transform="";setTimeout(()=>im.removeAttribute("style"),260)})}}};
 /* vertical eval bar (white's share); flip = black at the bottom */
 function EvalBar(el){this.el=el;el.innerHTML='<b></b><span class="top"></span><span class="bot"></span>';el.setAttribute("role","img")}
-EvalBar.prototype.set=function(cp,flip){const el=this.el;el.hidden=false;el.classList.toggle("flip",!!flip);if(cp==null){el.classList.add("wait");el.setAttribute("aria-label","Evaluation: working it out");return}
+EvalBar.prototype.set=function(cp,flip){const el=this.el;el.hidden=false;el.classList.toggle("flip",!!flip);if(cp==null){el.classList.add("wait");el.setAttribute("aria-label",T("eb.wait"));el.title="";return}
  el.classList.remove("wait");el.querySelector("b").style.height=Math.max(3,Math.min(97,wp(cp)))+"%";const w=flip?"top":"bot",bl=flip?"bot":"top",t=evTxt(cp);
- el.querySelector("."+w).textContent=cp>=0?t.replace("+",""):"";el.querySelector("."+bl).textContent=cp<0?t.replace("−",""):"";el.setAttribute("aria-label","Evaluation "+t)};
+ el.querySelector("."+w).textContent=cp>=0?t.replace("+",""):"";el.querySelector("."+bl).textContent=cp<0?t.replace("−",""):"";el.setAttribute("aria-label",T("eb.label",{t}));el.title=t};
 EvalBar.prototype.hide=function(){this.el.hidden=true};
 
 /* ---------- REVIEW ---------- */
@@ -495,31 +495,31 @@ function opStartLine(replay,at){if(!OT)return;const start=replay&&OD?OD.start:at
 async function opStep(){const d=OD;if(!d||d.gen!==GEN||d.key!==(OT&&OT.key))return;const c=d.c,fen=c.fen(),k=posKey(fen),n=OT.T.get(k),mine=(c.turn()==="w")===(OT.col==="w");
  if(d.ply>=OP_PLY||c.game_over())return opLineDone(d,"end");
  if(mine){if(!n&&!d.viaEx)return opLineDone(d,"data");d.wait=true;const x=OPS[k];
-  $("#oPrompt").className="verdict v-move";$("#oPrompt").innerHTML=`${ic("target")}<b>Your move.</b> ${n?(n.n?`Seen in ${n.n} of your games.`:"From your lesson lines."):"From Lichess games at your rating."}${n&&n.weak?' <span class="tag">weak spot</span>':""}${x&&x.pin?' <span class="tag">repertoire</span>':""}`;return}
- let x=d.opp[d.ply];if(!x){$("#oPrompt").className="verdict v-info";$("#oPrompt").innerHTML=`${ic("hourglass")}Your opponent is choosing a move…`;x=await opPickOpp(fen,n);if(d!==OD)return;if(!x)return opLineDone(d,"data");d.opp[d.ply]=x}
+  $("#oPrompt").className="verdict v-move";$("#oPrompt").innerHTML=`${ic("target")}<b>${esc(T("od.your"))}</b> ${esc(n?(n.n?TP("od.seen",n.n):T("od.lines")):T("od.lichess"))}${n&&n.weak?` <span class="tag">${esc(T("od.weak"))}</span>`:""}${x&&x.pin?` <span class="tag">${esc(T("od.rep"))}</span>`:""}`;return}
+ let x=d.opp[d.ply];if(!x){$("#oPrompt").className="verdict v-info";$("#oPrompt").innerHTML=`${ic("hourglass")}${esc(T("od.wait"))}`;x=await opPickOpp(fen,n);if(d!==OD)return;if(!x)return opLineDone(d,"data");d.opp[d.ply]=x}
  const m=c.move(x.san);if(!m)return opLineDone(d,"data");d.viaEx=x.src==="lichess";d.ply++;OB.set(c.fen(),{last:{from:m.from,to:m.to}});setTimeout(()=>{if(d===OD)opStep()},450)}
 async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=c.fen(),t=new Chess(fen),mv=t.move({from,to,promotion:"q"});if(!mv)return;d.wait=false;OW.clear();
  const k=posKey(fen),n=OT.T.get(k),u=mv.from+mv.to+(mv.promotion||""),pin=(OPS[k]||{}).pin,s=c.turn()==="w"?1:-1;OB.set(t.fen(),{last:{from,to}});
- $("#oFeedback").innerHTML='<div class="skel-wrap" role="status"><span class="sr-only">Checking your move…</span><span class="skel" style="width:55%"></span></div>';let best=pin||(n&&n.best),bev=n?n.ev:null,aev=null;
+ $("#oFeedback").innerHTML='<div class="skel-wrap" role="status"><span class="sr-only">'+esc(T("tr.checking"))+'</span><span class="skel" style="width:55%"></span></div>';let best=pin||(n&&n.best),bev=n?n.ev:null,aev=null;
  try{if(!best||bev==null){const r=await opEval(fen,14);best=best||r.best;if(bev==null)bev=r.cp}}catch(e){}
  if(d!==OD)return;let ok=!best||u===best,play=false;
  if(!ok){try{aev=(await opEval(t.fen(),12)).cp}catch(e){}if(d!==OD)return;const near=aev!=null&&bev!=null&&wp(s*bev)-wp(s*aev)<OP_TOL;if(pin&&near)play=true;else ok=near}
  const bs=best?uciSan(fen,best):null;
  if(play){d.wait=true;OB.set(fen,{last:c.history({verbose:true}).slice(-1).map(m=>({from:m.from,to:m.to}))[0]||null,arrows:[{from:pin.slice(0,2),to:pin.slice(2,4),c:"green"}]});
-  $("#oFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}${esc(mv.san)} is playable, but your repertoire move here is <b>${esc(bs)}</b>. Play it.</div>`;return}
+  $("#oFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}${T("od.playable",{mv:esc(mv.san),b:`<b>${esc(bs)}</b>`})}</div>`;return}
  opGrade(k,ok);Snd.play(ok?"correct":"wrong");sess(OSS,ok,"#oSess");
  if(ok){c.move(mv.san);d.ply++;d.last={k,u,san:mv.san};const pinned=pin===u;
-  $("#oFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}${esc(mv.san)} — correct.${!pinned&&bs&&bs!==mv.san?` The engine's first choice is ${esc(bs)}, but yours is just as good.`:""}</div>`+
-   `<button class="link" id="oPin" type="button">${pinned?`Unpin ${esc(mv.san)}`:`Pin ${esc(mv.san)} as my move here`}</button> <button class="link" id="oWhyBtn" type="button">Why?</button>`;
+  $("#oFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}${esc(T("tr.ok",{mv:mv.san}))}${!pinned&&bs&&bs!==mv.san?" "+esc(T("od.alsoGood",{b:bs})):""}</div>`+
+   `<button class="link" id="oPin" type="button">${esc(T(pinned?"od.unpin":"od.pin",{mv:mv.san}))}</button> <button class="link" id="oWhyBtn" type="button">${esc(T("tr.why"))}</button>`;
   $("#oWhyBtn").onclick=()=>{$("#oWhyBtn").remove();OW.show({fen,played:u,ok:true,restore:opBack})};
-  $("#oPin").onclick=()=>{const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0});x.pin=pinned?null:u;if(!x.pin)delete x.pin;x.at=Date.now();saveOPS(k);$("#oPin").outerHTML=`<span class="small">${x.pin?`Pinned ${esc(mv.san)} as your repertoire move.`:"Unpinned."}</span>`};
+  $("#oPin").onclick=()=>{const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0});x.pin=pinned?null:u;if(!x.pin)delete x.pin;x.at=Date.now();saveOPS(k);$("#oPin").outerHTML=`<span class="small">${esc(x.pin?T("od.pinned",{mv:mv.san}):T("od.unpinned"))}</span>`};
   setTimeout(()=>{if(d===OD)opStep()},350)}
  else{d.miss=true;const arrows=[{from:mv.from,to:mv.to,c:"red"}];if(best)arrows.push({from:best.slice(0,2),to:best.slice(2,4),c:"green"});OB.set(fen,{arrows});
-  $("#oPrompt").className="verdict v-info";$("#oPrompt").innerHTML=`${ic("rotate-ccw")}<b>Not this time.</b> Replay the line and lock it in.`;
-  $("#oFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}${esc(mv.san)} isn't it. ${pin?"Your repertoire move":"The move"} here is <b>${esc(bs||"?")}</b> (green)${bev!=null&&aev!=null?`: ${esc(mv.san)} swings it ${evTxt(bev)} → ${evTxt(aev)}`:""}.</div><div class="v-actions"><button class="pri" id="oReplay" type="button">${ic("rotate-ccw","sm")}Replay the line</button></div>`;
+  $("#oPrompt").className="verdict v-info";$("#oPrompt").innerHTML=`${ic("rotate-ccw")}<b>${esc(T("od.notH"))}</b> ${esc(T("od.notP"))}`;
+  $("#oFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}<span>${T(pin?"od.wrongPin":"od.wrong",{mv:esc(mv.san),b:`<b>${esc(bs||"?")}</b>`})}${bev!=null&&aev!=null?" "+esc(cap1(T("why.sw",{b:evPast(s*bev),a:evWords(s*aev)}))+"."):""}</span></div><div class="v-actions"><button class="pri" id="oReplay" type="button">${ic("rotate-ccw","sm")}${esc(T("od.replay"))}</button></div>`;
   $("#oReplay").onclick=()=>opStartLine(true);OW.show({fen,played:u,best,restore:()=>OB.set(fen,{arrows})})}
  renderOpStats()}
-function opLineDone(d,why){if(d!==OD)return;d.done=true;$("#oPrompt").className="verdict "+(d.miss?"v-info":"v-ok");$("#oPrompt").innerHTML=ic(d.miss?"rotate-ccw":"flag")+(why==="end"?"<b>Line complete.</b> ":"<b>That's as far as your games go here.</b> ")+(d.miss?"You missed a move: replay it to lock it in.":"On to the next line.");renderOpStats()}
+function opLineDone(d,why){if(d!==OD)return;d.done=true;$("#oPrompt").className="verdict "+(d.miss?"v-info":"v-ok");$("#oPrompt").innerHTML=ic(d.miss?"rotate-ccw":"flag")+`<b>${esc(T(why==="end"?"od.doneH":"od.endH"))}</b> `+esc(T(d.miss?"od.doneMiss":"od.doneOk"));renderOpStats()}
 function opEffect(key,t){const gs=opGames(key[0],key.slice(2)),b=gs.filter(g=>g.ts<t&&g.ts>=t-365*864e5),a=gs.filter(g=>g.ts>=t);
  return a.length>=5&&b.length>=5?{col:key[0],fam:key.slice(2),a:score(a),b:score(b),na:a.length,nb:b.length,date:new Date(t).toISOString().slice(0,10)}:null}
 function renderOpStats(){if(!OT)return;const core=opCore(),learned=core.filter(n=>((OPS[n.k]||{}).s||0)>=OP_LEARNED).length,due=core.filter(n=>isDue(n.k)).length,g=OT.games.length;
@@ -1256,11 +1256,11 @@ const opCourseFor=(col,fam)=>{const C=TRACKS[1].courses.find(co=>co.op.re&&co.op
    above my rating, else the first unfinished; placement checks skip ahead from there */
 function opRec(co){const pl=opPlays(co),col=pl.w+pl.b>=3?(pl.w>=pl.b?"w":"b"):(co.op.side||null),r=pzR0(),lc=co.chapters.filter(ch=>!ch.tac&&!chDone(ch)),mine=lc.filter(ch=>!col||ch.side===col),pool=mine.length?mine:lc;
  return pool.find(ch=>ch.r[1]>r)||pool[0]||co.chapters.find(ch=>!chDone(ch))||null}
-function prioBtn(x,i,W){const T=lsTarget(x.to,W),cl=i===0?"pri":"";
- if(T&&(T.co.pz||T.co.op||T.co.eg))return `<button class="${cl}" type="button" data-ch="${T.ch.id}">${T.ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s)?"Continue":"Start"}: ${esc(T.co.name)}${T.co.pz?" ":" · "}${esc(T.ch.short)}</button>`+(x.to.startsWith("op-")&&x.op?` <button class="link small" type="button" data-op="${esc(x.op)}">Opening trainer</button>`:"");
- if(T){const p=LSP["l:"+x.to]||{};return `<button class="${cl}" type="button" data-ls="${x.to}">${p.d?"Practise again":p.s?"Continue":"Start lesson"}</button>`}
- if(x.to==="openings")return `<button type="button" data-op="${esc(x.op||"")}">${ic("book-open","sm")}Opening trainer</button>`;
- return x.k==="clock"?'<a class="small" href="#progress">See your clock use</a>':'<a class="small" href="#review">Review your games</a>'}
+function prioBtn(x,i,W){const G=lsTarget(x.to,W),cl=i===0?"pri":"";
+ if(G&&(G.co.pz||G.co.op||G.co.eg))return `<button class="${cl}" type="button" data-ch="${G.ch.id}">${esc(T(G.ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s)?"ls.cont":"ls.start",{ch:G.co.name+" "+G.ch.short}))}</button>`+(x.to.startsWith("op-")&&x.op?` <button class="link small" type="button" data-op="${esc(x.op)}">${esc(T("ls.trainer"))}</button>`:"");
+ if(G){const p=LSP["l:"+x.to]||{};return `<button class="${cl}" type="button" data-ls="${x.to}">${esc(T(p.d?"ls.again":p.s?"ls.contL":"ls.startL"))}</button>`}
+ if(x.to==="openings")return `<button type="button" data-op="${esc(x.op||"")}">${ic("book-open","sm")}${esc(T("ls.trainer"))}</button>`;
+ return x.k==="clock"?`<a class="small" href="#progress">${esc(T("ls.clock"))}</a>`:`<a class="small" href="#review">${esc(T("ls.review"))}</a>`}
 /* Lessons home: track switch (Tactics / Endgames; opening courses open from Openings), level chips, the top 3 priorities,
    a grid of course cards (progress ring, "For you"), the weakness profile behind a disclosure; a course opens its own page (LCO). */
 let LCO=null;
@@ -1301,39 +1301,39 @@ function renderLessons(){LP=null;const W=wkProfile();if(LCO)return renderCourse(
 /* placement checks may have one miss in four (none in shorter checks) */
 const lsAllow=n=>n>=4?1:0;
 function courseHTML(co,L,W,fy){if(co.pz)return pzCourseHTML(co,W,fy);if(co.op)return opCourseHTML(co,fy);if(co.eg)return egCourseHTML(co,fy);const rec=co.lv.includes(L);
- return `<div class="course${rec?" rec":""}"><div class="course-h"><b>${esc(co.name)}</b><span class="chip${rec?" xp":""}">${rec?"Recommended":co.lv.map(lvlName).join(" · ")}</span></div><p class="small">${esc(co.desc)}</p>`+co.chapters.map(ch=>{
+ return `<div class="course${rec?" rec":""}"><div class="course-h"><b>${esc(co.name)}</b><span class="chip${rec?" xp":""}">${rec?esc(T("ls.rec")):co.lv.map(lvlName).join(", ")}</span></div><p class="small">${esc(co.desc)}</p>`+co.chapters.map(ch=>{
   const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch);
-  return `<div class="chapter"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.name)}</span><span class="small num">${d}/${ch.lessons.length} lessons</span></div><div class="meter"><b style="width:${d/ch.lessons.length*100}%;background:var(--primary)"></b></div>`+
-   `<ul class="ls-list">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<li><button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}</button><span class="small num">${p.s||0}/${l.steps.length}</span>${PAGES[l.id]?`<button class="link small" type="button" data-pg="${l.id}">Learn more</button>`:""}</li>`}).join("")}</ul>`+
-   `<div class="row">${done?'<span class="chip gold">'+ic("award","sm")+"Completed</span>":`<button class="${rec?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>`}${ch.test&&!c.p&&!done&&!started?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Take the ${ch.test.length}-puzzle check</button>`:""}${c.p&&!done?'<span class="chip gold">Check passed</span>':""}</div></div>`}).join("")+"</div>"}
+  return `<div class="chapter"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.name)}</span><span class="small num">${d}/${ch.lessons.length} ${esc(T("ls.lessons"))}</span></div><div class="meter"><b style="width:${d/ch.lessons.length*100}%;background:var(--primary)"></b></div>`+
+   `<ul class="ls-list">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<li><button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}</button><span class="small num">${p.s||0}/${l.steps.length}</span>${PAGES[l.id]?`<button class="link small" type="button" data-pg="${l.id}">${esc(T("ls.more"))}</button>`:""}</li>`}).join("")}</ul>`+
+   `<div class="row">${done?'<span class="chip gold">'+ic("award","sm")+esc(T("ls.done"))+"</span>":`<button class="${rec?"pri":""}" type="button" data-ch="${ch.id}">${started?esc(T("ls.contL")):esc(T("ls.startL"))}</button>`}${ch.test&&!c.p&&!done&&!started?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}${esc(T("ls.skipPz",{n:ch.test.length}))}</button>`:""}${c.p&&!done?'<span class="chip gold">'+esc(T("ls.passed"))+'</span>':""}</div></div>`}).join("")+"</div>"}
 /* a puzzle course: one collapsible card, a dot per chapter, the chapter to start at marked; checks let you skip ahead from there */
 function pzCourseHTML(co,W,fy){const rec=pzRec(co,W),sk=pzSkill(co.pz),nd=co.chapters.filter(chDone).length,f=fy.has(co.id);
- return `<details class="course pzc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${f?'<span class="chip xp">For you</span>':""}${rec?`<span class="chip">Your chapter: ${esc(rec.short)}</span>`:`<span class="chip gold">${ic("award","sm")}Completed</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
+ return `<details class="course pzc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${f?`<span class="chip xp">${esc(T("ls.forYou"))}</span>`:""}${rec?`<span class="chip">${esc(T("ls.yourCh",{ch:rec.short}))}</span>`:`<span class="chip gold">${ic("award","sm")}${esc(T("ls.done"))}</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
   `<span class="small">${esc(co.desc)}</span><span class="bands" role="img" aria-label="${nd} of ${co.chapters.length} chapters done">${co.chapters.map(ch=>`<i class="${chDone(ch)?"done":ch===rec?"on":""}"></i>`).join("")}</span></summary>`+
-  `<div class="pz-body"><div class="row"><button type="button" data-pg="${co.id}">${ic("book-open","sm")}Learn the idea</button>${sk?`<span class="small">Your puzzle level here: about <b class="num">${sk}</b></span>`:""}</div>`+
+  `<div class="pz-body"><div class="row"><button type="button" data-pg="${co.id}">${ic("book-open","sm")}${esc(T("ls.idea"))}</button>${sk?`<span class="small">${T("ls.lvlHere",{n:`<b class="num">${sk}</b>`})}</span>`:""}</div>`+
   co.chapters.map(ch=>{const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch),me=ch===rec;
-   return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?' <span class="chip xp">Start here</span>':""}</span><span class="small num">${d}/${ch.lessons.length} lessons</span></div>`+
+   return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?` <span class="chip xp">${esc(T("ls.here"))}</span>`:""}</span><span class="small num">${d}/${ch.lessons.length} ${esc(T("ls.lessons"))}</span></div>`+
     `<div class="ls-row">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}<span class="small num">${p.s||0}/${PZ_N}</span></button>`}).join("")}</div>`+
-    (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>${!c.p&&rec&&ch.band>=rec.band?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Skip ahead: ${PZ_T}-puzzle check</button>`:""}</div>`)+"</div>"}).join("")+"</div></details>"}
+    (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?esc(T("ls.contL")):esc(T("ls.startL"))}</button>${!c.p&&rec&&ch.band>=rec.band?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}${esc(T("ls.skipPz",{n:PZ_T}))}</button>`:""}</div>`)+"</div>"}).join("")+"</div></details>"}
 /* an opening course: chapters by colour and level, the chapter to start at marked, then "tactics in this opening" */
-function opCourseHTML(co,fy){const rec=opRec(co),pl=opPlays(co),f=fy.has(co.id),nd=co.chapters.filter(chDone).length,tac=co.chapters.find(ch=>ch.tac),sk=pzSkill(tac.pz),cn=s=>s==="w"?"White":"Black";
+function opCourseHTML(co,fy){const rec=opRec(co),pl=opPlays(co),f=fy.has(co.id),nd=co.chapters.filter(chDone).length,tac=co.chapters.find(ch=>ch.tac),sk=pzSkill(tac.pz),cn=s=>T(s==="w"?"rv.fWhite":"rv.fBlack");
  const plays=pl.w+pl.b>=3?`You play this${pl.w>=3?` as White (${pl.w})`:""}${pl.w>=3&&pl.b>=3?" and":""}${pl.b>=3?` as Black (${pl.b})`:""}`:"";
- return `<details class="course pzc opc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${plays?`<span class="chip xp">${esc(plays)}</span>`:""}${rec?`<span class="chip">Start: ${esc(rec.short)}</span>`:`<span class="chip gold">${ic("award","sm")}Completed</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
+ return `<details class="course pzc opc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${plays?`<span class="chip xp">${esc(plays)}</span>`:""}${rec?`<span class="chip">${esc(T("ls.startAt",{ch:rec.short}))}</span>`:`<span class="chip gold">${ic("award","sm")}${esc(T("ls.done"))}</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
   `<span class="small">${esc(co.desc)}</span><span class="bands" role="img" aria-label="${nd} of ${co.chapters.length} chapters done">${co.chapters.map(ch=>`<i class="${chDone(ch)?"done":ch===rec?"on":""}"></i>`).join("")}</span></summary>`+
-  `<div class="pz-body"><div class="row">${PAGES[co.id]?`<button type="button" data-pg="${co.id}">${ic("book-open","sm")}Learn the ideas</button>`:""}</div>`+
+  `<div class="pz-body"><div class="row">${PAGES[co.id]?`<button type="button" data-pg="${co.id}">${ic("book-open","sm")}${esc(T("ls.idea"))}</button>`:""}</div>`+
   co.chapters.map(ch=>{const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch),me=ch===rec,n=ch.tac?PZ_N:2;
-   return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?' <span class="chip xp">Start here</span>':""}</span><span class="small">${ch.tac?(sk?`Your level here: about <b class="num">${sk}</b>`:"Puzzles from 400 to "+ch.rg[1]):`${cn(ch.side)} · ${ch.r[0]?ch.r[0]+"–"+ch.r[1]:"up to "+ch.r[1]}`}</span></div>`+
+   return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?` <span class="chip xp">${esc(T("ls.here"))}</span>`:""}</span><span class="small">${ch.tac?(sk?`${T("ls.lvlHere",{n:`<b class="num">${sk}</b>`})}`:T("ls.pzRange",{n:ch.rg[1]})):`${cn(ch.side)} · ${ch.r[0]?ch.r[0]+"–"+ch.r[1]:T("ls.upTo",{n:ch.r[1]})}`}</span></div>`+
     `<div class="ls-row">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}<span class="small num">${p.s||0}/${n}</span></button>`}).join("")}</div>`+
-    (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>${!c.p&&!ch.tac&&ch.test.length&&rec&&co.chapters.indexOf(ch)>=co.chapters.indexOf(rec)?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Know it? ${ch.test.length}-move check</button>`:""}</div>`)+"</div>"}).join("")+"</div></details>"}
+    (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?esc(T("ls.contL")):esc(T("ls.startL"))}</button>${!c.p&&!ch.tac&&ch.test.length&&rec&&co.chapters.indexOf(ch)>=co.chapters.indexOf(rec)?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}${esc(T("ls.skipMv",{n:ch.test.length}))}</button>`:""}</div>`)+"</div>"}).join("")+"</div></details>"}
 /* an endgame course: lesson chapters (each lesson has a teaching page), then a puzzle chapter per rating band */
 function egCourseHTML(co,fy){const rec=egRec(co),f=fy.has(co.id),nd=co.chapters.filter(chDone).length,pc=co.chapters.filter(ch=>ch.pz),sk=pc.length?pzSkill(pc[0].pz):null;
  const chH=ch=>{const d=ch.lessons.filter(l=>lsDone(l.id)).length,c=LSP["c:"+ch.id]||{},started=ch.lessons.some(l=>(LSP["l:"+l.id]||{}).s),done=chDone(ch),me=ch===rec,n=l=>ch.pz?PZ_N:l.steps.length;
-  return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?' <span class="chip xp">Start here</span>':""}</span><span class="small">${ch.pz?"":(ch.r[0]?ch.r[0]+"–"+ch.r[1]:"up to "+ch.r[1])}</span></div>`+
-   `<div class="ls-row">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}<span class="small num">${p.s||0}/${n(l)}</span></button>${PAGES[l.id]?`<button class="link small" type="button" data-pg="${l.id}">Learn</button>`:""}`}).join("")}</div>`+
-   (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?"Continue":"Start"}</button>${!c.p&&ch.test&&ch.test.length>=2&&rec&&co.chapters.indexOf(ch)>=co.chapters.indexOf(rec)?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}Skip ahead: ${ch.test.length}-position check</button>`:""}</div>`)+"</div>"};
- return `<details class="course pzc egc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${f?'<span class="chip xp">For you</span>':""}${rec?`<span class="chip">Start: ${esc(rec.short)}</span>`:`<span class="chip gold">${ic("award","sm")}Completed</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
+  return `<div class="chapter${me?" me":""}"><div class="ch-h"><span class="ch-name">${done?ic("circle-check","sm"):""}${esc(ch.short)}${me?` <span class="chip xp">${esc(T("ls.here"))}</span>`:""}</span><span class="small">${ch.pz?"":(ch.r[0]?ch.r[0]+"–"+ch.r[1]:T("ls.upTo",{n:ch.r[1]}))}</span></div>`+
+   `<div class="ls-row">${ch.lessons.map(l=>{const p=LSP["l:"+l.id]||{};return `<button class="link" type="button" data-ls="${l.id}">${p.d?ic("check","sm"):""}${esc(l.name)}<span class="small num">${p.s||0}/${n(l)}</span></button>${PAGES[l.id]?`<button class="link small" type="button" data-pg="${l.id}">${esc(T("ls.more"))}</button>`:""}`}).join("")}</div>`+
+   (done?"":`<div class="row"><button class="${me?"pri":""}" type="button" data-ch="${ch.id}">${started?esc(T("ls.contL")):esc(T("ls.startL"))}</button>${!c.p&&ch.test&&ch.test.length>=2&&rec&&co.chapters.indexOf(ch)>=co.chapters.indexOf(rec)?`<button type="button" data-test="${ch.id}">${ic("graduation-cap","sm")}${esc(T("ls.skipPos",{n:ch.test.length}))}</button>`:""}</div>`)+"</div>"};
+ return `<details class="course pzc egc${f?" rec":""}"${f?" open":""}><summary><span class="course-h"><b>${esc(co.name)}</b><span class="chips">${f?`<span class="chip xp">${esc(T("ls.forYou"))}</span>`:""}${rec?`<span class="chip">${esc(T("ls.startAt",{ch:rec.short}))}</span>`:`<span class="chip gold">${ic("award","sm")}${esc(T("ls.done"))}</span>`}${ic("chevron-right","pz-chev")}</span></span>`+
   `<span class="small">${esc(co.desc)}</span><span class="bands" role="img" aria-label="${nd} of ${co.chapters.length} chapters done">${co.chapters.map(ch=>`<i class="${chDone(ch)?"done":ch===rec?"on":""}"></i>`).join("")}</span></summary>`+
-  `<div class="pz-body">${co.chapters.filter(ch=>!ch.pz).map(chH).join("")}${pc.length?`<h3 class="h-small">Endgame puzzles from real games${sk?` <span class="small">· your level here: about <b class="num">${sk}</b></span>`:""}</h3>`+pc.map(chH).join(""):""}</div></details>`}
+  `<div class="pz-body">${co.chapters.filter(ch=>!ch.pz).map(chH).join("")}${pc.length?`<h3 class="h-small">${esc(T("ls.egPz"))}${sk?` <span class="small">· ${T("ls.lvlHere",{n:`<b class="num">${sk}</b>`})}</span>`:""}</h3>`+pc.map(chH).join(""):""}</div></details>`}
 /* one handler for every lessons button */
 $("#v-lessons").addEventListener("click",e=>{const b=e.target.closest("button[data-ls],button[data-pg],button[data-ch],button[data-test],button[data-op],button[data-co],button[data-lv]");if(!b)return;
  if(b.dataset.co){LCO=b.dataset.co;renderLessons()}else if(b.dataset.lv){LSP.lvl={v:b.dataset.lv};saveLSP("lvl");renderLessons()}else if(b.dataset.ls)openLesson(b.dataset.ls);else if(b.dataset.pg)openPage(b.dataset.pg);else if(b.dataset.ch)openLesson(nextLesson(CIDX[b.dataset.ch].ch).id);else if(b.dataset.test)openTest(b.dataset.test);
@@ -1363,7 +1363,7 @@ function lsStep(){const L=LP;if(L.x.l&&L.x.l.pz&&!L.steps[L.i]){const p=pzPick(L
  const ask=pz?(L.kind==="test"?"Find the best move. Only your first try counts.":L.x.l.pz.ask):st.n;
  $("#lPrompt").className="verdict v-move";$("#lPrompt").innerHTML=`${ic("target")}<b>${side} to move.</b> ${esc(ask)}${pz&&L.kind==="lesson"?`<span class="coach-note">${esc(L.x.l.note)}</span>`:""}`;
  $("#lFeedback").innerHTML="";if(pz&&L.kind==="lesson")hintBtn(L,st);
- $("#lSrc").hidden=!pz;if(pz)$("#lSrc").innerHTML=`Puzzle rating ${st.r} · from a real game: <a href="https://lichess.org/training/${encodeURIComponent(st.pz)}" target="_blank" rel="noopener noreferrer">Lichess puzzle ${esc(st.pz)}</a>`;
+ $("#lSrc").hidden=!pz;if(pz)$("#lSrc").innerHTML=`${esc(T("lp.src",{r:st.r}))} <a href="https://lichess.org/training/${encodeURIComponent(st.pz)}" target="_blank" rel="noopener noreferrer">${esc(T("lp.srcLink",{id:st.pz}))}</a>`;
  $("#lPage").hidden=!(L.kind==="lesson"&&(PAGES[L.x.l.id]||PAGES[L.x.co.id]));$("#lSkip").hidden=L.kind!=="test"}
 async function lsMove(from,to){const L=LP;if(!L||!L.wait)return;const st=L.steps[L.i];if(st.m)return pzMove(L,st,from,to);if(st.ln)return lnMove(L,st,from,to);if(st.play)return egMove(L,st,from,to);const fen=st.f,c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;L.wait=false;
  const u=mv.from+mv.to,g=st.g||"best";LB.set(c.fen(),{last:{from,to}});let ok=false,also=false;
@@ -1397,7 +1397,7 @@ function pzHint(L,st){if(!L.wait||!L.c)return;const w=st.m[L.k],fen=L.c.fen(),p=
    move is asked for); guided runs show the note of each ply, the memory run shows none */
 function lnStart(L,st){const l=st.ln,n=lsN(L);L.tk=++LTK;L.ms=l.m.split(" ");L.k=0;L.c=new Chess();L.wait=false;LW.clear();LB.flip=l.side==="b";LB.set(L.c.fen());
  $("#lCrumb").textContent=lsCrumb(L);$("#lTitle").textContent=L.x.l.name;
- $("#lDots").innerHTML=Array.from({length:n},(s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">${st.mem?"From memory":"Guided"} · step ${L.i+1} of ${n}</span>`;
+ $("#lDots").innerHTML=Array.from({length:n},(s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">${esc(T(st.mem?"lp.mem":"lp.guided",{i:L.i+1,n}))}</span>`;
  $("#lPrompt").className="verdict v-move";$("#lPrompt").innerHTML=`${ic("target")}<b>You play ${l.side==="w"?"White":"Black"}.</b> ${st.mem?"Now play the whole line from memory. No notes this time.":"Play the line move by move; the coach plays the other side and explains the key moves."}`;
  $("#lFeedback").innerHTML="";$("#lSrc").hidden=true;$("#lPage").hidden=!PAGES[L.x.co.id];$("#lSkip").hidden=true;opNames().then(()=>{if(LP===L)lnName(L)});lnNext(L,st)}
 const lnMine=(L,st)=>(L.k%2===0)===(st.ln.side==="w"),lnNote=(L,st,k)=>st.mem?"":st.ln.n[k]||"";
@@ -1424,12 +1424,12 @@ function lnDone(L,st){Snd.play("correct");const h=L.c.history({verbose:true}),m=
    a clearly won position (+4); draw: a draw by the rules, or st.max moves survived. A move that drops a win below +1.5 (or a draw
    below -3), stalemate in a win, or running out of moves fails; I can take the move back and see a better one. */
 const egDepth=st=>st.d||EG_D[lvl()]||10;
-function egStat(L,st){$("#lSrc").hidden=false;$("#lSrc").textContent=`Goal: ${st.play==="win"?"win":"hold the draw"} · move ${L.mv} of ${st.max} · Stockfish plays at depth ${egDepth(st)}`}
+function egStat(L,st){$("#lSrc").hidden=false;$("#lSrc").textContent=T(st.play==="win"?"lp.goalWin":"lp.goalDraw",{m:L.mv,max:st.max,d:egDepth(st)})}
 function egHint(L,st){$("#lFeedback").innerHTML=`<div class="v-actions"><button class="ghost" type="button" id="lHint">${ic("lightbulb","sm")}Hint</button></div>`;
  $("#lHint").onclick=async()=>{if(!L.wait)return;const f=L.c.fen();st.help=1;$("#lHint").disabled=true;try{const b=(await wEval(f)).best;if(LP===L&&L.c.fen()===f&&b)LB.set(f,{arrows:[{from:b.slice(0,2),to:b.slice(2,4),c:"green"}]})}catch(e){}}}
 function egStart(L,st){const c=new Chess(st.f),n=lsN(L);L.tk=++LTK;L.c=c;L.me=c.turn();L.mv=0;L.wait=true;LW.clear();LB.flip=L.me==="b";LB.set(st.f);
  $("#lCrumb").textContent=lsCrumb(L);$("#lTitle").textContent=L.x.l.name;
- $("#lDots").innerHTML=Array.from({length:n},(s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">Play it out · step ${L.i+1} of ${n}</span>`;
+ $("#lDots").innerHTML=Array.from({length:n},(s,k)=>`<span class="sdot${k<L.i?" done":k===L.i?" on":""}"></span>`).join("")+`<span class="small">${esc(T("lp.play",{i:L.i+1,n}))}</span>`;
  $("#lPrompt").className="verdict v-move";$("#lPrompt").innerHTML=`${ic("swords")}<b>You play ${L.me==="w"?"White":"Black"}.</b> ${esc(st.n)}`;
  egHint(L,st);egStat(L,st);$("#lPage").hidden=!PAGES[L.x.l.id];$("#lSkip").hidden=true}
 async function egMove(L,st,from,to){const pre=L.c.fen(),c=new Chess(pre),mv=c.move({from,to,promotion:"q"});if(!mv)return;L.wait=false;L.c=c;L.mv++;LB.set(c.fen(),{last:{from,to}});LW.clear();
@@ -1648,11 +1648,11 @@ function focusOf(){const ins=insights()[0];if(!ins)return null;return ins}
 function renderHome(){if(!P||!GS)return;++HOMEtok;const hide=GS.set.hide,today=GS.days[dkey()]||{},goal=gGoal(),st=gStreak(),xp=gXP(),lv=gLevel(xp);
  const hr=new Date().getHours();$("#hHello").textContent=T(hr<5?"home.late":hr<12?"home.morning":hr<18?"home.afternoon":"home.evening",{name:P.user});
  // today's focus: one sentence, one action
- const f=focusOf();$("#hFocus").hidden=!f;if(f){$("#hFocus").innerHTML=`<h2 class="focus-k">${esc(T("home.focus"))}</h2><p class="focus-t">${esc(f.t)}</p><a class="btn-link" href="${f.go||"#train/puzzles"}">${esc(f.cta||T("home.focusGo"))}${ic("arrow-right","sm")}</a>`}
+ const f=focusOf();$("#hFocus").hidden=!f;if(f){setHTML($("#hFocus"),`<h2 class="focus-k">${esc(T("home.focus"))}</h2><p class="focus-t">${esc(f.t)}</p><a class="btn-link" href="${f.go||"#train/puzzles"}">${esc(f.cta||T("home.focusGo"))}${ic("arrow-right","sm")}</a>`)}
  // today's plan: the top three, the first one is the main action
  const C=planCards().slice(0,3);
- $("#hPlan").innerHTML=C.length?C.map((c,i)=>`<li class="plan-card${i===0?" top":""}"><span class="plan-ic" aria-hidden="true">${ic(c.i||"target")}</span><div class="plan-txt"><b>${esc(c.t)}</b><p>${esc(c.p)}</p></div><div class="plan-go">${!hide&&c.xp?`<span class="xp">+${fmtN(c.xp)} XP</span>`:""}<button class="${i===0?"pri":"ghost"}" type="button" data-plan="${i}">${esc(c.cta||T("plan.open"))}</button></div></li>`).join("")
-  :`<li class="empty-line">${esc(T("plan.none"))}</li>`;
+ setHTML($("#hPlan"),C.length?C.map((c,i)=>`<li class="plan-card${i===0?" top":""}"><span class="plan-ic" aria-hidden="true">${ic(c.i||"target")}</span><div class="plan-txt"><b>${esc(c.t)}</b><p>${esc(c.p)}</p></div><div class="plan-go">${!hide&&c.xp?`<span class="xp">+${fmtN(c.xp)} XP</span>`:""}<button class="${i===0?"pri":"ghost"}" type="button" data-plan="${i}">${esc(c.cta||T("plan.open"))}</button></div></li>`).join("")
+  :`<li class="empty-line">${esc(T("plan.none"))}</li>`);
  $("#hPlan").querySelectorAll("[data-plan]").forEach(b=>b.onclick=()=>{const c=C[+b.dataset.plan];if(c.go)location.hash=c.go.slice(1);else c.act()});
  // streak, daily goal and level in one strip (details on Progress › Trophies)
  $("#hStrip").hidden=hide;if(!hide)$("#hStrip").innerHTML=(st.cur?`<span class="hs-item">${ic("flame")}<b class="num">${fmtN(st.cur)}</b> ${esc(TP("home.streakLbl",st.cur))}</span>`:`<span class="hs-item">${ic("flame")}${esc(T("home.streakStart"))}</span>`)+`<span class="hs-item">${ringSVG(today,goal,true)}<span>${esc(T("home.goal",{n:fmtN(Math.min(dayU(today),goal)),goal:fmtN(goal)}))}</span></span><span class="hs-item">${ic("shield-check")}<b>${esc(lv.name)}</b>${xp?` <span class="num">${fmtN(xp)} XP</span>`:""}</span><span class="hs-more">${esc(T("home.trophies"))}${ic("chevron-right","sm")}</span>`;
@@ -1929,7 +1929,7 @@ const Fr={prof:null,_t:null,
  async render(){const on=!!Sync.me;$("#fOut").hidden=on;$("#fIn").hidden=!on;if(!on)return;
   try{const pr=await this.profile();$("#fName").value=pr.display_name||"";$("#fShare").checked=pr.share;$("#fLink").value=location.origin+location.pathname+"?invite="+pr.invite_code;
    await this.board();await this.friends()}catch(e){this.msg(this.err(e))}},
- async board(){$("#fBoardTitle").textContent="Leaderboard · "+TCL[P.tc];const {data,error}=await Sync.sb.rpc("friends_leaderboard",{p_tc:P.tc});if(error)throw error;
+ async board(){$("#fBoardTitle").textContent=T("fr.board",{tc:T("tc."+P.tc)});const {data,error}=await Sync.sb.rpc("friends_leaderboard",{p_tc:P.tc});if(error)throw error;
   const few=r=>r.games_analysed<10,num=(v,d)=>v==null?"–":v.toFixed(d),bpg=r=>r.blunders_per_game==null?99:r.blunders_per_game;
   const rows=(data||[]).slice().sort((a,b)=>(few(a)-few(b))||(bpg(a)-bpg(b))),pass=lbPassed(data||[]);if(pass.length)this.msg(`You passed ${pass.join(" and ")} this week!`);
   $("#fBody").innerHTML=rows.length?rows.map(r=>{const d=r.rating_now!=null&&r.rating_base!=null?r.rating_now-r.rating_base:null;
