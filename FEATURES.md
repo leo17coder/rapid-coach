@@ -51,6 +51,8 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 
 ## Lessons
 - [auto] **Lessons open** with their tracks.
+- [auto] **Course cards follow the Tactics/Endgames switch and open a course page** (chapters and lessons), with a way back.
+- [manual] The lessons home shows the level as chips (the suggested one marked, a choice is remembered), the top 3 priorities, course cards with a progress ring and "For you", a link to the opening principles (opening courses also open from each opening's "Learn the main lines"), and the weakness profile behind "See your weakness profile".
 - [manual] The priority list and weakness profile appear after enough analysed games; puzzle courses load (from `vendor/lichess-puzzles-…`), adapt to my level, give hints and record progress; opening courses play a line guided, then from memory; placement checks work; lesson progress is kept.
 
 ## Progress

@@ -112,4 +112,13 @@
  "op.noWeak":"No weak spots found yet. Analyse more games in this opening to find them.","op.exH":"More opponent moves from Lichess",
  "op.restart":"Restart line","op.nextLine":"Next line","op.drillP":"Play your side of the lines you really reach. Opponents reply the way yours did.",
  "op.rule":"A move counts as right when it's your pinned repertoire move, the engine's move, or within 6 win-percentage points of it. Positions you miss come back sooner; one you get right three reviews in a row counts as learned.",
+ "ls.track":"Track","ls.tactics":"Tactics","ls.endgames":"Endgames","ls.level":"Your level","ls.first":"Work on these first",
+ "ls.opNote":"Opening lessons are on each opening's page in Openings.","ls.opPrinciples":"New to openings? Start with the opening principles",
+ "ls.wk":"See your weakness profile","ls.profile":"Your profile","ls.phase":"By phase","ls.all":"All lessons",
+ "ls.ringL":"{d} of {n} chapters done","ls.forYou":"For you","ls.next":"Next: {ch}","ls.startAt":"Start at: {ch}","ls.done":"Completed",
+ "ls.cont":"Continue: {ch}","ls.start":"Start: {ch}","ls.idea":"Learn the idea","ls.suggested":"suggested",
+ "ls.lvlNote":"Suggested for you: {lv}.","ls.lvlRating":"From your rating ({r}) and accuracy.","ls.lvlNone":"Suggested: New to chess, because there are no games yet.","ls.lvlChange":"Change it any time.",
+ "ls.prioWait":"Working out your weak spots from your analysed games…","ls.prioClean":"Not enough mistakes to rank yet. Nicely played.","ls.prioNone":"Analyse a few games and your personal list appears here.",
+ "ls.tacDesc":"First steps for new players, then puzzle courses on every common tactic and mating pattern, from real games, up to about 1800.",
+ "ls.egDesc":"The endings every player needs, from the basic mates to Lucena and Philidor: short lessons, positions to play out against Stockfish, and endgame puzzles from real games.",
 };
