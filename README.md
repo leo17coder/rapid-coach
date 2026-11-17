@@ -1,4 +1,6 @@
-# Rapid Coach
+# Kibitz
+
+A *kibitzer* is the onlooker at a chess club who comments on your game. Kibitz is that friend, for the games you play online.
 
 A free chess coach for your chess.com and Lichess games. Enter a username and it:
 
@@ -66,7 +68,7 @@ GPL-3.0 (see `LICENSE`), because the app ships Stockfish, which is GPL-3.0.
 Stockfish: https://github.com/official-stockfish/Stockfish · stockfish.js: https://github.com/nmrugg/stockfish.js (licence in `vendor/STOCKFISH-LICENSE.txt`).
 chess.js © Jeff Hlywa, BSD-2-Clause (`vendor/CHESSJS-LICENSE.txt`).
 Chess pieces: cburnett by Colin M.L. Burnett, GPL-2.0-or-later, from @lichess-org/chessground 10.5.0; "Bold" is a derived variant (`vendor/pieces/LICENSE.txt`).
-Fonts: Fredoka and Nunito, SIL Open Font License 1.1, from @fontsource-variable 5.3.0, subset to Latin (`vendor/fonts/*-OFL.txt`).
+Fonts: Literata and Atkinson Hyperlegible Next, SIL Open Font License 1.1, from @fontsource-variable 5.3.0, Latin subset (`vendor/fonts/*-OFL.txt`).
 Icons: Lucide (lucide-static 1.66.0), ISC (`vendor/LUCIDE-LICENSE.txt`).
 Lesson puzzles: Lichess puzzle database, CC0 public domain (`vendor/LICHESS-PUZZLES-LICENSE.txt`).
 Opening names: lichess-org/chess-openings, CC0 public domain (`vendor/CHESS-OPENINGS-LICENSE.txt`).

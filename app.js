@@ -1,4 +1,4 @@
-/* Rapid Coach — free chess coach for chess.com and Lichess games. GPL-3.0. */
+/* Kibitz — free chess coach for chess.com and Lichess games. GPL-3.0. */
 {
 /* ---------- utils ---------- */
 const $=s=>document.querySelector(s);
@@ -134,11 +134,26 @@ const score=a=>a.length?(a.filter(g=>g.result==="win").length+a.filter(g=>g.resu
 
 /* ---------- board ---------- */
 /* ---------- display settings, icons, sounds ---------- */
-/* UI = rc.ui (this browser only): theme "system"|"light"|"dark", board "green"|"wood"|"slate", pieces "cburnett"|"bold", sound */
-const UI=Object.assign({theme:"system",board:"green",pieces:"cburnett",sound:false},LS.get("ui",{})),BOARDS=[];
+/* UI = rc.ui (this browser only): theme "dark"|"light"|"system" (dark is the default since the Kibitz redesign; v3 marks the
+   one-time move from the old default "system" to dark), board "green"|"wood"|"slate", pieces "cburnett"|"bold", sound, lang */
+const UI=Object.assign({theme:"dark",board:"green",pieces:"cburnett",sound:false},LS.get("ui",{})),BOARDS=[];
+if(!UI.v3){if(UI.theme!=="light")UI.theme="dark";UI.v3=1;LS.set("ui",UI)}
+/* ---------- interface text: i18n/<lang>.js (window.KZ_I18N), English as the fallback; dates and numbers through Intl ---------- */
+const LANGS=["en","fr","de","da"],I18N=window.KZ_I18N||{en:{}};let LANG="en";
+const T=(k,v)=>{let s=(I18N[LANG]||{})[k];if(s==null)s=I18N.en[k];if(s==null)s=k;return v?s.replace(/\{(\w+)\}/g,(m,x)=>v[x]!=null?v[x]:m):s};
+const fmtN=(n,o)=>new Intl.NumberFormat(LANG,o).format(n),TP=(k,n,v)=>T(k+"."+new Intl.PluralRules(LANG).select(n),{n:fmtN(n),...(v||{})});
+function langPick(){if(LANGS.includes(UI.lang)&&I18N[UI.lang])return UI.lang;for(const l of navigator.languages||[navigator.language||"en"]){const b=String(l).slice(0,2).toLowerCase();if(LANGS.includes(b)&&I18N[b])return b}return "en"}
+function applyI18n(root){(root||document).querySelectorAll("[data-i18n]").forEach(e=>e.textContent=T(e.dataset.i18n));(root||document).querySelectorAll("[data-i18n-html]").forEach(e=>e.innerHTML=T(e.dataset.i18nHtml));
+ (root||document).querySelectorAll("[data-i18n-attr]").forEach(e=>e.dataset.i18nAttr.split(";").forEach(p=>{const [a,k]=p.split(":");e.setAttribute(a,T(k))}));document.documentElement.lang=LANG}
+LANG=langPick();
+/* dates: "Today, 14:32", "Yesterday", "Sun 15 Nov, 14:32" (year only when it isn't this year) */
+const dayKey=d=>d.getFullYear()+"-"+d.getMonth()+"-"+d.getDate();
+function fmtDay(ts){const d=new Date(ts),n=new Date(),y=new Date(n-864e5);if(dayKey(d)===dayKey(n))return T("date.today");if(dayKey(d)===dayKey(y))return T("date.yesterday");
+ return new Intl.DateTimeFormat(LANG,{weekday:"short",day:"numeric",month:"short",...(d.getFullYear()!==n.getFullYear()?{year:"numeric"}:{})}).format(d)}
+const fmtTime=ts=>new Intl.DateTimeFormat(LANG,{hour:"2-digit",minute:"2-digit"}).format(new Date(ts)),fmtWhen=ts=>fmtDay(ts)+", "+fmtTime(ts);
 const RM=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
 const ic=(n,c)=>`<svg class="ic${c?" "+c:""}" aria-hidden="true" focusable="false"><use href="vendor/icons.svg#i-${n}"/></svg>`;
-function applyUI(){const d=document.documentElement;if(UI.theme==="system")delete d.dataset.theme;else d.dataset.theme=UI.theme;d.dataset.board=UI.board;BOARDS.forEach(b=>b.draw())}
+function applyUI(){const d=document.documentElement;d.dataset.theme=UI.theme;d.dataset.board=UI.board;BOARDS.forEach(b=>b.draw())}
 /* sounds are synthesised with Web Audio (no audio files); off unless switched on in settings */
 const Snd={ctx:null,nb:null,
  play(k){if(!UI.sound)return;try{const C=this.ctx||(this.ctx=new (window.AudioContext||window.webkitAudioContext)()),t=C.currentTime;if(C.state==="suspended")C.resume();
@@ -249,7 +264,7 @@ $("#gamePick").onchange=()=>{const g=GAMES.find(x=>x.id===$("#gamePick").value);
 $("#gameFilter").onchange=()=>{fillPicker();const g=GAMES.find(x=>x.id===$("#gamePick").value);if(g)openGame(g)};
 function stepGame(d){const l=filtered(),i=l.indexOf(CUR),g=l[Math.max(0,Math.min(l.length-1,i+d))];if(g)openGame(g)}
 $("#prevG").onclick=()=>stepGame(1);$("#nextG").onclick=()=>stepGame(-1);
-document.addEventListener("keydown",e=>{if(route.cur!=="review"||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+document.addEventListener("keydown",e=>{if(route.sec!=="review"||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
  if(e.key==="ArrowLeft"){nav("prev");e.preventDefault()}if(e.key==="ArrowRight"){nav("next");e.preventDefault()}if(e.key==="Home")nav("start");if(e.key==="End")nav("end")});
 function openDefault(){const g=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an&&serious(g).some(e=>e.kind==="blunder"))||GAMES[GAMES.length-1];
  if(g){const fe=serious(g).find(e=>e.kind==="blunder");openGame(g,fe?fe.i:0)}}
@@ -263,9 +278,9 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
   for(let i=0;i<g._f.length;i++){if(gen!==GEN)break;const c=new Chess(g._f[i]);if(c.game_over()){ev.push(c.in_checkmate()?(c.turn()==="w"?-10000:10000):0);best.push(null)}else{const r=await Engine.eval(g._f[i],DEPTH);ev.push(r.cp);best.push(r.best)}
    job("an",`Analysing game ${AQ.done+1} of ${AQ.done+AQ.list.length+1}`,(i+1)/g._f.length)}
   if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);Fr.soon();AQ.done++;maybeBaseline();
-  if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.cur==="progress")renderProgress();if(route.cur==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.cur==="home")renderHome()}}
+  if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.sec==="progress")renderProgress();if(route.sec==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.sec==="home")renderHome()}}
  catch(e){$("#anState").innerHTML=`<div class="verdict v-no">${ic("triangle-alert")}The engine couldn't start in this browser.</div>`}
- AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck();TG.run()}if(route.cur==="progress")renderProgress();if(route.cur==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
+ AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck();TG.run()}if(route.sec==="progress")renderProgress();if(route.sec==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
 
 /* ---------- TRAINER ---------- */
@@ -336,7 +351,7 @@ function sess(S,ok,el){S.n++;if(ok){S.ok++;S.run++;S.best=Math.max(S.best,S.run)
  $(el).innerHTML=`<span class="chip">${ic("target","sm")}${S.ok}/${S.n} this session</span><span class="chip xp">${ic("flame","sm")}${S.run} in a row</span>${S.best>2?`<span class="chip gold">${ic("trophy","sm")}best ${S.best}</span>`:""}`}
 const TB=new Board($("#tboard"),{onMove:tryMove,label:"Puzzle board"}),TW=new Why($("#tWhy"),TB,new EvalBar($("#tEv")));let PZ=[],PI=null,HINT=0,DONE=false;
 const TST=()=>{const t=LS.get(uk("trainer"),{});return t};let TS={};
-function buildPuzzles(){PZ=[];for(const g of GAMES){if(!g.an)continue;replay(g);for(const e of serious(g))if(wp(e.before)>=30&&e.best)PZ.push({id:g.id+":"+e.i,g,e})}PZ.sort((a,b)=>b.g.ts-a.g.ts);if(route.cur==="trainer")renderTStats()}
+function buildPuzzles(){PZ=[];for(const g of GAMES){if(!g.an)continue;replay(g);for(const e of serious(g))if(wp(e.before)>=30&&e.best)PZ.push({id:g.id+":"+e.i,g,e})}PZ.sort((a,b)=>b.g.ts-a.g.ts);if(route.sec==="trainer")renderTStats()}
 function pickPuzzle(){const st=id=>TS[id]||{};const failed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen);const pool=failed.length?failed:fresh.length?fresh:PZ;return pool[0]||null}
 function loadPuzzle(p){PI=p;HINT=0;DONE=false;TW.clear();$("#tFeedback").innerHTML="";$("#tMeta").innerHTML="";
  $("#tPrompt").className="verdict v-info";if(!p){$("#tPrompt").textContent=AQ?"Your games are being analysed — puzzles appear here as soon as the first one is done.":"No puzzles yet. Analyse a few games first (Progress → Analyse 20 more games).";TB.flip=false;TB.set(new Chess().fen());renderTStats();return}
@@ -554,8 +569,8 @@ function tagOne(g,e,rF,rA){const F=g._f[e.i],A=g._f[e.i+1],me=F.split(" ")[1],t=
 const TG={busy:false,async run(){if(this.busy||!P)return;this.busy=true;const gen=GEN;let done=0;
  try{for(const g of GAMES.filter(g=>g.an).slice(-MT_GAMES).reverse()){if(gen!==GEN)break;if(g.mt&&g.mt.v===MT_V)continue;replay(g);const mt={v:MT_V,e:{}};
   for(const e of serious(g)){if(gen!==GEN)break;const rF=(await Engine.eval(g._f[e.i],12)).pv,rA=(await Engine.eval(g._f[e.i+1],12)).pv;if(gen!==GEN)break;mt.e[e.i]=tagOne(g,e,rF,rA)}
-  if(gen!==GEN)break;g.mt=mt;DB.put([g]);if(++done%3===0&&route.cur==="lessons"&&!LP)renderLessons()}}
- catch(x){}finally{this.busy=false}if(gen===GEN&&done){if(route.cur==="lessons"&&!LP)renderLessons();if(route.cur==="home")renderHome()}}};
+  if(gen!==GEN)break;g.mt=mt;DB.put([g]);if(++done%3===0&&route.sec==="lessons"&&!LP)renderLessons()}}
+ catch(x){}finally{this.busy=false}if(gen===GEN&&done){if(route.sec==="lessons"&&!LP)renderLessons();if(route.sec==="home")renderHome()}}};
 function wkProfile(){const an=GAMES.filter(g=>g.an).slice(-MT_GAMES),tg=an.filter(g=>g.mt&&g.mt.v===MT_V),n=tg.length,T={},PH={opening:{n:0,d:0},middlegame:{n:0,d:0},endgame:{n:0,d:0}},ET={},inc=(o,k,d)=>{const x=o[k]||(o[k]={n:0,d:0});x.n++;x.d+=d};
  for(const g of tg)for(const i in g.mt.e){const x=g.mt.e[i];inc(T,x.t[0],x.d);PH[x.ph].n++;PH[x.ph].d+=x.d;if(x.et)inc(ET,x.et,x.d)}return {n,an:an.length,T,PH,ET}}
 /* where a theme is practised: a puzzle course (its chapter comes from pzRec), or the First steps lesson for new players and beginners until it's done */
@@ -1432,7 +1447,7 @@ function gCheck(xp0){if(!P||!GS)return;const xp=gXP(),l0=gLevel(xp0==null?xp:xp0
 function gAdd(o){if(!P||!GS)return;const xp0=gXP(),t=dkey(),d=GS.days[t]||(GS.days[t]={}),h=new Date().getHours();for(const k in o)d[k]=(d[k]||0)+o[k];
  if(h>=23||h<4)d.n=1;else if(h<7)d.e=1;if(!d.g&&dayU(d)>=gGoal()){d.g=1;gToast(`Daily goal met! +${GX.g} XP`);Snd.play("goal")}
  const w=wkSum(wkOf(t));if(w.done&&!(GS.wkt===wkOf(t))){GS.wkt=wkOf(t);gToast(`Weekly challenge complete: ${w.ch.t}! +${WK_BONUS} XP`)}
- gSave();gCheck(xp0);if(route.cur==="home")renderHome()}
+ gSave();gCheck(xp0);if(route.sec==="home")renderHome()}
 /* merge two states (sync): day counts max, badges earliest, records best, settings newest, reviewed union */
 function gMerge(a,b){const o=gNew();o.days=JSON.parse(JSON.stringify(a.days||{}));for(const k in b.days||{}){const d=o.days[k]||(o.days[k]={});for(const f in b.days[k])d[f]=Math.max(d[f]||0,b.days[k][f]||0)}
  o.badges={...(a.badges||{})};for(const k in b.badges||{})o.badges[k]=Math.min(o.badges[k]||Infinity,b.badges[k]);
@@ -1629,7 +1644,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   document.addEventListener("visibilitychange",()=>{if(!this.me)return;if(document.hidden)this.flush();else if(Date.now()-this.pulled>5*60e3)this.run()})},
  onAuth(ses){const u=ses&&ses.user;
   if(u&&(!this.me||this.me.id!==u.id)){this.me={id:u.id,email:u.email};Fr.prof=null;acctUI();this.run();Fr.onSignIn()}
-  else if(!u&&this.me){this.me=null;Fr.prof=null;acctUI();if(route.cur==="friends")Fr.render()}},
+  else if(!u&&this.me){this.me=null;Fr.prof=null;acctUI();if(route.sec==="friends")Fr.render()}},
  /* outbox: {an:{gameId:1}, pz:{"acct|puzzleId":1}, base:{"acct|tc":1}, la:{"acct|tc":1}, op:{"acct|posKey":1}, ops:{"acct|w|<family>":1}, gm:{acct:1}, ls:{"acct|item":1}} */
  mark(kind,key){if(!SB_ON)return;const o=LS.get("sb.out",{});(o[kind]=o[kind]||{})[key]=1;LS.set("sb.out",o);if(this.me){clearTimeout(this._t);this._t=setTimeout(()=>this.flush(),2000)}},
  async run(){if(!this.me||this.busy)return;this.busy=true;this.err="";acctUI();
@@ -1700,11 +1715,11 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   for(const a in lm)LS.set(a+".lessons",lm[a]);hi(lr,"ls");if(P&&lr.length)LSP=LS.get(uk("lessons"),{});
   // linked accounts: on a device with no profile yet, open the most recently used one
   const la=await this.rows("linked_accounts","account,tc",w.la);hi(la,"la");LS.set(wk,w);this.pulled=Date.now();
-  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.cur==="progress")renderProgress();if(route.cur==="trainer")renderTStats();if(route.cur==="home")renderHome();Fr.soon()}
+  if(P){refreshGames();if(CUR&&CUR.an){renderMoves();renderKM();renderAnState();show()}if(route.sec==="progress")renderProgress();if(route.sec==="trainer")renderTStats();if(route.sec==="home")renderHome();Fr.soon()}
   else if(la.length){const r=la[la.length-1],i=r.account.indexOf(":");P={source:r.account.slice(0,i),user:r.account.slice(i+1),tc:r.tc};LS.set("profile",P);enter(false)}},
  async exportAll(){const out={exported:new Date().toISOString(),account:this.me.email};for(const t of ["linked_accounts","analyses","puzzle_progress","baselines","opening_progress","opening_practice","gamification","lesson_progress","profiles","leaderboard_stats"])out[t]=await this.rows(t,"*");
   const f=await this.sb.rpc("my_friends");if(f.error)throw f.error;out.friends=f.data;return out},
- async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;Fr.prof=null;LS.set("sb.out",{});acctUI();if(route.cur==="friends")Fr.render()},
+ async signOut(){try{await this.sb.auth.signOut({scope:"local"})}catch(e){}this.me=null;Fr.prof=null;LS.set("sb.out",{});acctUI();if(route.sec==="friends")Fr.render()},
  async deleteAccount(){const {error}=await this.sb.rpc("delete_my_account");if(error)throw error;const id=this.me.id;await this.signOut();try{localStorage.removeItem("rc.sb.init."+id);localStorage.removeItem("rc.sb.pull."+id)}catch(e){}}};
 
 /* account panel */
@@ -1713,7 +1728,7 @@ function acctMsg(t){$("#acctMsg").textContent=t||""}
 function acctOpen(){acctDel=false;acctUI();const d=$("#acct");if(!d.open)d.showModal()}
 function acctUI(){if(!SB_ON)return;const me=Sync.me,step=me?"in":acctEmail?"code":"email";
  document.querySelectorAll("[data-acct]").forEach(e=>e.hidden=e.dataset.acct!==step);
- document.querySelectorAll(".acctBtn").forEach(b=>{const l=b.querySelector(".lbl");if(l)l.textContent=me?"Account":"Sign in to sync";else b.textContent=me?"Account":"Sign in to sync"});
+ document.querySelectorAll(".acctBtn").forEach(b=>{const l=b.querySelector(".lbl"),t=T(me?"menu.account":"menu.signin");if(l){l.textContent=t;l.dataset.i18n=me?"menu.account":"menu.signin"}else b.textContent=t});
  if(acctEmail)$("#acctSent").textContent=acctEmail;
  if(me){$("#acctWho").textContent=me.email;const o=LS.get("sb.out",{}),n=Object.values(o).reduce((a,x)=>a+Object.keys(x).length,0);
   $("#acctState").textContent=Sync.err||(Sync.busy?"Syncing…":n?`${n} change${n>1?"s":""} waiting to upload.`:Sync.pulled?"Everything is synced.":"");
@@ -1743,7 +1758,7 @@ const Fr={prof:null,_t:null,
  msg(t){$("#fMsg").textContent=t||""},
  async profile(){if(this.prof)return this.prof;const sb=Sync.sb,cols="display_name,share,invite_code";let {data,error}=await sb.from("profiles").select(cols).maybeSingle();if(error)throw error;
   if(!data){const r=await sb.from("profiles").insert({share:false}).select(cols).single();if(r.error)throw r.error;data=r.data}return this.prof=data},
- async onSignIn(){try{await this.profile();const code=LS.get("invite",null);if(code){LS.set("invite",null);await this.accept(code)}this.soon(1000)}catch(e){}if(route.cur==="friends")this.render()},
+ async onSignIn(){try{await this.profile();const code=LS.get("invite",null);if(code){LS.set("invite",null);await this.accept(code)}this.soon(1000)}catch(e){}if(route.sec==="friends")this.render()},
  async accept(code){let t;try{const {data,error}=await Sync.sb.rpc("add_friend",{code});if(error)throw error;t=`You and ${data||"your friend"} are now friends.`}catch(e){t=this.err(e)}
   if($("#acct").open)$("#acct").close();inviteBanner(false);if(P){if(location.hash!=="#friends")location.hash="friends";this.msg(t)}else $("#startMsg").textContent=t+" Enter your username to start."},
  soon(ms){if(!SB_ON)return;clearTimeout(this._t);this._t=setTimeout(()=>this.publish(),ms==null?20000:ms)},
@@ -1754,7 +1769,7 @@ const Fr={prof:null,_t:null,
    puzzles_solved:PZ.filter(p=>(TS[p.id]||{}).ok).length,openings_learned:opLearned(),lessons_completed:lsCount(),...gRow(),rating_now:r(s.rating),rating_base:b?r(b.rating):null,base_date:b?b.date:null}},
  async publish(){if(!Sync.me||!P||!GAMES.length||!ACCT_RE.test(acct()))return;
   try{const pr=await this.profile();if(!pr.share)return;const {error}=await Sync.sb.from("leaderboard_stats").upsert(this.row(),{onConflict:"user_id,account,tc"});if(error)throw error;
-   if(route.cur==="friends")await this.board()}catch(e){this.soon(120000)}},
+   if(route.sec==="friends")await this.board()}catch(e){this.soon(120000)}},
  async render(){const on=!!Sync.me;$("#fOut").hidden=on;$("#fIn").hidden=!on;if(!on)return;
   try{const pr=await this.profile();$("#fName").value=pr.display_name||"";$("#fShare").checked=pr.share;$("#fLink").value=location.origin+location.pathname+"?invite="+pr.invite_code;
    await this.board();await this.friends()}catch(e){this.msg(this.err(e))}},
@@ -1782,25 +1797,44 @@ $("#fNewLink").onclick=async()=>{try{const {data,error}=await Sync.sb.rpc("new_i
 
 /* ---------- settings dialog (display settings are local to this browser) ---------- */
 function setOpen(){const d=$("#settings");document.querySelectorAll('[name="sTheme"]').forEach(r=>r.checked=r.value===UI.theme);document.querySelectorAll('[name="sBoard"]').forEach(r=>r.checked=r.value===UI.board);
- document.querySelectorAll('[name="sPieces"]').forEach(r=>r.checked=r.value===UI.pieces);$("#sSound").checked=!!UI.sound;$("#sHideRow").hidden=!GS;if(GS)$("#sHide").checked=!!GS.set.hide;if(!d.open)d.showModal()}
+ document.querySelectorAll('[name="sPieces"]').forEach(r=>r.checked=r.value===UI.pieces);$("#sLang").innerHTML=LANGS.filter(l=>I18N[l]).map(l=>`<option value="${l}"${l===LANG?" selected":""}>${esc(I18N[l]["lang.name"]||l)}</option>`).join("");$("#sSound").checked=!!UI.sound;$("#sHideRow").hidden=!GS;if(GS)$("#sHide").checked=!!GS.set.hide;if(!d.open)d.showModal()}
 const setSave=()=>{LS.set("ui",UI);applyUI()};
 document.querySelectorAll('[name="sTheme"]').forEach(r=>r.onchange=()=>{UI.theme=r.value;setSave()});
 document.querySelectorAll('[name="sBoard"]').forEach(r=>r.onchange=()=>{UI.board=r.value;setSave()});
 document.querySelectorAll('[name="sPieces"]').forEach(r=>r.onchange=()=>{UI.pieces=r.value;setSave()});
+$("#sLang").onchange=()=>setLang($("#sLang").value);
+/* language: remembered in rc.ui; re-renders the shell and the current screen */
+function setLang(l){UI.lang=l;LS.set("ui",UI);LANG=langPick();applyI18n();if(P){$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);route()}}
 $("#sSound").onchange=()=>{UI.sound=$("#sSound").checked;setSave();if(UI.sound)Snd.play("correct")};
-$("#sHide").onchange=()=>{if(!GS)return;GS.set={...GS.set,hide:$("#sHide").checked,at:Date.now()};gSave();if(route.cur==="home")renderHome()};
-$("#setBtn").onclick=setOpen;$("#setClose").onclick=()=>$("#settings").close();
+$("#sHide").onchange=()=>{if(!GS)return;GS.set={...GS.set,hide:$("#sHide").checked,at:Date.now()};gSave();if(route.sec==="home")renderHome()};
+$("#setBtn").onclick=()=>{profMenu(false);setOpen()};$("#setClose").onclick=()=>$("#settings").close();
+/* profile menu: the player, switch player, account, settings (one place for all of them) */
+function profMenu(open){const m=$("#profMenu"),b=$("#profBtn");m.hidden=!open;b.setAttribute("aria-expanded",open?"true":"false");if(open){const f=m.querySelector("button:not([hidden])");if(f)f.focus()}}
+$("#profBtn").onclick=e=>{e.stopPropagation();profMenu($("#profMenu").hidden)};
+document.addEventListener("click",e=>{if(!$("#profMenu").hidden&&!e.target.closest("#profMenu,#profBtn"))profMenu(false)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#profMenu").hidden){profMenu(false);$("#profBtn").focus()}});
+$("#profMenu").addEventListener("click",e=>{if(e.target.closest("button"))setTimeout(()=>profMenu(false),0)});
+applyI18n();
 applyUI();
 
 /* ---------- routing ---------- */
-function route(){if(!P){show1("start");return}const t=["home","review","trainer","lessons","progress","openings"].concat(SB_ON?["friends"]:[]).includes(location.hash.slice(1))?location.hash.slice(1):"home";route.cur=t;show1(t);
- document.querySelectorAll("nav a").forEach(a=>{if(a.dataset.t===t)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
+/* routes: the hash path -> the section it shows. Four tabs (home, review, train, progress); Train and Progress have sections.
+   route.cur is the path ("train/puzzles"); route.sec the section ("trainer"). Links from before the redesign redirect. */
+const ROUTES={home:"home",review:"review","train/puzzles":"trainer","train/openings":"openings","train/lessons":"lessons",progress:"progress","progress/friends":"friends"};
+const OLDR={trainer:"train/puzzles",openings:"train/openings",lessons:"train/lessons",friends:"progress/friends","progress/overview":"progress"};
+const SUBS={train:[["train/puzzles","train.puzzles"],["train/openings","train.openings"],["train/lessons","train.lessons"]],progress:[["progress","progress.overview"],["progress/friends","progress.friends","friends"]]};
+function tabHead(top){const h=$("#tabHead"),sub=SUBS[top];h.hidden=!sub;if(!sub)return;$("#tabTitle").textContent=T(top+".title");
+ $("#subnav").setAttribute("aria-label",T("nav.sections"));$("#subnav").innerHTML=sub.filter(x=>x[2]!=="friends"||SB_ON).map(([p,k,t])=>`<a href="#${p}"${t?` data-t="${t}"`:""}${route.cur===p?' aria-current="page"':""}>${esc(T(k))}</a>`).join("")}
+function route(){if(!P){show1("start");return}let h=decodeURIComponent(location.hash.slice(1));
+ if(h==="train")h=LS.get("trainSec","train/puzzles");if(OLDR[h]){h=OLDR[h];history.replaceState(null,"","#"+h)}
+ if(h==="progress/friends"&&!SB_ON)h="progress";if(!ROUTES[h])h="home";const t=ROUTES[h],top=h.split("/")[0];route.cur=h;route.sec=t;if(top==="train")LS.set("trainSec",h);show1(t);tabHead(top);
+ document.querySelectorAll("#hdr nav a").forEach(a=>{if(a.dataset.t===top)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
  if(t==="progress")renderProgress();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
-function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);$("#hdr").hidden=t==="start";document.body.classList.toggle("has-side",t!=="start");if(t==="start")demoStart();else demoStop()}
+function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);if(t==="start")$("#tabHead").hidden=true;$("#hdr").hidden=t==="start";document.body.classList.toggle("has-side",t!=="start");if(t==="start")demoStart();else demoStop()}
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user+" · "+SRC[P.source].name+" · "+TCL[P.tc];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=`No ${TCL[P.tc]} games found for ${P.user} on ${SRC[P.source].name}. Try another time control.`;$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}

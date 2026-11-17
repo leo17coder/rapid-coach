@@ -1,4 +1,4 @@
-# What Rapid Coach does: the "nothing broken" checklist
+# What Kibitz does: the "nothing broken" checklist
 
 Every item below must still work after any change, including redesigns. Items marked **[auto]** are checked by `npm test` (see `tests/run.mjs`; the test names match the bold words). Items marked **[manual]** need a quick human or Claude check in a browser before merging. If a change has to alter or remove an item, ask Leo first and update this file in the same pull request.
 
@@ -67,7 +67,9 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 ## Look and feel
 - [auto] **Settings: dark theme applies and is remembered.**
 - [auto] **Layouts don't overflow sideways** on a phone (390 px) or a desktop (1280 px), and navigation is visible on both.
-- [manual] Board colours (green, wood, slate), piece sets, sound on/off; the sidebar on desktop and the bottom tab bar on phones; visible keyboard focus everywhere; reduced motion respected; text readable (WCAG AA) in light and dark.
+- [manual] Navigation: four tabs (Home, Review, Train, Progress) as a sidebar on desktop and a labelled bottom tab bar on phones; Train has Puzzles, Openings and Lessons, Progress has Overview and Friends; old links (`#trainer`, `#openings`, `#lessons`, `#friends`) open their new place; the profile menu holds Switch player, Sign in/Account and Settings.
+- [manual] Settings: theme (dark by default, light, or match the device) and language.
+- [manual] Board colours (green, wood, slate), piece sets, sound on/off; visible keyboard focus everywhere; reduced motion respected; text readable (WCAG AA) in light and dark.
 - [manual] No script errors in the browser console while using the app (the automated run checks this for everything it touches).
 
 ## Releasing

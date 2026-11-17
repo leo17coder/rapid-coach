@@ -120,7 +120,9 @@ export const st = page => page.evaluate(() => window.rcTest && window.rcTest.sta
 export const text = (page, sel) => page.$eval(sel, e => e.innerText.trim()).catch(() => "");
 export const visible = (page, sel) => page.$eval(sel, e => { const r = e.getBoundingClientRect(), s = getComputedStyle(e); return !e.closest("[hidden]") && s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0; }).catch(() => false);
 export async function goto(page, base, hash = "") { await page.goto(`${base}/index.html?test=1${hash}`, { waitUntil: "load" }); await waitFor(page, () => !!window.rcTest, { label: "app booted (window.rcTest)" }); }
-export async function tab(page, name) { await page.evaluate(n => { location.hash = n; }, name); await waitFor(page, n => window.rcTest.state().route === n || !document.querySelector("#v-start").hidden, { label: `tab ${name}`, arg: name }); await sleep(300); }
+/** Routes since the Kibitz redesign: four tabs, Train and Progress with sections. Old names map to their new place. */
+const ROUTE_OF = { trainer: "train/puzzles", openings: "train/openings", lessons: "train/lessons", friends: "progress/friends" };
+export async function tab(page, name) { const r = ROUTE_OF[name] || name; await page.evaluate(n => { location.hash = n; }, r); await waitFor(page, n => window.rcTest.state().route === n || !document.querySelector("#v-start").hidden, { label: `tab ${r}`, arg: r }); await sleep(300); }
 /** Click a square on a board element; uses rcTest to know the orientation. */
 export async function clickSquare(page, boardSel, sq, flip) {
   const r = await page.$eval(boardSel, e => { const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height }; });
