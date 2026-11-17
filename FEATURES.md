@@ -44,7 +44,9 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 - [manual] Click-to-move, drag-and-drop and keyboard moves (arrows + Enter) all work on every board; a move "just as good" as the engine's counts as correct; the session counter (solved, run, best run) updates.
 
 ## Openings
-- [auto] **Openings open** (trainer or its empty state).
+- [auto] **Openings open** (the gallery).
+- [auto] **Opening cards follow the White/Black switch and open an opening page** (stats), whose "Practise my lines" starts the drill.
+- [manual] The gallery shows my openings first (games, score, positions learned), then popular ones (`vendor/openings-popular-…`, 12 at first, "Show more"), each card with a small board after the defining moves and the moves underneath; the colour choice is remembered. The opening page shows "Learn the main lines" when a lesson course teaches it, weak spots as small boards (tapping one drills from there), the before-and-after effect and the Lichess explorer option; Home's opening cards, Progress's opening table, the priority list and "Drill this line in the opening trainer" open the right opening.
 - [manual] The opening drill plays the opponent's usual moves, grades my move, shows arrows after a miss and offers to replay the line; progress (learned positions) is kept; the optional Lichess explorer sign-in works and the trainer falls back to my own games without it.
 
 ## Lessons

@@ -519,26 +519,62 @@ async function opMove(from,to){const d=OD;if(!d||!d.wait)return;const c=d.c,fen=
 function opLineDone(d,why){if(d!==OD)return;d.done=true;$("#oPrompt").className="verdict "+(d.miss?"v-info":"v-ok");$("#oPrompt").innerHTML=ic(d.miss?"rotate-ccw":"flag")+(why==="end"?"<b>Line complete.</b> ":"<b>That's as far as your games go here.</b> ")+(d.miss?"You missed a move: replay it to lock it in.":"On to the next line.");renderOpStats()}
 function opEffect(key,t){const gs=opGames(key[0],key.slice(2)),b=gs.filter(g=>g.ts<t&&g.ts>=t-365*864e5),a=gs.filter(g=>g.ts>=t);
  return a.length>=5&&b.length>=5?{col:key[0],fam:key.slice(2),a:score(a),b:score(b),na:a.length,nb:b.length,date:new Date(t).toISOString().slice(0,10)}:null}
-function renderOpStats(){if(!OT)return;const core=opCore(),learned=core.filter(n=>((OPS[n.k]||{}).s||0)>=OP_LEARNED).length,due=core.filter(n=>isDue(n.k)).length,weak=core.filter(n=>n.weak).length;
- $("#oKpis").innerHTML=`<div class="kpi"><b>${OT.games.length}</b>games in this opening</div><div class="kpi${OT.games.length&&OT.score<45?" goal":""}"><b>${OT.games.length?Math.round(OT.score)+"%":"—"}</b>your score</div><div class="kpi"><b>${learned}<s>of ${core.length}</s></b>positions learned</div><div class="kpi goal"><b>${due}</b>due for review</div><div class="kpi"><b>${weak}</b>weak spots</div>`}
-function renderOpenings(){const opts=[];for(const col of ["w","b"]){const m={};GAMES.filter(g=>g.color===col).forEach(g=>{const f=famOf(g.eco);m[f]=(m[f]||0)+1});
-  Object.entries(m).filter(([,n])=>n>=3).sort((a,b)=>b[1]-a[1]).forEach(([f,n])=>opts.push({v:col+"|"+f,t:`${f} as ${col==="w"?"White":"Black"} (${n})`}));
-  for(const co of OPC)if(opLines(col,co.name).length&&!opts.some(o=>o.v[0]===col&&co.re&&co.re.test(o.v.slice(2))&&opLines(col,o.v.slice(2)).length))opts.push({v:col+"|"+co.name,t:`${co.name} as ${col==="w"?"White":"Black"} (lesson lines)`})}
- if(OPSEL&&!opts.some(o=>o.v===OPSEL))OPSEL=null;if(!OPSEL&&opts.length)OPSEL=opts[0].v;
- $("#oPick").innerHTML=opts.map(o=>`<option value="${esc(o.v)}"${o.v===OPSEL?" selected":""}>${esc(o.t)}</option>`).join("");
- $("#oEmpty").hidden=!!OPSEL;$("#oMain").hidden=!OPSEL;if(!OPSEL){OT=null;OD=null;return}
- const col=OPSEL[0],fam=OPSEL.slice(2),sig=opSig(col,fam);
- if(!OT||OT.key!==OPSEL||OT.sig!==sig){OT=buildTree(col,fam)}
- $("#oTitle").textContent=`${fam} as ${col==="w"?"White":"Black"}`;
- const W=[...OT.T.values()].filter(n=>n.weak).sort((a,b)=>b.prio-a.prio).slice(0,6);
- $("#oWeak").innerHTML=W.length?W.map((n,i)=>{const top=Object.values(n.mv).sort((a,b)=>b.n-a.n)[0];
-  return `<li><button class="link" type="button" data-w="${i}">${esc(n.path.length?movesTxt(n.path)+" …":"Starting position")}</button><span class="small"> seen ${n.n}×${n.err?`, an inaccuracy or worse in ${n.err} of ${n.anN} analysed games`:""}${n.drop>=10?`, you score ${Math.round(n.score)}% from here`:""}. You usually play ${esc(top.san)}.</span></li>`}).join("")
-  :'<li class="small">No weak spots found yet. Analyse more games in this opening to find them.</li>';
- $("#oWeak").querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>opStartLine(false,W[+b.dataset.w]));
+function renderOpStats(){if(!OT)return;const core=opCore(),learned=core.filter(n=>((OPS[n.k]||{}).s||0)>=OP_LEARNED).length,due=core.filter(n=>isDue(n.k)).length,g=OT.games.length;
+ $("#oKpis").innerHTML=`<div class="kpi"><b>${fmtN(g)}</b>${esc(T("op.kGames"))}</div><div class="kpi${g&&OT.score<45?" goal":""}"><b>${g?Math.round(OT.score)+"%":"—"}</b>${esc(T("op.kScore"))}</div><div class="kpi"><b>${fmtN(learned)}<s>${esc(T("op.of",{n:core.length}))}</s></b>${esc(T("op.kLearned"))}</div><div class="kpi goal"><b>${fmtN(due)}</b>${esc(T("op.kDue"))}</div>`}
+/* Train › Openings: a gallery of cards (#train/openings; my openings first, then popular ones), one opening's page
+   (#train/openings/<key>) and the drill (#train/openings/<key>/practise). A key is "<w|b>|<family or course/popular name>". */
+let OVW={v:"gal",k:null},OSTART=null,OPOP=null;const OPOP_FILE="vendor/openings-popular-2026-11.json",OTC=new Map();
+const opPop=()=>OPOP?Promise.resolve(OPOP):fetch(OPOP_FILE).then(r=>r.ok?r.json():{w:[],b:[]}).catch(()=>({w:[],b:[]})).then(j=>OPOP=j);
+const opNorm=s=>s.toLowerCase().replace(/defence/g,"defense").replace(/[^a-z]/g,"").replace(/s(opening|defense|game|gambit|attack)/g,"$1");
+/* the last moves of a long path, numbered: "… 9. d3 Bd6 10. Nc6 Qd7" */
+const opTail=p=>{const s=Math.max(0,p.length-6);return (s?"… ":"")+p.slice(s).map((m,j)=>{const i=s+j;return i%2===0||j===0?mvLabel(i)+" "+m:m}).join(" ")};
+let OPALL=false;
+const opGo=(k,drill)=>{OPSEL=k;LS.set(uk("opsel"),k);OD=null;const h="train/openings/"+encodeURIComponent(k)+(drill?"/practise":"");if(location.hash.slice(1)===h)route();else location.hash=h};
+const opTitle=k=>T(k[0]==="w"?"op.asW":"op.asB",{n:k.slice(2)});
+const opFen=m=>{const c=new Chess();for(const s of m.split(" "))if(!s||!c.move(s))break;return c};
+/* the moves that define an opening in my games: the moves all of them share, at most three a side */
+function opDef(gs){if(!gs.length)return "";const a=gs.map(g=>g.moves);let n=0;while(n<6&&a.every(m=>m[n]&&m[n]===a[0][n]))n++;return a[0].slice(0,Math.max(1,n)).join(" ")}
+/* a tree per opening, cached until its games or lines change (cards need "positions learned") */
+function opTreeOf(k){const sig=opSig(k[0],k.slice(2)),c=OTC.get(k);if(c&&c.sig===sig)return c;const t=buildTree(k[0],k.slice(2));OTC.set(k,t);return t}
+const coreOf=t=>[...t.T.values()].filter(n=>n.mine&&(n.n>=2||n.weak||n.ln));
+const learnedOf=t=>coreOf(t).filter(n=>((OPS[n.k]||{}).s||0)>=OP_LEARNED).length;
+function opMine(col){const m={};GAMES.filter(g=>g.color===col).forEach(g=>{const f=famOf(g.eco);(m[f]=m[f]||[]).push(g)});
+ const out=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length).map(([f,a])=>({k:col+"|"+f,n:f,gs:a,m:opDef(a)}));
+ // openings I only know from lesson lines I chose to drill
+ for(const co of OPC)if(opLines(col,co.name).length&&!out.some(o=>co.re&&co.re.test(o.n)&&opLines(col,o.n).length)){const p=(OPOP&&OPOP[col]||[]).find(x=>x.c===co.id),l=opLines(col,co.name)[0];out.push({k:col+"|"+co.name,n:co.name,gs:[],m:p?p.m:l.m.split(" ").slice(0,4).join(" ")})}
+ return out}
+function opCard(o,col){const c=opFen(o.m),h=c.history({verbose:true}),last=h[h.length-1],t=o.gs?opTreeOf(o.k):null,ln=t?learnedOf(t):0;
+ const st=o.gs?(o.gs.length?`<p class="o-st"><b>${esc(TP("op.games",o.gs.length))}</b>${esc(T("op.score",{s:Math.round(score(o.gs))}))}</p>`:`<p class="o-st"><b>${esc(T("op.fromLines"))}</b></p>`)+(ln?`<p class="o-st">${esc(TP("op.learned",ln))}</p>`:""):(o.c?`<p class="o-st"><span class="chip">${ic("graduation-cap","sm")}${esc(T("op.hasLessons"))}</span></p>`:"");
+ return `<a class="ocard" href="#train/openings/${encodeURIComponent(o.k)}" data-k="${esc(o.k)}"><span class="ocard-b">${miniBoard(c.fen(),col==="b",{last:last?{from:last.from,to:last.to}:null,label:o.n})}</span><span class="ocard-t"><h3>${esc(o.n)}</h3><span class="o-mv">${esc(movesTxt(o.m.split(" ")))}</span>${st}</span></a>`}
+function renderOpGal(){const col=LS.get(uk("opcol"),OPSEL?OPSEL[0]:"w");document.querySelectorAll('input[name="oCol"]').forEach(r=>r.checked=r.value===col);
+ if(!OPOP){opPop().then(()=>{if(route.sec==="openings"&&OVW.v==="gal")renderOpGal()})}
+ const mine=opMine(col),mn=new Set(mine.map(o=>opNorm(o.n))),pop=(OPOP&&OPOP[col]||[]).filter(p=>{const b=opNorm(p.n.split(":")[0]),f=opNorm(p.n);return ![...mn].some(x=>x.startsWith(f)||f.startsWith(x)||(x.startsWith(b)&&!p.n.includes(":")))}).map(p=>({k:col+"|"+p.n,n:p.n,m:p.m,c:p.c}));
+ setHTML($("#oMine"),mine.length?`<h2 class="o-h">${esc(T("op.mine"))}</h2><div class="o-grid">${mine.map(o=>opCard(o,col)).join("")}</div>`:`<div class="o-empty">${ic("book-open")}<p>${esc(T("op.mineNone"))}</p></div>`);
+ const sh=OPALL?pop:pop.slice(0,12);setHTML($("#oPop"),OPOP?sh.map(o=>opCard(o,col)).join("")+(sh.length<pop.length?`<button type="button" class="o-more" id="oMore">${esc(T("op.more",{n:pop.length-sh.length}))}</button>`:""):`<span class="skel" style="width:40%"></span>`);const mb=$("#oMore");if(mb)mb.onclick=()=>{OPALL=true;renderOpGal()}}
+document.querySelectorAll('input[name="oCol"]').forEach(r=>r.onchange=()=>{LS.set(uk("opcol"),r.value);renderOpGal()});
+/* "Learn the main lines": the lesson course's recommended lesson */
+function opLearn(id){const co=TRACKS[1].courses.find(c=>c.id===id);if(!co)return;const ch=opRec(co)||co.chapters[0];location.hash="train/lessons";openLesson(nextLesson(ch).id)}
+const opCourseOf=k=>{const p=(OPOP&&OPOP[k[0]]||[]).find(x=>k.slice(2)===x.n);return p&&p.c?(TRACKS[1].courses.find(c=>c.id===p.c)?p.c:null):opCourseFor(k[0],k.slice(2))};
+function renderOpPage(){const k=OVW.k,col=k[0],fam=k.slice(2),gs=OT.games,p=(OPOP&&OPOP[col]||[]).find(x=>x.n===fam),m=gs.length?opDef(gs):p?p.m:(opLines(col,fam)[0]||{m:""}).m.split(" ").slice(0,4).join(" ");
+ const c=opFen(m),h=c.history({verbose:true}),last=h[h.length-1];
+ $("#opBoard").innerHTML=miniBoard(c.fen(),col==="b",{last:last?{from:last.from,to:last.to}:null,label:fam});$("#opName").textContent=opTitle(k);$("#opMoves").textContent=movesTxt(m.split(" ").filter(Boolean));
+ renderOpStats();const core=opCore(),co=opCourseOf(k),can=core.length>0;
  const st=LS.get(uk("opstart"),{})[OT.key],e=st?opEffect(OT.key,st):null;
- $("#oEffect").textContent=st?(e?`Since you started practising on ${e.date}: ${Math.round(e.a)}% over ${e.na} games (was ${Math.round(e.b)}% over ${e.nb} games).`:`Practising since ${new Date(st).toISOString().slice(0,10)}. Your before-and-after score appears once you've played 5 games in this opening since then.`):"";
- renderExplorer();renderOpStats();if(!OD||OD.key!==OT.key||OD.gen!==GEN)opStartLine(false)}
-$("#oPick").onchange=()=>{OPSEL=$("#oPick").value;LS.set(uk("opsel"),OPSEL);OD=null;renderOpenings()};
+ $("#oEffect").textContent=st?(e?T("op.effect",{when:fmtDay(st),a:Math.round(e.a),na:e.na,b:Math.round(e.b),nb:e.nb}):T("op.effectWait",{when:fmtDay(st)})):"";
+ $("#opAct").innerHTML=(can?`<button class="pri lg" type="button" id="opPractise">${ic("play")}${esc(T("op.practise"))}</button>`:"")+(co?`<button class="lg${can?"":" pri"}" type="button" id="opLearnBtn">${ic("graduation-cap")}${esc(T("op.learn"))}</button>`:"")+(!can?`<p class="small op-why">${esc(T(co?"op.noLinesC":"op.noLines"))}</p>`:"");
+ const pb=$("#opPractise");if(pb)pb.onclick=()=>opGo(k,true);const lb=$("#opLearnBtn");if(lb)lb.onclick=()=>opLearn(co);
+ const W=[...OT.T.values()].filter(n=>n.weak).sort((a,b)=>b.prio-a.prio).slice(0,6);$("#opWeakBox").hidden=!can;
+ $("#oWeak").innerHTML=W.length?W.map((n,i)=>{const top=Object.values(n.mv).sort((a,b)=>b.n-a.n)[0],lm=n.path.length?opFen(n.path.join(" ")).history({verbose:true}).pop():null;
+  return `<button class="o-ws" type="button" data-w="${i}"><span class="ocard-b">${miniBoard(n.fen,col==="b",{last:lm?{from:lm.from,to:lm.to}:null})}</span><span class="o-mv">${esc(n.path.length?opTail(n.path):T("op.startPos"))}</span><span class="small">${esc((n.err?TP("op.wsErr",n.anN,{e:n.err}):T("op.wsScore",{s:Math.round(n.score)}))+" "+T("op.wsUsual",{mv:top?top.san:"?"}))}</span></button>`}).join(""):`<p class="small">${esc(T("op.noWeak"))}</p>`;
+ $("#oWeak").querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{OSTART=W[+b.dataset.w];opGo(k,true)});renderExplorer()}
+function renderOpenings(){const v=OVW.v;$("#oGal").hidden=v!=="gal";$("#oPage").hidden=v!=="page";$("#oDrill").hidden=v!=="drill";
+ if(v==="gal")return renderOpGal();
+ const k=OVW.k;if(OPSEL!==k){OPSEL=k;LS.set(uk("opsel"),k);OD=null}LS.set(uk("opcol"),k[0]);
+ const col=k[0],fam=k.slice(2),sig=opSig(col,fam);if(!OT||OT.key!==k||OT.sig!==sig)OT=buildTree(col,fam);
+ if(!OPOP)opPop().then(()=>{if(route.sec==="openings"&&OVW.k===k)renderOpenings()});
+ if(v==="page")return renderOpPage();
+ $("#oTitle").textContent=opTitle(k);$("#oBack").href="#train/openings/"+encodeURIComponent(k);$("#oBackL").textContent=T("op.backTo",{n:fam});
+ if(OSTART){const s=OSTART;OSTART=null;opStartLine(false,OT.T.get(s.k)||s)}else if(!OD||OD.key!==OT.key||OD.gen!==GEN)opStartLine(false)}
 $("#oRestart").onclick=()=>opStartLine(true);$("#oNext").onclick=()=>opStartLine(false);
 
 /* Lichess connection (OAuth with PKCE; no app registration). The token stays in this browser and is only used
@@ -1284,7 +1320,7 @@ function egCourseHTML(co,fy){const rec=egRec(co),f=fy.has(co.id),nd=co.chapters.
 /* one handler for every lessons button */
 $("#v-lessons").addEventListener("click",e=>{const b=e.target.closest("button[data-ls],button[data-pg],button[data-ch],button[data-test],button[data-op]");if(!b)return;
  if(b.dataset.ls)openLesson(b.dataset.ls);else if(b.dataset.pg)openPage(b.dataset.pg);else if(b.dataset.ch)openLesson(nextLesson(CIDX[b.dataset.ch].ch).id);else if(b.dataset.test)openTest(b.dataset.test);
- else if(b.dataset.op!=null){if(b.dataset.op){OPSEL=b.dataset.op;LS.set(uk("opsel"),OPSEL);OD=null}location.hash="openings"}});
+ else if(b.dataset.op!=null){if(b.dataset.op)opGo(b.dataset.op,true);else location.hash="train/openings"}});
 $("#lsLevel").onchange=()=>{LSP.lvl={v:$("#lsLevel").value};saveLSP("lvl");renderLessons()};
 $("#lBack").onclick=$("#pgBack").onclick=()=>renderLessons();
 /* player: a lesson (steps in order, progress saved) or a placement check (first try counts). Puzzle lessons pick each puzzle when
@@ -1399,7 +1435,7 @@ function egFail(L,st,pre,t){Snd.play("wrong");st.miss=true;
 /* "Drill this line": pin my moves of the line as repertoire moves (OPS), then open the trainer on a matching opening */
 function opDrill(l,co){const c=new Chess(),now=Date.now();let n=0;l.m.split(" ").forEach((s,i)=>{const k=posKey(c.fen()),m=c.move(s);if(!m)return;if((i%2===0)===(l.side==="w")&&!(l.bad||[]).includes(i+1)){const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0});x.pin=m.from+m.to+(m.promotion||"");x.at=now;saveOPS(k);n++}});
  const fams={};GAMES.filter(g=>g.color===l.side&&co.op.re&&co.op.re.test(famOf(g.eco))).forEach(g=>{const f=famOf(g.eco);fams[f]=(fams[f]||0)+1});
- const f=Object.keys(fams).filter(k=>fams[k]>=3).sort((a,b)=>fams[b]-fams[a])[0];OPSEL=l.side+"|"+(f||co.name);LS.set(uk("opsel"),OPSEL);OD=null;LP=null;gToast(`Pinned ${n} moves as your repertoire. Drill them here.`);location.hash="openings"}
+ const f=Object.keys(fams).filter(k=>fams[k]>=3).sort((a,b)=>fams[b]-fams[a])[0];LP=null;gToast(`Pinned ${n} moves as your repertoire. Drill them here.`);opGo(l.side+"|"+(f||co.name),true)}
 function lsChapterDone(ch){const k="c:"+ch.id;if((LSP[k]||{}).d||!chDone(ch))return;const c=LSP[k]||(LSP[k]={});c.d=Date.now();saveLSP(k);gAdd({lc:1});gToast(`Chapter complete: ${ch.name}! +${GX.lc} XP`)}
 /* after a puzzle lesson: suggest the next or previous chapter when the skill has left this band */
 function pzShift(L){const ch=L.x.ch,co=L.x.co;if(ch.all)return null;const i=co.chapters.indexOf(ch),sk=pzSkill(ch.pz)||0,B=pzRg(ch);
@@ -1577,13 +1613,13 @@ function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fa
  const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
  const colN=k=>T(k[0]==="w"?"card.asWhite":"card.asBlack");
  const weak=Object.entries(m).filter(([k,a])=>a.length>=5&&!ost[k]&&score(a)<45).sort((a,b)=>score(a[1])-score(b[1]))[0];
- if(weak)C.push({imp:18,t:T("plan.weakOp",{op:weak[0].slice(2),col:colN(weak[0])}),p:T("plan.weakOpP",{s:Math.round(score(weak[1])),n:weak[1].length}),xp:5*GX.op,i:"book-open",cta:T("plan.weakOpGo"),act:()=>{OPSEL=weak[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="train/openings"}});
+ if(weak)C.push({imp:18,t:T("plan.weakOp",{op:weak[0].slice(2),col:colN(weak[0])}),p:T("plan.weakOpP",{s:Math.round(score(weak[1])),n:weak[1].length}),xp:5*GX.op,i:"book-open",cta:T("plan.weakOpGo"),act:()=>opGo(weak[0],true)});
  const W=wkProfile(),lp=lsPriority().find(x=>{const T=lsTarget(x.to,W);return T&&!lsDone(T.l.id)}),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:T("plan.firstSteps")}:lp;
  if(lx){const Tg=lsTarget(lx.to,W),left=Tg.l.steps.length-((LSP["l:"+Tg.l.id]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:T("plan.lesson",{name:Tg.co.pz||Tg.co.op||Tg.co.eg?Tg.ch.name+(Tg.co.eg&&!Tg.ch.pz?": "+Tg.l.name:""):Tg.l.name}),p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:T("plan.lessonGo"),act:()=>{location.hash="train/lessons";openLesson(Tg.l.id)}})}
  // fallbacks so there are always a few things to do
  const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:T("plan.game",{opp:last.opp}),p:T("plan.gameP"),xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>openReview(last,keyPly(last))});
  const top=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length)[0];
- if(C.length<3&&top&&!C.some(c=>c.i==="book-open"))C.push({imp:6,t:T("plan.drill",{op:top[0].slice(2),col:colN(top[0])}),p:TP("plan.drillP",top[1].length),xp:5*GX.op,i:"book-open",cta:T("plan.drillGo"),act:()=>{OPSEL=top[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="train/openings"}});
+ if(C.length<3&&top&&!C.some(c=>c.i==="book-open"))C.push({imp:6,t:T("plan.drill",{op:top[0].slice(2),col:colN(top[0])}),p:TP("plan.drillP",top[1].length),xp:5*GX.op,i:"book-open",cta:T("plan.drillGo"),act:()=>opGo(top[0],true)});
  return C.sort((a,b)=>b.imp-a.imp).slice(0,5)}
 function ringSVG(d,goal,small){const R=42,L=2*Math.PI*R;let off=0,s=`<svg viewBox="0 0 100 100" class="ring${small?" sm":""}" role="img" aria-label="${esc(T("tro.ringLabel",{n:Math.min(dayU(d),goal),goal}))}"><circle cx="50" cy="50" r="${R}" fill="none" stroke="var(--border)" stroke-width="10"/>`;
  for(const [k,col] of [["pz","var(--q-blunder)"],["op","var(--q-best)"],["rv","var(--info)"],["ls","var(--gold)"]]){const f=Math.min((d[k]||0)*GU[k],Math.max(0,goal-off))/goal;if(f<=0)continue;
@@ -1685,7 +1721,7 @@ function renderOps(){const col=$("#opColor").value,m={};GAMES.filter(g=>g.color=
  const rows=Object.entries(m).filter(([,a])=>a.length>=5).sort((a,b)=>b[1].length-a[1].length).slice(0,15);
  $("#opBody").innerHTML=rows.length?rows.map(([f,a])=>{const w=a.filter(g=>g.result==="win").length,d=a.filter(g=>g.result==="draw").length,l=a.length-w-d,s=score(a);
   return `<tr><td data-l="Opening">${esc(f)}</td><td class="r" data-l="Games">${a.length}</td><td class="r" data-l="Score" style="color:${s<45?"var(--q-blunder)":s>55?"var(--q-best)":"inherit"};font-weight:700">${Math.round(s)}%</td><td data-l="W / D / L"><span class="num">${w} / ${d} / ${l}</span></td><td class="r" data-l=""><button class="link" type="button" data-op="${esc(col+"|"+f)}">Practise</button></td></tr>`}).join(""):'<tr><td colspan="5" class="small">No opening with 5+ games in the last year.</td></tr>';
- $("#opBody").querySelectorAll("[data-op]").forEach(b=>b.onclick=()=>{OPSEL=b.dataset.op;LS.set(uk("opsel"),OPSEL);OD=null;location.hash="openings"})}
+ $("#opBody").querySelectorAll("[data-op]").forEach(b=>b.onclick=()=>opGo(b.dataset.op))}
 $("#opColor").onchange=renderOps;
 $("#anMore").onclick=()=>{analyseRecent(20);$("#anNote").textContent="Queued — see progress at the top."};
 $("#resetBase").onclick=()=>{const s=stats();LS.set(uk("base."+P.tc),{...s,date:new Date().toISOString().slice(0,10),manual:new Date().toISOString()});Sync.mark("base",acct()+"|"+P.tc);Fr.soon();renderProgress()};
@@ -1922,7 +1958,8 @@ const OLDR={trainer:"train/puzzles",openings:"train/openings",lessons:"train/les
 const SUBS={train:[["train/puzzles","train.puzzles"],["train/openings","train.openings"],["train/lessons","train.lessons"]],progress:[["progress","progress.overview"],["progress/trophies","progress.trophies"],["progress/friends","progress.friends","friends"]]};
 function tabHead(top){const h=$("#tabHead"),sub=SUBS[top];h.hidden=!sub;if(!sub)return;$("#tabTitle").textContent=T(top+".title");
  $("#subnav").setAttribute("aria-label",T("nav.sections"));$("#subnav").innerHTML=sub.filter(x=>x[2]!=="friends"||SB_ON).map(([p,k,t])=>`<a href="#${p}"${t?` data-t="${t}"`:""}${route.cur===p?' aria-current="page"':""}>${esc(T(k))}</a>`).join("")}
-function route(){if(!P){show1("start");return}let h=decodeURIComponent(location.hash.slice(1)),rid=null;if(h.startsWith("review/")){rid=h.slice(7);h="review"}
+function route(){if(!P){show1("start");return}const raw=location.hash.slice(1);let h=decodeURIComponent(raw),rid=null;if(h.startsWith("review/")){rid=h.slice(7);h="review"}
+ if(raw.startsWith("train/openings/")){const p=raw.slice(15).split("/"),k=decodeURIComponent(p[0]);OVW=/^[wb]\|./.test(k)?{v:p[1]==="practise"?"drill":"page",k}:{v:"gal",k:null};h="train/openings"}else if(h==="train/openings"||h==="openings")OVW={v:"gal",k:null};
  if(h==="train")h=LS.get("trainSec","train/puzzles");if(OLDR[h]){h=OLDR[h];history.replaceState(null,"","#"+h)}
  if(h==="progress/friends"&&!SB_ON)h="progress";if(!ROUTES[h])h="home";const t=ROUTES[h],top=h.split("/")[0];route.cur=h;route.sec=t;if(top==="train")LS.set("trainSec",h);show1(t);tabHead(top);
  document.querySelectorAll("#hdr nav a").forEach(a=>{if(a.dataset.t===top)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
@@ -1931,7 +1968,7 @@ function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;OTC.clear();LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=T("start.noGames",{tc:T("tc."+P.tc),u:P.user,site:SRC[P.source].name});$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
