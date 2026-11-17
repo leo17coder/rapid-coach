@@ -10,7 +10,7 @@ import { ROOT, CC_USER, LI_USER, CC_RAPID_10, serve, launch, newPage, sleep, wai
 const SEL = {
   start: "#v-start", uName: "#uName", srcCc: "#uSrcCc", srcLi: "#uSrcLi", tc: v => `input[name="uTc"][value="${v}"]`, startBtn: "#startBtn", startMsg: "#startMsg", heroBoard: "#heroBoard",
   who: "#whoName", profBtn: "#profBtn", switchBtn: "#switchBtn", navLink: t => `#hdr nav a[data-t="${t}"], #subnav a[data-t="${t}"]`, nav: "#hdr nav",
-  picker: "#gamePick", filter: "#gameFilter", board: "#board", flip: "#flipBtn", navBtn: a => `[data-nav="${a}"]`, evFig: "#evFig", evNow: "#evNow",
+  card: ".gcard-link[data-g]", chip: v => `#rvChips [data-f="${v}"]`, back: "#rvBack", rvGame: "#rvGame", board: "#board", flip: "#flipBtn", navBtn: a => `[data-nav="${a}"]`, evFig: "#evFig", evNow: "#evNow",
   kmCard: "#km button[data-p]", moveBtn: "#moves button[data-p]",
   tboard: "#tboard", tHint: "#tHint", tShow: "#tShow", tNext: "#tNext", tPrompt: "#tPrompt", tFeedback: "#tFeedback", tOk: "#tFeedback .v-ok", tNo: "#tFeedback .v-no", tWhy: "#tWhy",
   insights: "#insights", kpis: "#pKpis", charts: ["#ratingFig", "#timeFig", "#errFig"], ends: "#ends", opRows: "#opBody tr", syncBtn: "#syncBtn",
@@ -67,24 +67,32 @@ test("Analysis starts automatically in the background", async ({ page }) => {
   await waitFor(page, () => window.rcTest.state().analysed >= 3, { label: "3 games analysed", timeout: 300000 });
 });
 
-test("Review: evaluation graph, key moments and move list", async ({ page }) => {
+test("Review: game cards open a game, at its first key moment", async ({ page }) => {
   await tab(page, "review");
-  const id = await page.evaluate(async (pick, km) => {
-    const sel = document.querySelector(pick);
-    for (const o of [...sel.options]) {
-      sel.value = o.value; sel.dispatchEvent(new Event("change", { bubbles: true }));
-      await new Promise(r => setTimeout(r, 150));
-      const s = window.rcTest.state();
-      if (s.cur === o.value && window.rcTest.game(o.value).an && document.querySelectorAll(km).length) return o.value;
-    }
-    return null;
-  }, SEL.picker, SEL.kmCard);
+  await waitFor(page, s => document.querySelectorAll(s).length > 0, { label: "game cards", arg: SEL.card });
+  const ids = await page.$$eval(SEL.card, as => as.map(a => a.dataset.g));
+  let id = null;
+  for (const g of ids) {
+    if (!(await page.evaluate(id => !!window.rcTest.game(id).an, g))) continue;
+    await page.click(`${SEL.card}[data-g="${g}"]`);
+    await waitFor(page, ([g, s]) => window.rcTest.state().cur === g && !document.querySelector(s).hidden, { label: "game view open", arg: [g, SEL.rvGame] });
+    await sleep(200);
+    if ((await page.$$(SEL.kmCard)).length) { id = g; break; }
+    await page.click(SEL.back); await waitFor(page, s => document.querySelectorAll(s).length > 0, { label: "back to the list", arg: SEL.card });
+  }
   assert(id, "no analysed game with key moments found");
   ctx.gameId = id;
+  const ply = (await st(page)).ply, kms = await page.$$eval(SEL.kmCard, bs => bs.map(b => +b.dataset.p));
+  assert(kms.includes(ply), `the game view opened at ply ${ply}, not at a key moment (${kms})`);
+});
+
+test("Review: evaluation graph, key moments and move list", async ({ page }) => {
+  const id = ctx.gameId;
   const g = await page.evaluate(id => window.rcTest.game(id), id);
   assert(await page.$eval(SEL.evFig, e => !!e.querySelector("svg")), "evaluation graph missing");
   assert((await page.$$(SEL.moveBtn)).length === g.moves, "move list doesn't list every move");
   const p = await page.$eval(SEL.kmCard, e => +e.dataset.p);
+  await page.click(SEL.navBtn("start")); await sleep(100);
   await page.click(SEL.kmCard); await sleep(300);
   assert((await st(page)).ply === p, "clicking a key moment doesn't jump to it");
   assert((await text(page, SEL.evNow)).length > 0, "current evaluation not shown");
@@ -101,10 +109,11 @@ test("Review: keyboard and buttons step through moves, board flips, filters work
   assert((await st(page)).ply === g.moves, "end button");
   const f0 = (await st(page)).flip; await page.click(SEL.flip); await sleep(100);
   assert((await st(page)).flip !== f0, "flip button");
-  await page.select(SEL.filter, "loss"); await sleep(300);
-  const res = await page.evaluate(sel => [...document.querySelector(sel).options].map(o => window.rcTest.game(o.value)).filter(Boolean).map(g => g.result), SEL.picker);
+  await page.click(SEL.back); await waitFor(page, s => document.querySelectorAll(s).length > 0, { label: "game cards", arg: SEL.card });
+  await page.click(SEL.chip("loss")); await sleep(300);
+  const res = await page.evaluate(sel => [...document.querySelectorAll(sel)].map(a => window.rcTest.game(a.dataset.g)).filter(Boolean).map(g => g.result), SEL.card);
   assert(res.length > 0 && res.every(r => r === "loss"), `Losses filter shows other results: ${res}`);
-  await page.select(SEL.filter, "all");
+  await page.click(SEL.chip("all"));
 });
 
 test("Trainer: a puzzle from your own games appears", async ({ page }) => {

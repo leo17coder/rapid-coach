@@ -67,5 +67,14 @@
  "start.b2t":"Training from your mistakes","start.b2p":"Puzzles from your own blunders, plus tactics, opening and endgame lessons pitched at your level.",
  "start.b3t":"Free and private","start.b3p":"Runs in your browser. No ads, no tracking, no account needed; sign in only if you want to sync devices.",
  "start.lookup":"Looking you up on {site}…","start.notFound":"No {site} player called “{u}”.","start.noReach":"Couldn't reach {site}. Check your connection and try again.",
- "start.noGames":"No {tc} games found for {u} on {site}. Try another time control.","start.loadFail":"Couldn't load your games from {site}. Try again in a minute."
+ "start.noGames":"No {tc} games found for {u} on {site}. Try another time control.","start.loadFail":"Couldn't load your games from {site}. Try again in a minute.",
+ "job.an":"Analysing game {n} of {all}",
+ "rv.title":"Review","rv.filter":"Filter games","rv.fAll":"All","rv.fWin":"Wins","rv.fLoss":"Losses","rv.fWhite":"White","rv.fBlack":"Black","rv.fUn":"Not analysed",
+ "rv.more":"Show {n} more","rv.thisWeek":"This week","rv.noMatch":"No games match this filter.","rv.back":"All games","rv.older":"Older game","rv.newer":"Newer game",
+ "rv.start":"Start","rv.prev":"Back","rv.next":"Forward","rv.end":"End","rv.flip":"Flip board","rv.km":"Key moments","rv.graph":"How the game went","rv.moves":"Moves","rv.moveList":"Move list",
+ "rv.onSite":"Open on {site}","rv.evAt":"After {mv}: {ev}","rv.evStart":"Start position: {ev}",
+ "ev.mate":"you have a forced mate","ev.winning":"you're clearly winning","ev.better":"you're better","ev.equal":"it's about equal","ev.worse":"you're worse","ev.losing":"you're clearly losing","ev.mated":"you're getting mated",
+ "rv.kmNone":"Analyse this game to see where it turned.","rv.kmClean":"No blunders or mistakes from you in this game. Nicely played.",
+ "rv.blunder":"Blunder","rv.mistake":"Mistake","rv.kmBetter":"Better was {mv}.","rv.kmSwing":"{b}, then {a}.","rv.kmStill":"{ev} before and after, but it cost you.","evp.mate":"you had a forced mate","evp.winning":"you were clearly winning","evp.better":"you were better","evp.equal":"it was about equal","evp.worse":"you were worse","evp.losing":"you were clearly losing","evp.mated":"you were getting mated","rv.kmClock":"You took {s} s, with {left} left.",
+ "rv.lgBetter":"better move","rv.lgPlayed":"what was played","rv.analyse":"Analyse this game","rv.analyseP":"About 30 seconds, on your device.","rv.noEngine":"The engine couldn't start in this browser."
 };

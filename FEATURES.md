@@ -24,12 +24,13 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 - [auto] **Reload keeps games and analyses**; older chess.com months are not fetched again, only the newest two.
 - [auto] **Check for new games** adds games played since the last visit.
 - [auto] chess.com and Lichess requests are made one at a time, and the site makes **no third-party requests** beyond the game and account APIs (fonts, icons and pieces are self-hosted).
-- [manual] "Analyse 20 more games" queues more games; "Analyse this game" in Review analyses the open game first.
+- [manual] "Analyse 20 more games" queues more games; "Analyse" on a Review card or in the game view analyses that game first.
 
 ## Review
+- [auto] **Game cards open a game at its first key moment**: the list shows one card per game (grouped Today, Yesterday, This week, then by month; 20 at a time with "Show more"), each with result and how, colour, opponent and both ratings, opening, time control, a small board of the decisive position and a one-sentence summary; "All games" goes back.
 - [auto] **Evaluation graph, key moments and move list**: the graph shows; every move is listed; clicking a key moment jumps to it and shows the evaluation.
-- [auto] **Keyboard and buttons step through moves** (←/→, start/end buttons), the **board flips**, and **filters work** (Losses shows only losses).
-- [manual] Key moments show the better move, the evaluation swing and the time spent; the board shows the played move (red) and the better move (green) as arrows; the eval bar follows the position; clicking the graph jumps to that move.
+- [auto] **Keyboard and buttons step through moves** (←/→, start/end buttons), the **board flips**, and **filter chips work** (All, Wins, Losses, White, Black, Not analysed; Losses shows only losses).
+- [manual] Key moments show the better move, the swing in plain words ("you were clearly winning, then it was about equal") and the time spent; the line under the board says how the position stands in words; the previous/next arrows step between games; the board shows the played move (red) and the better move (green) as arrows; the eval bar follows the position; clicking the graph jumps to that move.
 - [manual] Reviewing a game (8 positions of an analysed game) counts towards the daily goal.
 
 ## Trainer (puzzles from your own blunders)

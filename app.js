@@ -120,7 +120,7 @@ async function syncLi(onFirst){const gen=GEN,u=P.user,tc=P.tc,key=uk("last."+tc)
 /* ---------- game helpers ---------- */
 function refreshGames(){GAMES=ALL.filter(g=>g.user===P.user&&srcOf(g)===P.source&&matchTc({rules:g.rules||"chess",time_control:g.tc,time_class:g.tclass},P.tc)).sort((a,b)=>a.ts-b.ts);
  if(PEND.size){const got=GAMES.filter(g=>!g.an&&PEND.has(g.id));got.forEach(g=>{g.an=PEND.get(g.id);PEND.delete(g.id)});if(got.length){DB.put(got);DB.pendDel(got.map(g=>g.id))}}
- fillPicker();buildPuzzles()}
+ buildPuzzles();if(route.sec==="review"&&!RV.game)renderReview()}
 const famOf=e=>{const w=(e||"Unknown").split(" ");const o=[];for(const x of w){if(/\d|\.\.\./.test(x)&&o.length>=2){o.push(x);break}o.push(x)}return o.slice(0,5).join(" ")};
 function replay(g){if(g._f)return g;const c=new Chess(),f=[c.fen()],mv=[];for(const s of g.moves){const m=c.move(s);if(!m)break;mv.push(m);f.push(c.fen())}g._f=f;g._m=mv;return g}
 function errorsOf(g){const an=g.an,out=[];if(!an)return out;for(let i=0;i<an.ev.length-1;i++){const white=i%2===0,b=an.ev[i],a=an.ev[i+1];if(a==null||b==null)continue;const s=white?1:-1,drop=wp(s*b)-wp(s*a),k=drop>=30?"blunder":drop>=20?"mistake":drop>=10?"inacc":null;
@@ -222,32 +222,49 @@ EvalBar.prototype.hide=function(){this.el.hidden=true};
 
 /* ---------- REVIEW ---------- */
 const RB=new Board($("#board"),{sound:true,label:"Game board"}),REB=new EvalBar($("#evBar"));
-function filtered(){const f=$("#gameFilter").value;return GAMES.filter(g=>f==="all"||(f==="loss"&&g.result==="loss")||(f==="win"&&g.result==="win")||f===g.color||(f==="an"&&g.an)).slice().reverse()}
-function fillPicker(){const list=filtered().slice(0,500),sel=$("#gamePick");
- sel.innerHTML=list.length?list.map(g=>{const e=g.an?serious(g).filter(x=>x.kind==="blunder").length:null;
-  return `<option value="${esc(g.id)}">${g.date} · ${g.color==="w"?"White":"Black"} · ${g.result==="win"?"Won":g.result==="loss"?"Lost":"Draw"} vs ${esc(g.opp)} · ${esc(famOf(g.eco))}${e==null?" · not analysed":e?` · ${e} blunder${e>1?"s":""}`:" · clean"}</option>`}).join(""):"<option>No games match</option>";
- if(CUR)sel.value=CUR.id}
-function openGame(g,ply){CUR=replay(g);RB.flip=g.color==="b";PLY=ply==null?0:ply;
- const res=g.result==="win"?"Won":g.result==="loss"?"Lost":"Drew",how={checkmated:"checkmate",resigned:"resignation",timeout:"on time",abandoned:"abandoned"}[g.how];
- $("#gTitle").textContent=`${res} with ${g.color==="w"?"White":"Black"}${how?` (${how})`:""}`;
- $("#gSub").innerHTML=`${esc(g.date)} · ${esc(famOf(g.eco))} · you ${g.myR} vs ${esc(g.opp)} ${g.oppR} · ${Math.ceil(g.moves.length/2)} moves${g.link?` · <a href="${esc(g.link)}" target="_blank" rel="noopener">on ${SRC[srcOf(g)].name}</a>`:""}`;
- renderMoves();renderKM();renderAnState();show();$("#gamePick").value=g.id}
+/* the list: game cards grouped by day, filter chips, 20 at a time */
+const RV={f:"all",n:20,game:false,ply:null},RVF=[["all","rv.fAll"],["win","rv.fWin"],["loss","rv.fLoss"],["w","rv.fWhite"],["b","rv.fBlack"],["un","rv.fUn"]];
+function filtered(){const f=RV.f;return GAMES.filter(g=>f==="all"||(f==="loss"&&g.result==="loss")||(f==="win"&&g.result==="win")||f===g.color||(f==="un"&&!g.an)).slice().reverse()}
+function dayGroup(ts){const d=new Date(ts),n=new Date(),k=x=>new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime(),days=Math.round((k(n)-k(d))/864e5);
+ if(days<=0)return T("date.today");if(days===1)return T("date.yesterday");if(days<7)return T("rv.thisWeek");
+ return new Intl.DateTimeFormat(LOC(),{month:"long",...(d.getFullYear()!==n.getFullYear()?{year:"numeric"}:{})}).format(d)}
+function renderReview(){const ch=$("#rvChips");if(ch.dataset.l!==LANG||!ch.children.length){ch.innerHTML=RVF.map(([v,k])=>`<button type="button" class="fchip" data-f="${v}">${esc(T(k))}</button>`).join("");ch.dataset.l=LANG}
+ ch.querySelectorAll("[data-f]").forEach(b=>b.setAttribute("aria-pressed",RV.f===b.dataset.f));
+ const L=filtered(),show=L.slice(0,RV.n);let html="",cur=null;
+ for(const g of show){const grp=dayGroup(g.ts);if(grp!==cur){html+=(cur?"</div>":"")+`<h2 class="rv-day">${esc(grp)}</h2><div class="rv-cards">`;cur=grp}html+=gameCard(g)}
+ $("#rvGroups").innerHTML=show.length?html+"</div>":`<p class="empty-line">${esc(T(GAMES.length?"rv.noMatch":"home.noGames"))}</p>`;
+ $("#rvMore").hidden=L.length<=RV.n;$("#rvMore").textContent=T("rv.more",{n:Math.min(20,L.length-RV.n)})}
+$("#rvChips").onclick=e=>{const b=e.target.closest("[data-f]");if(!b)return;RV.f=b.dataset.f;RV.n=20;renderReview()};
+$("#rvMore").onclick=()=>{RV.n+=20;renderReview()};
+/* open a game in the game view (#review/<id>), at ply or its first key moment */
+function openReview(g,ply){RV.ply=ply==null?keyPly(g):ply;const h="review/"+encodeURIComponent(g.id);if(location.hash.slice(1)===h)route();else location.hash=h}
+function reviewView(id){const g=id&&GAMES.find(x=>x.id===id);RV.game=!!g;$("#rvList").hidden=!!g;$("#rvGame").hidden=!g;
+ if(g){if(CUR!==g||RV.ply!=null)openGame(g,RV.ply!=null?RV.ply:keyPly(g));else show();RV.ply=null;drawEval()}else renderReview()}
+function openGame(g,ply){CUR=replay(g);RB.flip=g.color==="b";PLY=ply==null?keyPly(g):ply;
+ $("#gTitle").textContent=resultLine(g);
+ $("#gSub").innerHTML=`${esc(fmtWhen(g.ts))}<br>${T("card.vs",{col:T(g.color==="w"?"card.white":"card.black"),opp:esc(g.opp),oppR:g.oppR||"?",myR:g.myR||"?"})}<br>${esc(famOf(g.eco))}, ${esc(tcName(g.tc))}${g.link?`. <a href="${esc(g.link)}" target="_blank" rel="noopener">${esc(T("rv.onSite",{site:SRC[srcOf(g)].name}))}</a>`:""}`;
+ $("#gStory").textContent=g.an?gameStory(g).t:"";renderMoves();renderKM();renderAnState();show()}
 function show(){const g=CUR;if(!g)return;if(g.an&&GS&&!GS.rev[g.id]){(g._seen||(g._seen=new Set())).add(PLY);if(g._seen.size>=8){GS.rev[g.id]=1;gAdd(g.result==="loss"?{rv:1,rvl:1}:{rv:1})}}const m=g._m[PLY-1],o={last:m?{from:m.from,to:m.to}:null,arrows:[]};
  if(g.an&&PLY<g.moves.length&&g.an.best[PLY]){const er=errorsOf(g).find(e=>e.i===PLY);if(er&&er.kind!=="inacc"){const nx=g._m[PLY],b=g.an.best[PLY];o.arrows.push({from:nx.from,to:nx.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"})}}
  RB.set(g._f[PLY],o);if(g.an&&g.an.ev[PLY]!=null)REB.set(g.an.ev[PLY],RB.flip);else REB.hide();document.querySelectorAll("#moves button,#km button").forEach(b=>b.classList.toggle("on",+b.dataset.p===PLY));
  const on=document.querySelector("#moves button.on"),mv=$("#moves");if(on){const t=on.offsetTop;if(t<mv.scrollTop||t>mv.scrollTop+mv.clientHeight-30)mv.scrollTop=t-mv.clientHeight/2}
- $("#evNow").textContent=g.an&&g.an.ev[PLY]!=null?`Move ${PLY?mvLabel(PLY-1):"0"} · ${evTxt(g.an.ev[PLY])}`:"";drawEval()}
+ $("#evNow").textContent=g.an&&g.an.ev[PLY]!=null?T(PLY?"rv.evAt":"rv.evStart",{mv:PLY?mvTxt(g,PLY-1):"",ev:evWords((g.color==="w"?1:-1)*g.an.ev[PLY])}):"";$("#evNow").title=g.an&&g.an.ev[PLY]!=null?evTxt(g.an.ev[PLY]):"";drawEval()}
+/* an evaluation in words, from the player's side */
+const evPast=cp=>T(cp>=9000?"evp.mate":cp>=300?"evp.winning":cp>=120?"evp.better":cp>-120?"evp.equal":cp>-300?"evp.worse":cp>-9000?"evp.losing":"evp.mated"),cap1=t=>t.charAt(0).toUpperCase()+t.slice(1);
+const evWords=cp=>T(cp>=9000?"ev.mate":cp>=300?"ev.winning":cp>=120?"ev.better":cp>-120?"ev.equal":cp>-300?"ev.worse":cp>-9000?"ev.losing":"ev.mated");
 /* scoresheet: move-quality marks from the analysis: ?? blunder, ? mistake, ?! inaccuracy, a check where the move was the engine's own */
 function renderMoves(){const g=CUR,er=errorsOf(replay(g)),tag={blunder:"??",mistake:"?",inacc:"?!"},nm={blunder:"blunder",mistake:"mistake",inacc:"inaccuracy"};let h="";
- for(let i=0;i<g.moves.length;i+=2){h+=`<span class="n">${i/2+1}</span>`;for(const j of [i,i+1]){if(j>=g.moves.length){h+="<span></span>";continue}const e=er.find(x=>x.i===j),m=g._m[j],best=g.an&&m&&g.an.best[j]===m.from+m.to+(m.promotion||"");
-  h+=`<span><button data-p="${j+1}" class="${e?"q-"+e.kind:best?"q-best":""}"${e?` aria-label="${esc(g.moves[j])}, ${nm[e.kind]}"`:best?` aria-label="${esc(g.moves[j])}, best move"`:""}>${esc(g.moves[j])}${e?`<span class="qm t-${e.kind}" aria-hidden="true">${tag[e.kind]}</span>`:best?`<span class="qm t-best" aria-hidden="true">${ic("check","sm")}</span>`:""}</button></span>`}}
+ for(let i=0;i<g.moves.length;i+=2){h+=`<span class="mp"><span class="n">${i/2+1}</span>`;for(const j of [i,i+1]){if(j>=g.moves.length)continue;const e=er.find(x=>x.i===j),m=g._m[j],best=g.an&&m&&g.an.best[j]===m.from+m.to+(m.promotion||"");
+  h+=`<span><button data-p="${j+1}" class="${e?"q-"+e.kind:best?"q-best":""}"${e?` aria-label="${esc(g.moves[j])}, ${nm[e.kind]}"`:best?` aria-label="${esc(g.moves[j])}, best move"`:""}>${esc(g.moves[j])}${e?`<span class="qm t-${e.kind}" aria-hidden="true">${tag[e.kind]}</span>`:best?`<span class="qm t-best" aria-hidden="true">${ic("check","sm")}</span>`:""}</button></span>`}h+="</span>"}
  $("#moves").innerHTML=h}
-function renderKM(){const g=CUR;if(!g.an){$("#km").innerHTML='<div class="empty">Analyse this game to see where it turned.</div>';return}
- const er=serious(g);if(!er.length){$("#km").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}No blunders or mistakes from you in this game. Nicely played.</div>`;return}
- $("#km").innerHTML=er.map(e=>{const sp=spent(g,e.i),cl=g.clocks&&g.clocks[e.i],bs=uciSan(g._f[e.i],e.best),ctx=e.before>200?"You were winning. ":e.before<-200?"You were already worse. ":"";
-  return `<button data-p="${e.i}"><span class="km-q t-${e.kind}" aria-hidden="true">${e.kind==="blunder"?"??":"?"}</span><span><b>${mvLabel(e.i)} ${esc(g.moves[e.i])}</b> <span class="km-kind t-${e.kind}">${e.kind}</span> · better <b>${esc(bs||"?")}</b><br><span class="small">${ctx}${evTxt(e.before)} → ${evTxt(e.after)}${sp!=null?` · thought ${sp}s, ${mmss(cl)} left`:""}</span></span><span class="small num">−${Math.round(e.drop)}%</span></button>`}).join("")}
-function renderAnState(){const g=CUR;$("#anState").innerHTML=g.an?`<div class="small legend"><span><span class="k k-green"></span>better move</span><span><span class="k k-red"></span>what was played</span><span>Stockfish depth ${g.an.depth}</span></div>`:`<div class="row"><button class="pri" id="anOne">${ic("cpu")}Analyse this game</button><span class="small">About 30 seconds, on your device.</span></div>`;
- const b=$("#anOne");if(b)b.onclick=()=>{queue([g],true);b.disabled=true;b.textContent="Queued…"}}
+/* key moments: my mistakes and blunders in plain words: the better move, what changed, and the clock */
+function renderKM(){const g=CUR;if(!g.an){$("#km").innerHTML=`<p class="empty-line">${esc(T("rv.kmNone"))}</p>`;return}
+ const er=serious(g);if(!er.length){$("#km").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}${esc(T("rv.kmClean"))}</div>`;return}
+ $("#km").innerHTML=er.map(e=>{const sp=spent(g,e.i),cl=g.clocks&&g.clocks[e.i],bs=uciSan(g._f[e.i],e.best),bw=evPast(e.before),aw=evPast(e.after);
+  return `<button data-p="${e.i}"><span class="km-q t-${e.kind}" aria-hidden="true">${e.kind==="blunder"?"??":"?"}</span><span><span class="km-h"><b>${esc(mvTxt(g,e.i))}</b> <span class="km-kind t-${e.kind}">${esc(T("rv."+e.kind))}</span></span><span class="km-why">${esc(T("rv.kmBetter",{mv:bs||"?"}))} ${esc(cap1(bw===aw?T("rv.kmStill",{ev:aw}):T("rv.kmSwing",{b:bw,a:aw})))}</span>${sp!=null?`<span class="small">${esc(T("rv.kmClock",{s:sp,left:mmss(cl)}))}</span>`:""}</span></button>`}).join("")}
+function renderAnState(){const g=CUR;$("#rvGraphD").hidden=!g.an;$("#evLegend").innerHTML=g.an?`<span><span class="k k-green"></span>${esc(T("rv.lgBetter"))}</span><span><span class="k k-red"></span>${esc(T("rv.lgPlayed"))}</span>`:"";
+ $("#anState").innerHTML=g.an?"":`<div class="row"><button class="pri" id="anOne">${ic("cpu")}${esc(T("rv.analyse"))}</button><span class="small">${esc(T("rv.analyseP"))}</span></div>`;
+ const b=$("#anOne");if(b)b.onclick=()=>{queue([g],true);b.disabled=true;b.textContent=T("card.queued")}}
 function drawEval(){const el=$("#evFig"),g=CUR;if(!g||!g.an){el.innerHTML='<div class="empty" style="height:100%;display:grid;place-items:center">No evaluation yet</div>';el.onclick=null;return}
  const W=el.clientWidth||400,H=el.clientHeight,n=g.an.ev.length-1||1,X=i=>i/n*W,Y=cp=>H-(wp(Math.max(-1500,Math.min(1500,cp==null?0:cp)))/100)*H;
  const p=`M0,${H} `+g.an.ev.map((c,i)=>`L${X(i).toFixed(1)},${Y(c).toFixed(1)}`).join(" ")+` L${W},${H}Z`;
@@ -261,11 +278,9 @@ document.querySelectorAll("[data-nav]").forEach(b=>b.onclick=()=>nav(b.dataset.n
 $("#flipBtn").onclick=()=>{RB.flip=!RB.flip;show()};
 $("#moves").onclick=e=>{const b=e.target.closest("button");if(b){PLY=+b.dataset.p;show()}};
 $("#km").onclick=e=>{const b=e.target.closest("button");if(b){PLY=+b.dataset.p;show()}};
-$("#gamePick").onchange=()=>{const g=GAMES.find(x=>x.id===$("#gamePick").value);if(g)openGame(g)};
-$("#gameFilter").onchange=()=>{fillPicker();const g=GAMES.find(x=>x.id===$("#gamePick").value);if(g)openGame(g)};
-function stepGame(d){const l=filtered(),i=l.indexOf(CUR),g=l[Math.max(0,Math.min(l.length-1,i+d))];if(g)openGame(g)}
+function stepGame(d){const l=filtered(),i=l.indexOf(CUR),g=l[Math.max(0,Math.min(l.length-1,i+d))];if(g&&g!==CUR)openReview(g)}
 $("#prevG").onclick=()=>stepGame(1);$("#nextG").onclick=()=>stepGame(-1);
-document.addEventListener("keydown",e=>{if(route.sec!=="review"||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+document.addEventListener("keydown",e=>{if(route.sec!=="review"||!RV.game||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
  if(e.key==="ArrowLeft"){nav("prev");e.preventDefault()}if(e.key==="ArrowRight"){nav("next");e.preventDefault()}if(e.key==="Home")nav("start");if(e.key==="End")nav("end")});
 function openDefault(){const g=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an&&serious(g).some(e=>e.kind==="blunder"))||GAMES[GAMES.length-1];
  if(g){const fe=serious(g).find(e=>e.kind==="blunder");openGame(g,fe?fe.i:0)}}
@@ -277,10 +292,10 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
  const gen=GEN;AQ={list,done:0};
  try{while(AQ.list.length&&gen===GEN){const g=replay(AQ.list.shift());if(g.an)continue;const ev=[],best=[];
   for(let i=0;i<g._f.length;i++){if(gen!==GEN)break;const c=new Chess(g._f[i]);if(c.game_over()){ev.push(c.in_checkmate()?(c.turn()==="w"?-10000:10000):0);best.push(null)}else{const r=await Engine.eval(g._f[i],DEPTH);ev.push(r.cp);best.push(r.best)}
-   job("an",`Analysing game ${AQ.done+1} of ${AQ.done+AQ.list.length+1}`,(i+1)/g._f.length)}
+   job("an",T("job.an",{n:AQ.done+1,all:AQ.done+AQ.list.length+1}),(i+1)/g._f.length)}
   if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);Fr.soon();AQ.done++;maybeBaseline();
-  if(CUR===g){renderMoves();renderKM();renderAnState();show()}fillPicker();buildPuzzles();if(route.sec==="progress")renderProgress();if(route.sec==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.sec==="home")renderHome()}}
- catch(e){$("#anState").innerHTML=`<div class="verdict v-no">${ic("triangle-alert")}The engine couldn't start in this browser.</div>`}
+  if(CUR===g){renderMoves();renderKM();renderAnState();$("#gStory").textContent=gameStory(g).t;show()}buildPuzzles();if(route.sec==="review"&&!RV.game)renderReview();if(route.sec==="progress")renderProgress();if(route.sec==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.sec==="home")renderHome()}}
+ catch(e){$("#anState").innerHTML=`<div class="verdict v-no">${ic("triangle-alert")}${esc(T("rv.noEngine"))}</div>`}
  AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck();TG.run()}if(route.sec==="progress")renderProgress();if(route.sec==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
 
@@ -1509,7 +1524,7 @@ const tcName=tc=>{const {base,inc}=tcParts(tc);return T(inc?"card.tcInc":"card.t
 /* one delegated handler for every game card on the page */
 document.addEventListener("click",e=>{const a=e.target.closest(".gcard-link[data-g]"),an=e.target.closest(".gcard-an[data-an]");
  if(an){e.preventDefault();const g=GAMES.find(x=>x.id===an.dataset.an);if(g){queue([g],true);an.disabled=true;an.textContent=T("card.queued")}return}
- if(a){e.preventDefault();const g=GAMES.find(x=>x.id===a.dataset.g);if(g){const s=gameStory(g);openGame(g,s.p!=null?s.p:keyPly(g));location.hash="review"}}});
+ if(a){e.preventDefault();const g=GAMES.find(x=>x.id===a.dataset.g);if(g){const s=gameStory(g);openReview(g,s.p!=null?s.p:keyPly(g))}}});
 /* where a game view should open: the first key moment, else the start */
 const keyPly=g=>{const e=g.an?serious(replay(g))[0]:null;return e?e.i:0};
 
@@ -1519,7 +1534,7 @@ function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fa
  const due=Object.values(OPS).filter(x=>x.due&&x.due<=now).length,loss=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an);
  if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:TP("plan.retry",n),p:T("plan.retryP"),xp:n*GX.pz,go:"#train/puzzles",i:"rotate-ccw",cta:T("plan.retryGo")})}
  if(due){const n=Math.min(due,10);C.push({imp:26+due*2,t:TP("plan.due",n),p:T("plan.dueP"),xp:n*GX.op,go:"#train/openings",i:"book-open",cta:T("plan.dueGo")})}
- if(loss&&!GS.rev[loss.id]){const s=gameStory(loss);C.push({imp:28,t:T("plan.loss",{opp:loss.opp}),p:s.t,xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>{openGame(loss,s.p!=null?s.p:keyPly(loss));location.hash="review"}})}
+ if(loss&&!GS.rev[loss.id]){const s=gameStory(loss);C.push({imp:28,t:T("plan.loss",{opp:loss.opp}),p:s.t,xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>openReview(loss,s.p!=null?s.p:keyPly(loss))})}
  if(fresh.length){const n=Math.min(fresh.length,5);C.push({imp:20,t:TP("plan.fresh",n),p:T("plan.freshP"),xp:n*GX.pz,go:"#train/puzzles",i:"puzzle",cta:T("plan.freshGo")})}
  if(un){const n=Math.min(un,20);C.push({imp:15+n,t:TP("plan.analyse",n),p:T("plan.analyseP"),xp:null,i:"cpu",cta:T("plan.analyseGo"),act:()=>{analyseRecent(20);renderHome()}})}
  const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
@@ -1529,7 +1544,7 @@ function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fa
  const W=wkProfile(),lp=lsPriority().find(x=>{const T=lsTarget(x.to,W);return T&&!lsDone(T.l.id)}),fs=["new","beg"].includes(lvl())?TRACKS[0].courses[0].chapters.map(nextLesson).find(l=>!lsDone(l.id)):null,lx=fs?{to:fs.id,name:"First steps",reason:T("plan.firstSteps")}:lp;
  if(lx){const Tg=lsTarget(lx.to,W),left=Tg.l.steps.length-((LSP["l:"+Tg.l.id]||{}).s||0);C.push({imp:fs?40:27+Math.min(12,lx.cost*2||0),t:T("plan.lesson",{name:Tg.co.pz||Tg.co.op||Tg.co.eg?Tg.ch.name+(Tg.co.eg&&!Tg.ch.pz?": "+Tg.l.name:""):Tg.l.name}),p:lx.reason,xp:Math.max(1,left)*GX.ls,i:"graduation-cap",cta:T("plan.lessonGo"),act:()=>{location.hash="train/lessons";openLesson(Tg.l.id)}})}
  // fallbacks so there are always a few things to do
- const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:T("plan.game",{opp:last.opp}),p:T("plan.gameP"),xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>{openGame(last,keyPly(last));location.hash="review"}});
+ const last=GAMES.slice().reverse().find(g=>g.an&&!GS.rev[g.id]&&g!==loss);if(C.length<3&&last)C.push({imp:8,t:T("plan.game",{opp:last.opp}),p:T("plan.gameP"),xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>openReview(last,keyPly(last))});
  const top=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length)[0];
  if(C.length<3&&top&&!C.some(c=>c.i==="book-open"))C.push({imp:6,t:T("plan.drill",{op:top[0].slice(2),col:colN(top[0])}),p:TP("plan.drillP",top[1].length),xp:5*GX.op,i:"book-open",cta:T("plan.drillGo"),act:()=>{OPSEL=top[0];LS.set(uk("opsel"),OPSEL);OD=null;location.hash="train/openings"}});
  return C.sort((a,b)=>b.imp-a.imp).slice(0,5)}
@@ -1870,11 +1885,11 @@ const OLDR={trainer:"train/puzzles",openings:"train/openings",lessons:"train/les
 const SUBS={train:[["train/puzzles","train.puzzles"],["train/openings","train.openings"],["train/lessons","train.lessons"]],progress:[["progress","progress.overview"],["progress/trophies","progress.trophies"],["progress/friends","progress.friends","friends"]]};
 function tabHead(top){const h=$("#tabHead"),sub=SUBS[top];h.hidden=!sub;if(!sub)return;$("#tabTitle").textContent=T(top+".title");
  $("#subnav").setAttribute("aria-label",T("nav.sections"));$("#subnav").innerHTML=sub.filter(x=>x[2]!=="friends"||SB_ON).map(([p,k,t])=>`<a href="#${p}"${t?` data-t="${t}"`:""}${route.cur===p?' aria-current="page"':""}>${esc(T(k))}</a>`).join("")}
-function route(){if(!P){show1("start");return}let h=decodeURIComponent(location.hash.slice(1));
+function route(){if(!P){show1("start");return}let h=decodeURIComponent(location.hash.slice(1)),rid=null;if(h.startsWith("review/")){rid=h.slice(7);h="review"}
  if(h==="train")h=LS.get("trainSec","train/puzzles");if(OLDR[h]){h=OLDR[h];history.replaceState(null,"","#"+h)}
  if(h==="progress/friends"&&!SB_ON)h="progress";if(!ROUTES[h])h="home";const t=ROUTES[h],top=h.split("/")[0];route.cur=h;route.sec=t;if(top==="train")LS.set("trainSec",h);show1(t);tabHead(top);
  document.querySelectorAll("#hdr nav a").forEach(a=>{if(a.dataset.t===top)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trophies")renderTrophies();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review"&&CUR)show();if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
+ if(t==="progress")renderProgress();if(t==="trophies")renderTrophies();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review")reviewView(rid);if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
 function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);if(t==="start")$("#tabHead").hidden=true;$("#hdr").hidden=t==="start";document.body.classList.toggle("has-side",t!=="start");if(t==="start")demoStart();else demoStop()}
 window.addEventListener("hashchange",route);
 

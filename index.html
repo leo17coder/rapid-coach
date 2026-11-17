@@ -10,7 +10,7 @@
 <link rel="preload" href="vendor/fonts/atkinson-next-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/literata-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;d.dataset.theme=u.v3&&u.theme?u.theme:u.theme==="light"?"light":"dark";if(u.board)d.dataset.board=u.board}catch(e){document.documentElement.dataset.theme="dark"}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-18b">
+<link rel="stylesheet" href="style.css?v=2026-11-18c">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -89,35 +89,38 @@
   </section>
 </section>
 
-<!-- REVIEW -->
+<!-- REVIEW: the list of game cards; a game opens in the game view (#review/<id>) -->
 <section id="v-review" hidden>
-  <div class="review-bar">
-    <select id="gamePick" aria-label="Choose a game"></select>
-    <select id="gameFilter" aria-label="Filter games">
-      <option value="all">All games</option><option value="loss">Losses</option><option value="win">Wins</option><option value="w">As White</option><option value="b">As Black</option><option value="an">Analysed</option>
-    </select>
-    <button class="icon-btn" id="prevG" type="button" aria-label="Previous game"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button><button class="icon-btn" id="nextG" type="button" aria-label="Next game"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button>
+  <div id="rvList">
+    <h1 data-i18n="rv.title">Review</h1>
+    <div class="fchips" id="rvChips" role="group" aria-label="Filter games" data-i18n-attr="aria-label:rv.filter"></div>
+    <div id="rvGroups"></div>
+    <button class="rv-more" id="rvMore" type="button" hidden data-i18n="rv.more">Show more</button>
   </div>
-  <div class="grid review">
-    <div class="board-col">
-      <div class="board-row"><div class="evalbar" id="evBar" hidden></div><div class="boardwrap" id="board"></div></div>
-      <div class="ctl">
-        <button data-nav="start" type="button" aria-label="Start"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-left"/></svg></button><button data-nav="prev" type="button" aria-label="Back"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button>
-        <button data-nav="next" type="button" aria-label="Forward"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button><button data-nav="end" type="button" aria-label="End"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-right"/></svg></button>
-        <button id="flipBtn" type="button" aria-label="Flip board"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-up-down"/></svg></button>
-      </div>
+  <div id="rvGame" hidden>
+    <div class="rv-top">
+      <a class="back" href="#review" id="rvBack"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg><span data-i18n="rv.back">All games</span></a>
+      <span class="rv-step"><button class="icon-btn ghost" id="prevG" type="button" aria-label="Older game" data-i18n-attr="aria-label:rv.older"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button><button class="icon-btn ghost" id="nextG" type="button" aria-label="Newer game" data-i18n-attr="aria-label:rv.newer"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button></span>
     </div>
-    <div class="sheet">
-      <div class="sheet-head"><h1 id="gTitle">No games yet</h1><p class="sub" id="gSub"></p></div>
-      <div class="sheet-eval">
-        <div class="row" style="justify-content:space-between"><h2>Evaluation</h2><span class="small num" id="evNow"></span></div>
-        <div class="fig" id="evFig"></div>
-        <div id="anState"></div>
+    <div class="grid review">
+      <div class="board-col">
+        <div class="board-row"><div class="evalbar" id="evBar" hidden></div><div class="boardwrap" id="board"></div></div>
+        <div class="ctl">
+          <button data-nav="start" type="button" aria-label="Start" data-i18n-attr="aria-label:rv.start"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-left"/></svg></button><button data-nav="prev" type="button" aria-label="Back" data-i18n-attr="aria-label:rv.prev"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg></button>
+          <button data-nav="next" type="button" aria-label="Forward" data-i18n-attr="aria-label:rv.next"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-right"/></svg></button><button data-nav="end" type="button" aria-label="End" data-i18n-attr="aria-label:rv.end"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-chevrons-right"/></svg></button>
+          <button id="flipBtn" type="button" aria-label="Flip board" data-i18n-attr="aria-label:rv.flip"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-arrow-up-down"/></svg></button>
+        </div>
+        <p class="ev-now" id="evNow" aria-live="polite"></p>
       </div>
-      <h2>Key moments</h2>
-      <div class="km" id="km"></div>
-      <h2 class="moves-h">Moves</h2>
-      <div class="moves num" id="moves" aria-label="Move list"></div>
+      <div class="sheet">
+        <div class="sheet-head"><h1 id="gTitle"></h1><p class="small" id="gSub"></p><p class="story" id="gStory"></p></div>
+        <h2 data-i18n="rv.km">Key moments</h2>
+        <div class="km" id="km"></div>
+        <div id="anState"></div>
+        <details class="rv-more-d" id="rvGraphD" open><summary data-i18n="rv.graph">How the game went</summary><div class="fig" id="evFig"></div><p class="small legend" id="evLegend"></p></details>
+        <h2 class="moves-h" data-i18n="rv.moves">Moves</h2>
+        <div class="moves" id="moves" aria-label="Move list" data-i18n-attr="aria-label:rv.moveList"></div>
+      </div>
     </div>
   </div>
 </section>
@@ -367,9 +370,9 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-18b"></script>
-<script src="i18n/en.js?v=2026-11-18b"></script>
+<script src="config.js?v=2026-11-18c"></script>
+<script src="i18n/en.js?v=2026-11-18c"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-18b"></script>
+<script src="app.js?v=2026-11-18c"></script>
 </body>
 </html>
