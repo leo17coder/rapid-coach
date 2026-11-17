@@ -23,7 +23,10 @@ await page.type("#uName", "test_player"); await page.click("#startBtn");
 await waitFor(page, () => window.rcTest.state().analysed >= 10, { timeout: 600000, label: "analysis" });
 await sleep(1500);
 for (const r of routes) {
-  await page.evaluate(h => { location.hash = h; }, r); await sleep(1200);
+  // "game": the game view of the newest analysed game
+  if (r === "game") await page.evaluate(() => { location.hash = "review"; }), await sleep(800), await page.evaluate(() => { const a = [...document.querySelectorAll(".gcard-link[data-g]")].find(a => window.rcTest.game(a.dataset.g).an); a && a.click(); });
+  else await page.evaluate(h => { location.hash = h; }, r);
+  await sleep(1200);
   for (const t of ["dark", "light"]) for (const w of [390, 1440]) await shot(r, w, t);
 }
 await browser.close(); srv.close();
