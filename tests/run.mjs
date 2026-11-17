@@ -55,6 +55,16 @@ test("Start screen: onboarding form and demo board", async ({ page, base }) => {
   assert(await page.$eval(SEL.heroBoard, e => !!e.querySelector("svg")), "demo board not drawn");
 });
 
+test("Language: the start screen switch changes the text", async ({ page }) => {
+  const h1 = () => text(page, "#v-start h1");
+  const en = await h1();
+  await page.click('#langSw [data-lang="de"]');
+  await waitFor(page, t => document.querySelector("#v-start h1").textContent !== t, { label: "German headline", arg: en });
+  assert(await page.evaluate(() => document.documentElement.lang === "de"), "html lang not set to de");
+  await page.click('#langSw [data-lang="en"]');
+  await waitFor(page, t => document.querySelector("#v-start h1").textContent === t, { label: "English headline again", arg: en });
+});
+
 test("Onboarding: unknown username shows a clear error", async ({ page }) => {
   await onboard(page, "nobody_here_123");
   await waitFor(page, s => /player called/i.test(document.querySelector(s).textContent), { label: "not-found message", arg: SEL.startMsg });
@@ -258,6 +268,19 @@ test("Settings: dark theme applies and is remembered", async ({ page, base }) =>
   await goto(page, base, "#home");
   assert(await page.evaluate(() => document.documentElement.dataset.theme === "dark"), "theme not remembered");
   await menuClick(page, SEL.setBtn); await page.$eval(SEL.theme("system"), e => e.click()); await page.click(SEL.setClose);
+});
+
+test("Language: Settings switches the interface and it is remembered after reload", async ({ page, base }) => {
+  await menuClick(page, SEL.setBtn);
+  await waitFor(page, s => document.querySelector(s).open, { label: "settings dialog open", arg: SEL.settings });
+  await page.select("#sLang", "fr"); await sleep(200);
+  await page.click(SEL.setClose);
+  const nav = () => text(page, SEL.navLink("home"));
+  assert((await nav()).includes("Accueil"), `navigation not in French: ${await nav()}`);
+  await goto(page, base, "#home");
+  assert((await nav()).includes("Accueil"), "French not remembered after reload");
+  await menuClick(page, SEL.setBtn); await page.select("#sLang", "en"); await page.click(SEL.setClose);
+  assert((await nav()).includes("Home"), "back to English failed");
 });
 
 test("Reload keeps games and analyses; only the newest months are fetched again", async ({ page, base }) => {

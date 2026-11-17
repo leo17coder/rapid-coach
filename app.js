@@ -141,7 +141,9 @@ if(!UI.v3){if(UI.theme!=="light")UI.theme="dark";UI.v3=1;LS.set("ui",UI)}
 /* ---------- interface text: i18n/<lang>.js (window.KZ_I18N), English as the fallback; dates and numbers through Intl ---------- */
 const LANGS=["en","fr","de","da"],I18N=window.KZ_I18N||{en:{}};let LANG="en";
 const T=(k,v)=>{let s=(I18N[LANG]||{})[k];if(s==null)s=I18N.en[k];if(s==null)s=k;return v?s.replace(/\{(\w+)\}/g,(m,x)=>v[x]!=null?v[x]:m):s};
-const fmtN=(n,o)=>new Intl.NumberFormat(LANG,o).format(n),TP=(k,n,v)=>T(k+"."+new Intl.PluralRules(LANG).select(n),{n:fmtN(n),...(v||{})});
+/* TX: a translation of data text (badge names, themes, levels...) when the language has one, else the English from the data */
+const TX=(k,d)=>{const v=(I18N[LANG]||{})[k];return v!=null?v:d};
+const fmtN=(n,o)=>new Intl.NumberFormat(LANG,o).format(n),TP=(k,n,v)=>{const c=k+"."+new Intl.PluralRules(LANG).select(n);return T((I18N[LANG]||{})[c]!=null||I18N.en[c]!=null?c:k+".other",{n:fmtN(n),...(v||{})})};
 function langPick(){if(LANGS.includes(UI.lang)&&I18N[UI.lang])return UI.lang;for(const l of navigator.languages||[navigator.language||"en"]){const b=String(l).slice(0,2).toLowerCase();if(LANGS.includes(b)&&I18N[b])return b}return "en"}
 function applyI18n(root){(root||document).querySelectorAll("[data-i18n]").forEach(e=>e.textContent=T(e.dataset.i18n));(root||document).querySelectorAll("[data-i18n-html]").forEach(e=>e.innerHTML=T(e.dataset.i18nHtml));
  (root||document).querySelectorAll("[data-i18n-attr]").forEach(e=>e.dataset.i18nAttr.split(";").forEach(p=>{const [a,k]=p.split(":");e.setAttribute(a,T(k))}));document.documentElement.lang=LANG}
@@ -314,44 +316,45 @@ async function wLine(fen,first){const c=new Chess(fen),L=[];let cp=null;
  if(cp==null&&c.in_checkmate())cp=c.turn()==="w"?-10000:10000;return {fen,L,cp}}
 const matOf=fen=>{const m={w:{p:0,n:0,b:0,r:0,q:0},b:{p:0,n:0,b:0,r:0,q:0}};for(const ch of fen.split(" ")[0]){const t=ch.toLowerCase();if(VAL[t])m[ch===t?"b":"w"][t]++}return m};
 const balOf=(m,me)=>{const op=me==="w"?"b":"w";let s=0;for(const t in VAL)s+=VAL[t]*(m[me][t]-m[op][t]);return s};
-const piecesTxt=d=>{const PL={p:"pawns",n:"knights",b:"bishops",r:"rooks",q:"queens"},ONE={p:"a pawn",n:"a knight",b:"a bishop",r:"a rook",q:"the queen"},out=[];
- for(const t of ["q","r","b","n","p"]){const k=d[t]||0;if(k>0)out.push(k===1?ONE[t]:(k===2?"two ":k+" ")+PL[t])}return out.join(" and ")};
+const piecesTxt=d=>{const out=[];for(const t of ["q","r","b","n","p"]){const k=d[t]||0;if(k>0)out.push(TP("pc."+t,k))}return out.join(T("tr.and"))};
+const wL=(k,v)=>({t:T("why.l."+k+".t",v),y:T("why.l."+k+".y",v)});
 /* plain-language label of a line for `me` (the side to move at its start). keep: allow "keeps an extra pawn" (not for a wrong move) */
 function wLabel(line,me,keep){if(!line||!line.L.length)return null;const L=line.L,op=me==="w"?"b":"w";let e=Math.min(L.length,WHY_SHOW);while(e<L.length&&L[e-1].cap)e++;   // don't stop mid-exchange
  const end=L[e-1].fen,c=new Chess(end),cp=line.cp==null?null:me==="w"?line.cp:-line.cp;
- if(c.in_checkmate())return c.turn()===me?{t:"gets mated",y:"you get mated"}:{t:"gives mate",y:"you give mate"};
- if(cp!=null&&Math.abs(cp)>=9000){const n=10000-Math.abs(cp);return cp>0?{t:`mates in ${n}`,y:`you mate in ${n}`}:{t:`allows mate in ${n}`,y:`they mate in ${n}`}}
+ if(c.in_checkmate())return wL(c.turn()===me?"mated":"mate");
+ if(cp!=null&&Math.abs(cp)>=9000){const n=10000-Math.abs(cp);return wL(cp>0?"mateIn":"allowMate",{n})}
  const m0=matOf(line.fen),m1=matOf(end),lost={},got={};for(const t in VAL){const a=m0[me][t]-m1[me][t],b=m0[op][t]-m1[op][t];if(a>0)lost[t]=a;if(b>0)got[t]=b}
- const net=balOf(m1,me)-balOf(m0,me),b0=balOf(m0,me),b1=balOf(m1,me),lt=piecesTxt(lost)||"material",gt=piecesTxt(got)||"material";
+ const net=balOf(m1,me)-balOf(m0,me),b0=balOf(m0,me),b1=balOf(m1,me),lt=piecesTxt(lost)||T("why.material"),gt=piecesTxt(got)||T("why.material");
  const exch=(a,b)=>a.r===1&&!a.q&&!a.n&&!a.b&&!b.r&&!b.q&&(b.n||0)+(b.b||0)===1;
- if(net<=-2&&exch(lost,got))return {t:"loses the exchange",y:"you've lost the exchange"};
- if(net>=2&&exch(got,lost))return {t:"wins the exchange",y:"you win the exchange"};
- if(net<=-1)return {t:`loses ${lt}${piecesTxt(got)?` for ${gt}`:""}`,y:`you've lost ${lt}${piecesTxt(got)?` for ${gt}`:""}`};
- if(net>=1)return {t:`wins ${gt}${piecesTxt(lost)?` for ${lt}`:""}`,y:`you win ${gt}${piecesTxt(lost)?` for ${lt}`:""}`};
- if(keep&&b0>=1){const x={1:"an extra pawn",2:"two extra pawns",3:"an extra piece",4:"an extra piece",5:"an extra rook"}[b0]||"a material advantage";return {t:`keeps ${x}`,y:`you keep ${x}`}}
- if(b1===0&&cp!=null&&Math.abs(cp)>=60)return cp>0?{t:"equal material, better position",y:"you're better with equal material"}:{t:"equal material, worse position",y:"you're worse with equal material"};
+ if(net<=-2&&exch(lost,got))return wL("loseEx");
+ if(net>=2&&exch(got,lost))return wL("winEx");
+ if(net<=-1)return piecesTxt(got)?wL("loseFor",{a:lt,b:gt}):wL("lose",{a:lt});
+ if(net>=1)return piecesTxt(lost)?wL("winFor",{a:gt,b:lt}):wL("win",{a:gt});
+ if(keep&&b0>=1)return wL("keep",{x:T("why.x"+({1:1,2:2,3:3,4:3,5:5}[b0]||"M"))});
+ if(b1===0&&cp!=null&&Math.abs(cp)>=60)return wL(cp>0?"eqB":"eqW");
  return null}
 /* move text with move numbers from fen: "5. Nd6+ exd6 6. Bd3" / "5… exd6 6. Bd3" */
 const wMoves=(fen,L)=>{const f=fen.split(" "),w=f[1]==="w",n0=+f[5]||1;return L.map((m,j)=>{const wm=(j%2===0)===w,n=n0+Math.floor((j+(w?0:1))/2);return {num:wm?n+".":j===0?n+"…":"",san:m.san}})};
 function Why(el,board,bar){this.el=el;this.b=board;this.bar=bar;this.tok=0}
 Why.prototype.clear=function(){this.tok++;this.el.innerHTML="";this.b.lock=false;if(this.bar)this.bar.hide()};
 /* o: {fen, played: UCI of the move being explained, best: UCI of the right move (optional), ok: played was right, restore(): redraw the drill/puzzle position} */
-Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.lock=false;this.el.innerHTML='<div class="why-wait" role="status"><span class="sr-only">Working out why…</span><span class="skel" style="width:85%"></span><span class="skel" style="width:60%"></span><span class="skel" style="width:72%"></span></div>';
- const me=o.fen.split(" ")[1],opp=me==="w"?"Black":"White";let ev0=null,A=null,B=null;
+Why.prototype.show=async function(o){const t=++this.tok,gen=GEN;this.o=o;this.b.lock=false;this.el.innerHTML='<div class="why-wait" role="status"><span class="sr-only">${esc(T("why.wait"))}</span><span class="skel" style="width:85%"></span><span class="skel" style="width:60%"></span><span class="skel" style="width:72%"></span></div>';
+ const me=o.fen.split(" ")[1],opp=T(me==="w"?"card.black":"card.white"),ew=cp=>evWords(cp==null?0:me==="w"?cp:-cp);let ev0=null,A=null,B=null;
  try{ev0=(await wEval(o.fen)).cp;if(t!==this.tok)return;if(o.played)A=await wLine(o.fen,o.played);if(t!==this.tok)return;
   if(!o.ok){const pv0=(await wEval(o.fen)).pv[0],b=o.best&&o.best!==o.played?o.best:pv0&&pv0!==o.played?pv0:null;if(b)B=await wLine(o.fen,b!==pv0?b:null)}}catch(e){}
- if(t!==this.tok||gen!==GEN)return;if(!A&&!B){this.el.innerHTML='<p class="small">Couldn\'t work out the lines for this position.</p>';return}
- const la=wLabel(A,me,!!o.ok),lb=wLabel(B,me,true),sw=(a,b)=>a!=null&&b!=null?`the evaluation goes ${evTxt(a)} → ${evTxt(b)}`:"",S=[];
- if(A&&!o.ok){const r=A.L[1];S.push(`After ${A.L[0].san}${r?`, ${opp} plays ${r.san}`:""}${la?` and ${la.y}`:sw(ev0,A.cp)?`: ${sw(ev0,A.cp)}`:""}.`)}
- if(A&&o.ok)S.push(`${A.L[0].san} works: ${la?la.t:`it keeps the evaluation at ${evTxt(A.cp)}`}.`);
- if(B)S.push(`${B.L[0].san} is better: ${lb?lb.t:`the evaluation stays ${evTxt(B.cp)}`}.`);
- this.render(S.join(" "),[A&&{title:o.ok?"Why it works":"Your move",c:o.ok?"green":"red",x:A,lab:la},B&&{title:"Better",c:"green",x:B,lab:lb}].filter(Boolean))};
+ if(t!==this.tok||gen!==GEN)return;if(!A&&!B){this.el.innerHTML=`<p class="small">${esc(T("why.none"))}</p>`;return}
+ const la=wLabel(A,me,!!o.ok),lb=wLabel(B,me,true),S=[];
+ // plain words, no evaluation numbers: "After Nd6+, Black plays Qxd6 and you've lost a knight." / "...: you were better, now you're worse."
+ if(A&&!o.ok){const r=A.L[1],v={mv:A.L[0].san,side:opp,r:r?r.san:"",y:la?la.y:"",sw:ev0!=null&&A.cp!=null?T("why.sw",{b:evPast(me==="w"?ev0:-ev0),a:ew(A.cp)}):""};S.push(T("why.wrong"+(r?"R":"")+(la?"L":v.sw?"S":""),v))}
+ if(A&&o.ok)S.push(la?T("why.okL",{mv:A.L[0].san,t:la.t}):T("why.okE",{mv:A.L[0].san,ev:ew(A.cp)}));
+ if(B)S.push(lb?T("why.betterL",{mv:B.L[0].san,t:lb.t}):T("why.betterE",{mv:B.L[0].san,ev:ew(B.cp)}));
+ this.render(cap1(S.join(" ")),[A&&{title:T(o.ok?"why.works":"why.your"),c:o.ok?"green":"red",x:A,lab:la},B&&{title:T("why.better"),c:"green",x:B,lab:lb}].filter(Boolean))};
 /* draw a sentence and lines ({title, c: "red"|"green", x: {fen, L}, lab: {t}}); also used by the start screen's demo */
 Why.prototype.render=function(say,lines){this.lines=lines;this.cur=null;
- this.el.innerHTML=`<p class="why-say">${esc(say)}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${l.title}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
+ this.el.innerHTML=`<p class="why-say">${esc(say)}</p>`+this.lines.map((l,i)=>`<div class="why-line ${l.c}" data-i="${i}"><div class="why-head"><b>${esc(l.title)}</b>${l.lab?` <span class="tag">${esc(l.lab.t)}</span>`:""}</div>`+
   `<p class="why-moves">${wMoves(l.x.fen,l.x.L.slice(0,WHY_SHOW)).map((m,k)=>`${m.num?`<span class="num">${m.num}</span> `:""}<button class="why-mv" type="button" data-k="${k+1}">${esc(m.san)}</button>`).join(" ")}</p></div>`).join("")+
   // one control row for all lines: it steps through the line last clicked (the better line to begin with)
-  `<div class="why-nav"><button type="button" data-a="back" aria-label="Back one move">${ic("chevron-left","sm")}Back</button><button type="button" data-a="fwd" aria-label="Forward one move">Forward${ic("chevron-right","sm")}</button><button class="link" type="button" data-a="reset">Back to the position</button></div>`;
+  `<div class="why-nav"><button type="button" data-a="back" aria-label="${esc(T("why.backL"))}">${ic("chevron-left","sm")}${esc(T("why.back"))}</button><button type="button" data-a="fwd" aria-label="${esc(T("why.fwdL"))}">${esc(T("why.fwd"))}${ic("chevron-right","sm")}</button><button class="link" type="button" data-a="reset">${esc(T("why.reset"))}</button></div>`;
  this.el.querySelectorAll(".why-line").forEach(d=>{const i=+d.dataset.i;d.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>this.step(i,+b.dataset.k))});
  const li=()=>this.cur?this.cur.i:this.lines.length-1;
  this.el.querySelector('[data-a="back"]').onclick=()=>this.step(li(),(this.cur?this.cur.k:1)-1);this.el.querySelector('[data-a="fwd"]').onclick=()=>this.step(li(),(this.cur?this.cur.k:0)+1);
@@ -390,10 +393,10 @@ function renderTHub(){const G=last5();let h;
  else{const er=G.flatMap(g=>serious(replay(g))),bl=er.filter(e=>e.kind==="blunder").length,mi=er.length-bl,th=topThemes(G).slice(0,2),tu=G.map(timeUsed).filter(x=>x!=null).sort((a,b)=>a-b),B=baseSecs(),med=tu.length?tu[tu.length>>1]:null;
   h=`<div class="panel"><h2>${esc(TP("tr.sumH",G.length))}</h2><ul class="t-games">${G.map(g=>`<li><a href="#review/${encodeURIComponent(g.id)}" class="t-g"><span class="rchip ${g.result}">${esc(T("tr.r."+g.result))}</span><span class="t-gs">${esc(gameStory(g).t)}</span></a></li>`).join("")}</ul>
   <div class="kpis t-facts"><div class="kpi"><b>${fmtN(bl)}</b>${esc(TP("tr.blunders",bl))}</div><div class="kpi"><b>${fmtN(mi)}</b>${esc(TP("tr.mistakes",mi))}</div>${med!=null?`<div class="kpi"><b>${mmss(med)}</b>${esc(T("tr.time"))}</div>`:""}</div>${med!=null?`<p class="t-themes">${ic("timer","sm")}<span>${esc(T(med>=B*.7?"tr.timeOk":"tr.timeGoal",{goal:mmss(B*.7)}))}</span></p>`:""}
-  ${th.length?`<p class="t-themes">${ic("crosshair","sm")}<span>${esc(T("tr.themes",{t:th.map(k=>MOT[k].n.toLowerCase()).join(T("tr.and"))}))}</span></p>`:er.length?"":`<p class="t-themes">${ic("circle-check","sm")}<span>${esc(T("tr.clean"))}</span></p>`}</div>`}
+  ${th.length?`<p class="t-themes">${ic("crosshair","sm")}<span>${esc(T("tr.themes",{t:th.map(k=>motN(k).toLowerCase()).join(T("tr.and"))}))}</span></p>`:er.length?"":`<p class="t-themes">${ic("circle-check","sm")}<span>${esc(T("tr.clean"))}</span></p>`}</div>`}
  setHTML($("#tSum"),h);const ab=$("#tAnalyse");if(ab)ab.onclick=()=>{analyseRecent(20);renderTHub()};
  const M=tModes(),first=M.find(m=>m.ids.length>=(m.course?3:1))||M.find(m=>m.course);
- setHTML($("#tModes"),M.length?M.map(m=>{const n=m.ids.length,course=m.course&&n<3,f=m===first,tn=m.th?MOT[m.th].n.toLowerCase():"";
+ setHTML($("#tModes"),M.length?M.map(m=>{const n=m.ids.length,course=m.course&&n<3,f=m===first,tn=m.th?motN(m.th).toLowerCase():"";
   return `<article class="t-mode${f?" first":""}"><span class="t-ic">${ic(m.i)}</span><div class="t-mt"><h3>${esc(T("tr.m."+m.k,{n:G.length,t:tn}))}</h3><p>${esc(T("tr.m."+m.k+(course?"C":"")+"P"))}</p><p class="t-meta">${ic("timer","sm")}${esc(course?T("tr.lessonMeta"):TP("tr.meta",n,{min:Math.max(1,Math.round(n*1.2))}))}</p></div><button type="button" class="${f?"pri":""}" data-mode="${m.k}">${esc(T(course?"tr.openCourse":"tr.start"))}${ic(course?"arrow-right":"play","sm")}</button></article>`}).join(""):`<p class="empty-line">${esc(T("tr.noModes"))}</p>`)}
 $("#tModes").onclick=e=>{const b=e.target.closest("[data-mode]");if(b)tStart(b.dataset.mode)};
 /* start a session of one mode (from the hub, Home's plan or "Train again"); returns false when that mode has nothing left */
@@ -408,7 +411,7 @@ function renderTDone(){const r=Object.values(TSN.res),ok=r.filter(x=>x).length,m
  $("#tAgain").onclick=()=>{if(!tStart(TSN.k)){TSN=null;tView()}};$("#tBack").onclick=()=>{TSN=null;tView()}}
 $("#tQuit").onclick=()=>{TSN=null;PI=null;TW.clear();tView()};
 function loadPuzzle(p){PI=p;HINT=0;DONE=false;TW.clear();$("#tFeedback").innerHTML="";$("#tMeta").innerHTML="";
- if(TSN){$("#tProg").textContent=T("tr.prog",{i:TSN.i+1,n:TSN.ids.length});$("#tTitle").textContent=T("tr.m."+TSN.k,{n:last5().length,t:TSN.th?MOT[TSN.th].n.toLowerCase():""});$("#tNextL").textContent=T(TSN.i+1>=TSN.ids.length?"tr.finish":"tr.next")}
+ if(TSN){$("#tProg").textContent=T("tr.prog",{i:TSN.i+1,n:TSN.ids.length});$("#tTitle").textContent=T("tr.m."+TSN.k,{n:last5().length,t:TSN.th?motN(TSN.th).toLowerCase():""});$("#tNextL").textContent=T(TSN.i+1>=TSN.ids.length?"tr.finish":"tr.next")}
  $("#tPrompt").className="verdict v-info";if(!p){$("#tPrompt").textContent=T("tr.gone");TB.flip=false;TB.set(new Chess().fen());return}
  const g=p.g,e=p.e,c=new Chess(g._f[e.i]),m=g._m[e.i-1];TB.flip=c.turn()==="b";TB.set(g._f[e.i],{last:m?{from:m.from,to:m.to}:null});
  $("#tPrompt").innerHTML=`${ic("target")}<b>${esc(T(c.turn()==="w"?"tr.wtm":"tr.btm"))}</b> ${esc(T("tr.find"))}`;$("#tPrompt").className="verdict v-move";
@@ -618,6 +621,7 @@ const MOT={mate_missed:{n:"Missed checkmates",to:"pz-mate2",fs:"fs-mate1"},mate_
  hang:{n:"Hanging pieces",to:"pz-hanging",fs:"fs-save"},material_missed:{n:"Free material left on the board",to:"pz-hanging",fs:"fs-free"},
  fork_missed:{n:"Missed forks",to:"pz-fork"},fork_allowed:{n:"Allowing forks",to:"pz-fork"},pin_missed:{n:"Missed pins",to:"pz-pin"},skewer_missed:{n:"Missed skewers",to:"pz-skewer"},
  pin_allowed:{n:"Allowing pins and skewers",to:"pz-pin"},tactic_missed:{n:"Other missed tactics",to:"pz-discovered"},tactic_allowed:{n:"Other tactics allowed",to:"pz-discovered"},positional:{n:"Positional slips",to:null}};
+const motN=k=>TX("mot."+k,MOT[k].n),endN=k=>TX("end."+k,ENDT[k]),phN=k=>TX("ph."+k,PHN[k]);
 const ENDT={kp:"King and pawn endings",rook:"Rook endings",minor:"Minor-piece endings",queen:"Queen endings",mixed:"Other endings"},PHN={opening:"Opening",middlegame:"Middlegame",endgame:"Endgame"};
 const sqi=s=>[FILES.indexOf(s[0]),+s[1]-1];
 function bMap(fen){const m={},c=new Chess(fen);c.board().forEach((row,r)=>row.forEach((p,f)=>{if(p)m[FILES[f]+(8-r)]=p}));return m}
@@ -668,8 +672,8 @@ function wkProfile(){const an=GAMES.filter(g=>g.an).slice(-MT_GAMES),tg=an.filte
 const motTo=k=>{const m=MOT[k];return m.fs&&["new","beg"].includes(lvl())&&!lsDone(m.fs)?m.fs:m.to};
 /* priority list: every weakness with its cost (win-% points per game) and a one-line reason; habits from what Progress measures */
 function lsPriority(){const W=wkProfile(),out=[],n=W.n;if(n<3)return out;const pg=x=>x.d/n,times=k=>k===1?"once":k===2?"twice":k+" times";
- for(const k in W.T){if(k==="positional")continue;const x=W.T[k];out.push({k,name:MOT[k].n,cost:pg(x),to:motTo(k),reason:`${times(x.n)} in your last ${n} analysed games, about ${pg(x).toFixed(1)} points a game.`})}
- for(const k in W.ET){const x=W.ET[k];if(x.n>=2)out.push({k:"end_"+k,name:ENDT[k],cost:pg(x)*.8,to:egCourseFor(k),reason:`${times(x.n)} you went wrong in ${ENDT[k].toLowerCase()}, about ${pg(x).toFixed(1)} points a game.`})}
+ for(const k in W.T){if(k==="positional")continue;const x=W.T[k];out.push({k,name:motN(k),cost:pg(x),to:motTo(k),reason:`${times(x.n)} in your last ${n} analysed games, about ${pg(x).toFixed(1)} points a game.`})}
+ for(const k in W.ET){const x=W.ET[k];if(x.n>=2)out.push({k:"end_"+k,name:endN(k),cost:pg(x)*.8,to:egCourseFor(k),reason:`${times(x.n)} you went wrong in ${ENDT[k].toLowerCase()}, about ${pg(x).toFixed(1)} points a game.`})}
  const s=stats(),B=baseSecs(),errs=[];GAMES.filter(g=>g.mt).slice(-MT_GAMES).forEach(g=>{for(const i in g.mt.e)errs.push({g,i:+i,x:g.mt.e[i]})});
  const win=errs.filter(o=>(errorsOf(o.g).find(e=>e.i===o.i)||{}).before>200);if(win.length>=2){const d=win.reduce((a,o)=>a+o.x.d,0)/n,tc={};win.forEach(o=>{const t=o.x.t[0];if(MOT[t].to)tc[t]=(tc[t]||0)+o.x.d});const top=Object.keys(tc).sort((a,b)=>tc[b]-tc[a])[0];
   out.push({k:"winning",name:"Letting winning positions slip",cost:d*.6,to:top?motTo(top):"pz-hanging",reason:`${times(win.length)} you went wrong when already clearly winning, about ${d.toFixed(1)} points a game.`})}
@@ -683,7 +687,7 @@ function lsPriority(){const W=wkProfile(),out=[],n=W.n;if(n<3)return out;const p
 const LVLS=[["new","New to chess"],["beg","Beginner"],["imp","Improver"],["int","Intermediate"],["club","Club player"]];
 function lvlAuto(){if(!GAMES.length)return "new";const s=stats();let r=(s.rating||0)-(P.source==="li"?250:0),i=r<400?0:r<800?1:r<1100?2:r<1400?3:4;
  if(s.nAn>=10&&s.errs!=null){if(s.errs>=4&&i>1)i--;else if(s.errs<=1.2&&i>0&&i<4)i++}return LVLS[i][0]}
-const lvl=()=>(LSP.lvl&&LSP.lvl.v)||lvlAuto(),lvlName=id=>(LVLS.find(l=>l[0]===id)||LVLS[1])[1];
+const lvl=()=>(LSP.lvl&&LSP.lvl.v)||lvlAuto(),lvlName=id=>{const l=LVLS.find(l=>l[0]===id)||LVLS[1];return TX("lv."+l[0],l[1])};
 
 /* ---------- PUZZLE COURSES ----------
    Real-game puzzles from the Lichess puzzle database (CC0): a fixed subset made by tools/build-puzzles.py, vendored one file per
@@ -1279,15 +1283,15 @@ function renderLessons(){LP=null;const W=wkProfile();if(LCO)return renderCourse(
  $("#lsPrio").innerHTML=items.length?items.map((x,i)=>`<li class="prio-item${i===0?" top":""}"><span class="prio-n">${i+1}</span><div class="prio-txt"><b>${esc(x.name)}</b><span class="small">${esc(x.reason)}</span></div>${prioBtn(x,i,W)}</li>`).join("")
   :`<li class="empty">${esc(T(an.length?pend?"ls.prioWait":"ls.prioClean":"ls.prioNone"))}</li>`;
  // profile by theme (longer bar = more points lost a game) and strengths
- const rows=Object.entries(W.T).map(([k,x])=>({k,n:MOT[k].n,c:x.d/W.n,cnt:x.n})).sort((a,b)=>b.c-a.c),mx=Math.max(.1,...rows.map(r=>r.c)),bar=(n,c,cnt,col,m)=>`<li><span class="bar-l">${esc(n)}</span><span class="bar-t"><b style="width:${Math.max(3,c/(m||mx)*100)}%;background:${col}"></b></span><span class="bar-v num" title="${cnt} mistakes">${c.toFixed(1)}</span></li>`;
+ const rows=Object.entries(W.T).map(([k,x])=>({k,n:motN(k),c:x.d/W.n,cnt:x.n})).sort((a,b)=>b.c-a.c),mx=Math.max(.1,...rows.map(r=>r.c)),bar=(n,c,cnt,col,m)=>`<li><span class="bar-l">${esc(n)}</span><span class="bar-t"><b style="width:${Math.max(3,c/(m||mx)*100)}%;background:${col}"></b></span><span class="bar-v num" title="${cnt} mistakes">${c.toFixed(1)}</span></li>`;
  const good=[];if(W.n>=8){[["hang","No hanging pieces"],["fork_missed","No missed forks"],["mate_missed","No missed mates"],["fork_allowed","No forks allowed"]].forEach(([k,t])=>{if(!W.T[k])good.push(`${t} in your last ${W.n} games`)});
   const ph=Object.entries(W.PH).filter(([,x])=>x.n).sort((a,b)=>a[1].d-b[1].d)[0];if(ph)good.push(`Your strongest phase: the ${ph[0]}`)}
  if(s.time!=null&&s.time>=B*.5)good.push("You use your clock well");
  $("#lsProfile").innerHTML=W.n?`<p class="small">From ${W.n} analysed game${W.n>1?"s":""}${pend?` (${pend} more being checked)`:""}. Points lost a game per theme: longer is weaker.</p><ul class="bars">${rows.map(r=>bar(r.n,r.c,r.cnt,r.k==="positional"?"var(--border-strong)":"var(--q-blunder)")).join("")}</ul>`+(good.length?`<h3 class="h-small">Strengths</h3><ul class="good">${good.map(g=>`<li>${ic("circle-check","sm")}${esc(g)}</li>`).join("")}</ul>`:"")
   :`<div class="empty">${an.length?"Checking your mistakes with Stockfish…":"Your profile appears after a few analysed games."}</div>`;
  const pm=Math.max(.1,...Object.values(W.PH).map(x=>x.d/Math.max(1,W.n)));
- $("#lsPhase").innerHTML=W.n?`<ul class="bars">${Object.entries(W.PH).map(([k,x])=>bar(PHN[k],x.d/W.n,x.n,"var(--q-mistake)",pm)).join("")}</ul>`+
-  (Object.keys(W.ET).length?`<h3 class="h-small">Endings</h3><ul class="good">${Object.entries(W.ET).sort((a,b)=>b[1].d-a[1].d).map(([k,x])=>`<li>${ic("flag","sm")}${esc(ENDT[k])}: ${x.n} mistake${x.n>1?"s":""}</li>`).join("")}</ul>`:"")
+ $("#lsPhase").innerHTML=W.n?`<ul class="bars">${Object.entries(W.PH).map(([k,x])=>bar(phN(k),x.d/W.n,x.n,"var(--q-mistake)",pm)).join("")}</ul>`+
+  (Object.keys(W.ET).length?`<h3 class="h-small">Endings</h3><ul class="good">${Object.entries(W.ET).sort((a,b)=>b[1].d-a[1].d).map(([k,x])=>`<li>${ic("flag","sm")}${esc(endN(k))}: ${x.n} mistake${x.n>1?"s":""}</li>`).join("")}</ul>`:"")
   :'<div class="empty">Phases appear with your profile.</div>';
  // course cards of the chosen track; courses on the priority list (and endings I go wrong in) are marked "For you"
  const fy=new Set(pr.map(x=>x.to).filter(t=>COIDX[t]));if(fsOpen)fy.add(TRACKS[0].courses[0].id);
@@ -1449,8 +1453,8 @@ function egFail(L,st,pre,t){Snd.play("wrong");st.miss=true;
 /* "Drill this line": pin my moves of the line as repertoire moves (OPS), then open the trainer on a matching opening */
 function opDrill(l,co){const c=new Chess(),now=Date.now();let n=0;l.m.split(" ").forEach((s,i)=>{const k=posKey(c.fen()),m=c.move(s);if(!m)return;if((i%2===0)===(l.side==="w")&&!(l.bad||[]).includes(i+1)){const x=OPS[k]||(OPS[k]={s:0,ok:0,miss:0});x.pin=m.from+m.to+(m.promotion||"");x.at=now;saveOPS(k);n++}});
  const fams={};GAMES.filter(g=>g.color===l.side&&co.op.re&&co.op.re.test(famOf(g.eco))).forEach(g=>{const f=famOf(g.eco);fams[f]=(fams[f]||0)+1});
- const f=Object.keys(fams).filter(k=>fams[k]>=3).sort((a,b)=>fams[b]-fams[a])[0];LP=null;gToast(`Pinned ${n} moves as your repertoire. Drill them here.`);opGo(l.side+"|"+(f||co.name),true)}
-function lsChapterDone(ch){const k="c:"+ch.id;if((LSP[k]||{}).d||!chDone(ch))return;const c=LSP[k]||(LSP[k]={});c.d=Date.now();saveLSP(k);gAdd({lc:1});gToast(`Chapter complete: ${ch.name}! +${GX.lc} XP`)}
+ const f=Object.keys(fams).filter(k=>fams[k]>=3).sort((a,b)=>fams[b]-fams[a])[0];LP=null;gToast(T("t.pinned",{n}));opGo(l.side+"|"+(f||co.name),true)}
+function lsChapterDone(ch){const k="c:"+ch.id;if((LSP[k]||{}).d||!chDone(ch))return;const c=LSP[k]||(LSP[k]={});c.d=Date.now();saveLSP(k);gAdd({lc:1});gToast(T("t.chapter",{c:ch.name,xp:GX.lc}))}
 /* after a puzzle lesson: suggest the next or previous chapter when the skill has left this band */
 function pzShift(L){const ch=L.x.ch,co=L.x.co;if(ch.all)return null;const i=co.chapters.indexOf(ch),sk=pzSkill(ch.pz)||0,B=pzRg(ch);
  if(sk>=B[1]+40&&co.chapters[i+1]&&co.chapters[i+1].pz&&!chDone(co.chapters[i+1]))return {ch:co.chapters[i+1],t:"These are getting easy for you. Ready for the next chapter?"};
@@ -1518,8 +1522,8 @@ function gStreak(){const ks=Object.keys(GS.days).filter(k=>GS.days[k].g).sort(),
  if(ks.length)for(let d=ks[0];d<today;d=dAdd(d,1)){if((GS.days[d]||{}).g){s++;if(s%7===0)fz=Math.min(FZ_MAX,fz+1)}else if(s>0&&fz>0){fz--;used.push(d)}else s=0;best=Math.max(best,s)}
  if((GS.days[today]||{}).g){s++;if(s%7===0)fz=Math.min(FZ_MAX,fz+1)}return {cur:s,best:Math.max(best,s),fz,used}}
 function gLevel(xp){let i=0;while(i+1<LEVELS.length&&xp>=LEVELS[i+1][1])i++;
- if(i<LEVELS.length-1)return {name:LEVELS[i][0],next:LEVELS[i+1][0],from:LEVELS[i][1],to:LEVELS[i+1][1]};
- const k=xp<20000?-1:Math.floor((xp-20000)/8000),nm=j=>j<0?"King":"King "+(ROMAN[j]||j+1),from=k<0?12000:20000+k*8000;return {name:nm(k),next:nm(k+1),from,to:k<0?20000:from+8000}}
+ const lN=n=>TX("lvl."+n,n);if(i<LEVELS.length-1)return {name:lN(LEVELS[i][0]),next:lN(LEVELS[i+1][0]),from:LEVELS[i][1],to:LEVELS[i+1][1]};
+ const k=xp<20000?-1:Math.floor((xp-20000)/8000),nm=j=>j<0?lN("King"):lN("King")+" "+(ROMAN[j]||j+1),from=k<0?12000:20000+k*8000;return {name:nm(k),next:nm(k+1),from,to:k<0?20000:from+8000}}
 /* badges: [id, name, how, test(context)] */
 const BADGES=[["pz1","First puzzle","Solve a puzzle",c=>c.pz>=1],["pz25","Puzzle regular","Solve 25 puzzles",c=>c.pz>=25],["pz100","Puzzle machine","Solve 100 puzzles",c=>c.pz>=100],["pz500","Puzzle master","Solve 500 puzzles",c=>c.pz>=500],
  ["ol10","Repertoire started","Learn 10 opening positions",c=>c.ol>=10],["ol50","Book knowledge","Learn 50 opening positions",c=>c.ol>=50],["ol200","Theory buff","Learn 200 opening positions",c=>c.ol>=200],
@@ -1541,17 +1545,17 @@ function gCtx(){const c={pz:0,ol:0,rv:0,ls:0,lc:0,p1day:0,n:0,e:0,wknd:0},D=GS.d
 const toastQ=[];let toastOn=false;
 function gToast(msg){if(!GS||GS.set.hide)return;toastQ.push(msg);if(toastOn)return;const nx=()=>{const m=toastQ.shift();if(!m){toastOn=false;$("#toast").hidden=true;return}toastOn=true;const t=$("#toast");t.textContent=m;t.hidden=false;t.classList.remove("pop");void t.offsetWidth;t.classList.add("pop");setTimeout(nx,3200)};nx()}
 /* after any change: level-ups, new badges, beaten records (first values are recorded silently) */
-function gCheck(xp0){if(!P||!GS)return;const xp=gXP(),l0=gLevel(xp0==null?xp:xp0).name,l1=gLevel(xp).name;if(l1!==l0)gToast(`Level up: you're now a ${l1}!`);
- const c=gCtx();let ch=false;for(const [id,nm] of BADGES.map(x=>[x[0],x[1],x[3]]).filter(x=>x[2](c))){if(!GS.badges[id]){GS.badges[id]=Date.now();ch=true;gToast(`Badge earned: ${nm}`)}}
+function gCheck(xp0){if(!P||!GS)return;const xp=gXP(),l0=gLevel(xp0==null?xp:xp0).name,l1=gLevel(xp).name;if(l1!==l0)gToast(T("t.level",{l:l1}));
+ const c=gCtx();let ch=false;for(const [id,nm] of BADGES.map(x=>[x[0],x[1],x[3]]).filter(x=>x[2](c))){if(!GS.badges[id]){GS.badges[id]=Date.now();ch=true;gToast(T("t.badge",{b:TX("b."+id,nm)}))}}
  const R=GS.rec,bw=Math.max(0,...gWeeks().filter(w=>w<wkOf(dkey())).map(w=>wkSum(w).xp),wkSum(wkOf(dkey())).xp),s=stats();
  const beat=(k,v,better,txt)=>{if(v==null)return;if(R[k]==null){R[k]=v;ch=true}else if(better(v,R[k])){R[k]=v;ch=true;gToast(txt)}};
- beat("bw",bw||null,(a,b)=>a>b,`New record: your best week, ${bw} XP!`);beat("ls",c.best||null,(a,b)=>a>b,`New record: your longest streak, ${c.best} days!`);
- if(s.nAn>=20&&s.errs!=null)beat("bb",+s.errs.toFixed(2),(a,b)=>a<b-.04,`New record: your lowest blunder rate, ${s.errs.toFixed(1)} per game!`);
+ beat("bw",bw||null,(a,b)=>a>b,T("t.recWeek",{xp:bw}));beat("ls",c.best||null,(a,b)=>a>b,T("t.recStreak",{n:c.best}));
+ if(s.nAn>=20&&s.errs!=null)beat("bb",+s.errs.toFixed(2),(a,b)=>a<b-.04,T("t.recBl",{n:fmtN(+s.errs.toFixed(1))}));
  if(ch)gSave()}
 /* record training: o = {pz: 1, p1: 1, ...} */
 function gAdd(o){if(!P||!GS)return;const xp0=gXP(),t=dkey(),d=GS.days[t]||(GS.days[t]={}),h=new Date().getHours();for(const k in o)d[k]=(d[k]||0)+o[k];
- if(h>=23||h<4)d.n=1;else if(h<7)d.e=1;if(!d.g&&dayU(d)>=gGoal()){d.g=1;gToast(`Daily goal met! +${GX.g} XP`);Snd.play("goal")}
- const w=wkSum(wkOf(t));if(w.done&&!(GS.wkt===wkOf(t))){GS.wkt=wkOf(t);gToast(`Weekly challenge complete: ${w.ch.t}! +${WK_BONUS} XP`)}
+ if(h>=23||h<4)d.n=1;else if(h<7)d.e=1;if(!d.g&&dayU(d)>=gGoal()){d.g=1;gToast(T("t.goal",{xp:GX.g}));Snd.play("goal")}
+ const w=wkSum(wkOf(t));if(w.done&&!(GS.wkt===wkOf(t))){GS.wkt=wkOf(t);gToast(T("t.week",{c:TX("ch."+w.ch.k,w.ch.t),xp:WK_BONUS}))}
  gSave();gCheck(xp0);if(route.sec==="home")renderHome()}
 /* merge two states (sync): day counts max, badges earliest, records best, settings newest, reviewed union */
 function gMerge(a,b){const o=gNew();o.days=JSON.parse(JSON.stringify(a.days||{}));for(const k in b.days||{}){const d=o.days[k]||(o.days[k]={});for(const f in b.days[k])d[f]=Math.max(d[f]||0,b.days[k][f]||0)}
@@ -1665,11 +1669,11 @@ function renderTrophies(){if(!P||!GS)return;const today=GS.days[dkey()]||{},goal
  $("#hRing").innerHTML=ringSVG(today,goal);
  $("#hRingTxt").innerHTML=`<b>${esc(T("tro.goalToday"))}</b><ul class="goal-key"><li><span class="k" style="background:var(--q-blunder)"></span>${esc(T("tro.kPz"))} <b>${today.pz||0}</b></li><li><span class="k" style="background:var(--q-best)"></span>${esc(T("tro.kOp"))} <b>${today.op||0}</b></li><li><span class="k" style="background:var(--info)"></span>${esc(T("tro.kRv"))} <b>${today.rv||0}</b></li><li><span class="k" style="background:var(--gold)"></span>${esc(T("tro.kLs"))} <b>${today.ls||0}</b></li></ul>`;
  document.querySelectorAll('[name="hInt"]').forEach(r=>r.checked=r.value===(GS.set.int||"normal"));
- $("#hChallenge").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("trophy")}<b>${esc(w.ch.t)}</b></span><span class="small num">${fmtN(w.chv)} / ${fmtN(w.ch.n)}, +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(Math.min(1,w.chv/w.ch.n)*100)}%;background:var(--gold)"></b></div>`;
+ $("#hChallenge").innerHTML=`<div class="lv-row"><span class="lv-name">${ic("trophy")}<b>${esc(TX("ch."+w.ch.k,w.ch.t))}</b></span><span class="small num">${fmtN(w.chv)} / ${fmtN(w.ch.n)}, +${WK_BONUS} XP</span></div><div class="meter"><b style="width:${Math.round(Math.min(1,w.chv/w.ch.n)*100)}%;background:var(--gold)"></b></div>`;
  const earned=BADGES.filter(([id])=>GS.badges[id]),locked=BADGES.filter(([id])=>!GS.badges[id]);
  const show=earned.concat(locked.slice(0,Math.max(4,8-earned.length))),bc=gCtx(),bp=f=>{const m=/c\.(\w+)>=(\d+)/.exec(String(f));return m&&bc[m[1]]!=null?{v:Math.min(+bc[m[1]]||0,+m[2]),n:+m[2]}:null};
- $("#hBadges").innerHTML=show.map(([id,nm,how,f])=>{const p=GS.badges[id]?null:bp(f);return `<li class="badge${GS.badges[id]?"":" locked"}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?esc(T("tro.earned",{d:fmtDay(GS.badges[id])})):esc(how)}</span>${p&&p.n>1?`<span class="bdg-p"><span class="meter"><b style="width:${p.v/p.n*100}%;background:var(--gold)"></b></span><span class="small num">${fmtN(p.v)} / ${fmtN(p.n)}</span></span>`:""}</li>`}).join("")+(show.length<BADGES.length?`<li class="badge-more"><button class="ghost" type="button" id="badgeAll">${esc(T("tro.allBadges",{n:BADGES.length}))}</button></li>`:"");
- const ba=$("#badgeAll");if(ba)ba.onclick=()=>{$("#hBadges").innerHTML=earned.concat(locked).map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(nm)}</b><span class="small">${GS.badges[id]?esc(T("tro.earned",{d:fmtDay(GS.badges[id])})):esc(how)}</span></li>`).join("")};
+ $("#hBadges").innerHTML=show.map(([id,nm,how,f])=>{const p=GS.badges[id]?null:bp(f);return `<li class="badge${GS.badges[id]?"":" locked"}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(TX("b."+id,nm))}</b><span class="small">${GS.badges[id]?esc(T("tro.earned",{d:fmtDay(GS.badges[id])})):esc(TX("b."+id+".h",how))}</span>${p&&p.n>1?`<span class="bdg-p"><span class="meter"><b style="width:${p.v/p.n*100}%;background:var(--gold)"></b></span><span class="small num">${fmtN(p.v)} / ${fmtN(p.n)}</span></span>`:""}</li>`}).join("")+(show.length<BADGES.length?`<li class="badge-more"><button class="ghost" type="button" id="badgeAll">${esc(T("tro.allBadges",{n:BADGES.length}))}</button></li>`:"");
+ const ba=$("#badgeAll");if(ba)ba.onclick=()=>{$("#hBadges").innerHTML=earned.concat(locked).map(([id,nm,how])=>`<li class="badge${GS.badges[id]?"":" locked"}"><span class="bdg" aria-hidden="true">${ic(BICON[id]||"award")}</span><b>${esc(TX("b."+id,nm))}</b><span class="small">${GS.badges[id]?esc(T("tro.earned",{d:fmtDay(GS.badges[id])})):esc(TX("b."+id+".h",how))}</span></li>`).join("")};
  const R=GS.rec;$("#hRecords").innerHTML=`<li>${ic("zap")}<div><b class="num">${fmtN(R.bw||0)} XP</b><span class="small">${esc(T("tro.bestWeek"))}</span></div></li><li>${ic("flame")}<div><b class="num">${esc(TP("home.streakDays",Math.max(R.ls||0,st.best)))}</b><span class="small">${esc(T("tro.longest"))}</span></div></li><li>${ic("shield-check")}<div><b class="num">${R.bb==null?"—":fmtN(R.bb,{maximumFractionDigits:1,minimumFractionDigits:1})}</b><span class="small">${esc(T("tro.fewest"))}</span></div></li>`}
 document.querySelectorAll('[name="hInt"]').forEach(r=>r.onchange=()=>{GS.set={...GS.set,int:r.value,at:Date.now()};const d=GS.days[dkey()];if(d&&!d.g&&dayU(d)>=gGoal())d.g=1;gSave();renderTrophies()});
 
@@ -1750,8 +1754,8 @@ $("#syncBtn").onclick=async()=>{$("#syncBtn").disabled=true;try{const n=await sy
 const HB=new Board($("#heroBoard"),{label:"Example position"}),HW=new Why($("#heroWhy"),HB),DEMO_FEN="rn1qkbnr/pp2pppp/2p5/5b2/3PN3/8/PPP2PPP/R1BQKBNR w KQkq - 1 5";
 const demoLine=(fen,sans)=>{const c=new Chess(fen),L=[];for(const s of sans){const m=c.move(s);if(!m)break;L.push({san:m.san,from:m.from,to:m.to,cap:!!m.captured,fen:c.fen()})}return {fen,L}};
 let demoT=null,demoK=0,demoOff=false;
-function demoStart(){if(!HW.lines){HW.render("After Nd6+, Black plays Qxd6 and you've lost a knight. Ng3 is better: the evaluation stays +0.3.",
- [{title:"Your move",c:"red",x:demoLine(DEMO_FEN,["Nd6+","Qxd6","Qf3","Qd7"]),lab:{t:"loses a knight"}},{title:"Better",c:"green",x:demoLine(DEMO_FEN,["Ng3","Bg6","Nf3","e6","h4","h6","h5","Bh7"]),lab:null}]);
+function demoStart(){if(!HW.lines||HW.lang!==LANG){HW.lang=LANG;const kn=TP("pc.n",1);HW.render(cap1(T("why.wrongRL",{mv:"Nd6+",side:T("card.black"),r:"Qxd6",y:T("why.l.lose.y",{a:kn})})+" "+T("why.betterE",{mv:"Ng3",ev:evWords(30)})),
+ [{title:T("why.your"),c:"red",x:demoLine(DEMO_FEN,["Nd6+","Qxd6","Qf3","Qd7"]),lab:{t:T("why.l.lose.t",{a:kn})}},{title:T("why.better"),c:"green",x:demoLine(DEMO_FEN,["Ng3","Bg6","Nf3","e6","h4","h6","h5","Bh7"]),lab:null}]);
  HW.o={restore:()=>HB.set(DEMO_FEN)};HB.set(DEMO_FEN);$("#heroWhy").addEventListener("click",()=>{demoOff=true;demoStop()},{once:true})}   // any click there hands control to the visitor
  if(demoT||demoOff||matchMedia("(prefers-reduced-motion: reduce)").matches)return;
  demoT=setInterval(()=>{const seq=[[0,1],[0,2],[0,0],[1,1],[1,2],[1,3],[1,4],[1,5],[1,6],[1,0]],[i,k]=seq[demoK++%seq.length];if(k)HW.step(i,k);else HW.reset()},1600)}
