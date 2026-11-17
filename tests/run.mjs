@@ -9,7 +9,7 @@ import { ROOT, CC_USER, LI_USER, CC_RAPID_10, serve, launch, newPage, sleep, wai
 
 const SEL = {
   start: "#v-start", uName: "#uName", srcCc: "#uSrcCc", srcLi: "#uSrcLi", tc: "#uTc", startBtn: "#startBtn", startMsg: "#startMsg", heroBoard: "#heroBoard",
-  who: "#whoName", switchBtn: "#switchBtn", navLink: t => `#hdr nav a[data-t="${t}"]`, nav: "#hdr nav",
+  who: "#whoName", profBtn: "#profBtn", switchBtn: "#switchBtn", navLink: t => `#hdr nav a[data-t="${t}"], #subnav a[data-t="${t}"]`, nav: "#hdr nav",
   picker: "#gamePick", filter: "#gameFilter", board: "#board", flip: "#flipBtn", navBtn: a => `[data-nav="${a}"]`, evFig: "#evFig", evNow: "#evNow",
   kmCard: "#km button[data-p]", moveBtn: "#moves button[data-p]",
   tboard: "#tboard", tHint: "#tHint", tShow: "#tShow", tNext: "#tNext", tPrompt: "#tPrompt", tFeedback: "#tFeedback", tOk: "#tFeedback .v-ok", tNo: "#tFeedback .v-no", tWhy: "#tWhy",
@@ -17,7 +17,7 @@ const SEL = {
   homePlan: "#hPlan .plan-card", lsTracks: "#lsTracks", oMain: "#oMain", oEmpty: "#oEmpty",
   setBtn: "#setBtn", settings: "#settings", theme: v => `input[name="sTheme"][value="${v}"]`, setClose: "#setClose",
 };
-const TABS = ["home", "review", "trainer", "lessons", "progress", "openings"];
+const TABS = ["home", "review", "train/puzzles", "train/lessons", "progress", "train/openings"];
 const V1 = JSON.parse(fs.readFileSync(path.join(ROOT, "tests/fixtures/v1-storage.json"), "utf8"));
 
 /* ---------- runner ---------- */
@@ -36,6 +36,8 @@ async function onboard(page, user, source = "cc", tc = "600") {
   await page.click(SEL.startBtn);
 }
 const ctx = {}; // values shared between the ordered tests of the main flow
+/** Account actions and settings live in the profile menu: open it, then click the item. */
+async function menuClick(page, sel) { await page.click(SEL.profBtn); await waitFor(page, s => !document.querySelector(s).closest("[hidden]"), { label: "profile menu open", arg: sel }); await page.click(sel); }
 
 /* ================= main flow (one browser profile, tests run in order) ================= */
 
@@ -176,14 +178,14 @@ test("Lessons and Openings open", async ({ page }) => {
 });
 
 test("Settings: dark theme applies and is remembered", async ({ page, base }) => {
-  await page.click(SEL.setBtn);
+  await menuClick(page, SEL.setBtn);
   await waitFor(page, s => document.querySelector(s).open, { label: "settings dialog open", arg: SEL.settings });
   await page.$eval(SEL.theme("dark"), e => e.click()); await sleep(200);
   assert(await page.evaluate(() => document.documentElement.dataset.theme === "dark"), "dark theme not applied");
   await page.click(SEL.setClose);
   await goto(page, base, "#home");
   assert(await page.evaluate(() => document.documentElement.dataset.theme === "dark"), "theme not remembered");
-  await page.click(SEL.setBtn); await page.$eval(SEL.theme("system"), e => e.click()); await page.click(SEL.setClose);
+  await menuClick(page, SEL.setBtn); await page.$eval(SEL.theme("system"), e => e.click()); await page.click(SEL.setClose);
 });
 
 test("Reload keeps games and analyses; only the newest months are fetched again", async ({ page, base }) => {
@@ -220,14 +222,14 @@ test("Layouts don't overflow sideways on phone or desktop", async ({ page }) => 
 
 test("Switch player: a Lichess account with its own games", async ({ page }) => {
   ctx.ccAnalysed = (await st(page)).analysed;
-  await page.click(SEL.switchBtn);
+  await menuClick(page, SEL.switchBtn);
   await onboard(page, "Li_Friend", "li");
   await waitFor(page, () => { const s = window.rcTest.state(); return s.source === "li" && s.games === 6; }, { label: "6 Lichess games", timeout: 30000 });
   assert((await st(page)).user === LI_USER, "Lichess user not set");
 });
 
 test("Switching back keeps the first player's data", async ({ page }) => {
-  await page.click(SEL.switchBtn);
+  await menuClick(page, SEL.switchBtn);
   await onboard(page, CC_USER, "cc");
   await waitFor(page, n => { const s = window.rcTest.state(); return s.source === "cc" && s.games === n; }, { label: "chess.com games back", arg: CC_RAPID_10 + 1, timeout: 30000 });
   assert((await st(page)).analysed >= ctx.ccAnalysed, "analyses lost after switching");
@@ -266,7 +268,7 @@ test("With accounts switched off the app still works and hides Friends", async (
     await waitFor(page, n => window.rcTest.state().games === n, { label: "games loaded", arg: CC_RAPID_10, timeout: 30000 });
     assert(!(await visible(page, SEL.navLink("friends"))), "Friends shown although accounts are off");
     await page.evaluate(() => { location.hash = "friends"; }); await sleep(400);
-    assert((await st(page)).route !== "friends", "#friends opens although accounts are off");
+    assert((await st(page)).route !== "progress/friends", "#friends opens although accounts are off");
     assert(page.errors.length === 0, `errors: ${page.errors.join(" | ")}`);
   } finally { await page.ctx.close(); }
 }, { isolated: true });
