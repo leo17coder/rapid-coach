@@ -58,7 +58,8 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 ## Progress
 - [auto] **Insights, key numbers, charts, endings and openings** all render.
 - [auto] **A baseline is frozen once 10 games are analysed.**
-- [manual] "Reset baseline" sets a new one; change since the baseline is shown on Progress.
+- [manual] "Reset baseline" (after a confirmation) sets a new one; change since the baseline is shown on Progress. The actions (Analyse 20 more games, Check for new games, Reset baseline) sit in the bar at the top; every insight links to where to work on it; charts, how games end and the openings table (White/Black switch, rows open the opening's page) sit behind "See more", whose open state is remembered.
+- [manual] Trophies: locked badges show what earns them and how far along you are; Friends: the sharing setting is a switch.
 
 ## Home and motivation
 - [auto] **Home shows a plan of actions.**
