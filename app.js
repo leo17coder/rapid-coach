@@ -452,13 +452,14 @@ const movesTxt=path=>path.map((m,i)=>i%2===0?mvLabel(i)+" "+m:m).join(" ");
 let OPSEL=null,OT=null,OD=null,OPS={};
 const OB=new Board($("#oboard"),{onMove:(f,t)=>opMove(f,t),label:"Opening board"}),OEV=new Map(),OW=new Why($("#oWhy"),OB,new EvalBar($("#oEv")));
 const opBack=()=>{if(!OD)return;const h=OD.c.history({verbose:true}).slice(-1)[0];OB.set(OD.c.fen(),{last:h?{from:h.from,to:h.to}:null})};
-const saveOPS=k=>{LS.set(uk("openings"),OPS);if(k)Sync.mark("op",acct()+"|"+k);Fr.soon()};
+const saveOPS=k=>{OLC.clear();LS.set(uk("openings"),OPS);if(k)Sync.mark("op",acct()+"|"+k);Fr.soon()};
 const opGames=(col,fam)=>GAMES.filter(g=>g.color===col&&famOf(g.eco)===fam);
 const opLearned=()=>Object.values(OPS).filter(x=>(x.s||0)>=OP_LEARNED).length;
 const isDue=k=>{const x=OPS[k];return !x||!x.due||x.due<=Date.now()};
 /* lesson lines being drilled: at least two thirds of my moves in the line are pinned repertoire moves; they belong to an opening whose
    famOf name the course matches, or to the course's own name when I have no games in it */
-function opLines(col,fam){const out=[];for(const co of OPC)for(const ch of co.chapters)for(const l of ch.lessons){const side=l.side||ch.side;if(side!==col||!((co.re&&co.re.test(fam))||co.name===fam))continue;
+const OLC=new Map();
+function opLines(col,fam){const ck=col+"|"+fam;if(OLC.has(ck))return OLC.get(ck);const out=[];OLC.set(ck,out);for(const co of OPC)for(const ch of co.chapters)for(const l of ch.lessons){const side=l.side||ch.side;if(side!==col||!((co.re&&co.re.test(fam))||co.name===fam))continue;
   const c=new Chess();let n=0,p=0;for(const [i,s] of l.m.split(" ").entries()){const k=posKey(c.fen()),m=c.move(s);if(!m)break;if((i%2===0)===(col==="w")&&!(l.bad||[]).includes(i+1)){n++;if((OPS[k]||{}).pin===m.from+m.to+(m.promotion||""))p++}}
   if(n&&p*3>=n*2)out.push(l)}return out}
 const opSig=(col,fam)=>{const gs=opGames(col,fam);return gs.length+"/"+gs.filter(g=>g.an).length+"/"+opLines(col,fam).length};
@@ -538,15 +539,18 @@ const opFen=m=>{const c=new Chess();for(const s of m.split(" "))if(!s||!c.move(s
 /* the moves that define an opening in my games: the moves all of them share, at most three a side */
 function opDef(gs){if(!gs.length)return "";const a=gs.map(g=>g.moves);let n=0;while(n<6&&a.every(m=>m[n]&&m[n]===a[0][n]))n++;return a[0].slice(0,Math.max(1,n)).join(" ")}
 /* a tree per opening, cached until its games or lines change (cards need "positions learned") */
-function opTreeOf(k){const sig=opSig(k[0],k.slice(2)),c=OTC.get(k);if(c&&c.sig===sig)return c;const t=buildTree(k[0],k.slice(2));OTC.set(k,t);return t}
-const coreOf=t=>[...t.T.values()].filter(n=>n.mine&&(n.n>=2||n.weak||n.ln));
-const learnedOf=t=>coreOf(t).filter(n=>((OPS[n.k]||{}).s||0)>=OP_LEARNED).length;
+/* positions learned in an opening, for its card: my-move positions reached in its games (first OP_PLY plies) or its drilled
+   lesson lines that have a learned streak. A light walk with its own Chess (nothing cached on the games, unlike buildTree,
+   which would replay and keep every game of every opening); skipped when nothing is learned yet; memoised per opening. */
+function learnedIn(k){const L=new Set(Object.keys(OPS).filter(p=>(OPS[p].s||0)>=OP_LEARNED));if(!L.size)return 0;const col=k[0],fam=k.slice(2),gs=opGames(col,fam),sig=gs.length+"/"+L.size+"/"+opLines(col,fam).length,c=OTC.get(k);if(c&&c.sig===sig)return c.n;
+ const seen=new Set(),walk=ms=>{const ch=new Chess();for(let i=0;i<ms.length&&i<OP_PLY;i++){if((i%2===0)===(col==="w")){const p=posKey(ch.fen());if(L.has(p))seen.add(p)}if(!ch.move(ms[i]))break}};
+ gs.forEach(g=>walk(g.moves));opLines(col,fam).forEach(l=>walk(l.m.split(" ")));OTC.set(k,{sig,n:seen.size});return seen.size}
 function opMine(col){const m={};GAMES.filter(g=>g.color===col).forEach(g=>{const f=famOf(g.eco);(m[f]=m[f]||[]).push(g)});
  const out=Object.entries(m).filter(([,a])=>a.length>=3).sort((a,b)=>b[1].length-a[1].length).map(([f,a])=>({k:col+"|"+f,n:f,gs:a,m:opDef(a)}));
  // openings I only know from lesson lines I chose to drill
  for(const co of OPC)if(opLines(col,co.name).length&&!out.some(o=>co.re&&co.re.test(o.n)&&opLines(col,o.n).length)){const p=(OPOP&&OPOP[col]||[]).find(x=>x.c===co.id),l=opLines(col,co.name)[0];out.push({k:col+"|"+co.name,n:co.name,gs:[],m:p?p.m:l.m.split(" ").slice(0,4).join(" ")})}
  return out}
-function opCard(o,col){const c=opFen(o.m),h=c.history({verbose:true}),last=h[h.length-1],t=o.gs?opTreeOf(o.k):null,ln=t?learnedOf(t):0;
+function opCard(o,col){const c=opFen(o.m),h=c.history({verbose:true}),last=h[h.length-1],ln=o.gs?learnedIn(o.k):0;
  const st=o.gs?(o.gs.length?`<p class="o-st"><b>${esc(TP("op.games",o.gs.length))}</b>${esc(T("op.score",{s:Math.round(score(o.gs))}))}</p>`:`<p class="o-st"><b>${esc(T("op.fromLines"))}</b></p>`)+(ln?`<p class="o-st">${esc(TP("op.learned",ln))}</p>`:""):(o.c?`<p class="o-st"><span class="chip">${ic("graduation-cap","sm")}${esc(T("op.hasLessons"))}</span></p>`:"");
  return `<a class="ocard" href="#train/openings/${encodeURIComponent(o.k)}" data-k="${esc(o.k)}"><span class="ocard-b">${miniBoard(c.fen(),col==="b",{last:last?{from:last.from,to:last.to}:null,label:o.n})}</span><span class="ocard-t"><h3>${esc(o.n)}</h3><span class="o-mv">${esc(movesTxt(o.m.split(" ")))}</span>${st}</span></a>`}
 function renderOpGal(){const col=LS.get(uk("opcol"),OPSEL?OPSEL[0]:"w");document.querySelectorAll('input[name="oCol"]').forEach(r=>r.checked=r.value===col);
@@ -1856,7 +1860,7 @@ const Sync={sb:null,me:null,_load:null,_t:null,busy:false,pulled:0,err:"",
   for(const a in om)LS.set(a+".openings",om[a]);hi(op,"op");
   const opr=await this.rows("opening_practice","account,opening,started_at",w.ops),os={};
   for(const r of opr){const m=os[r.account]||(os[r.account]=LS.get(r.account+".opstart",{})),t=Date.parse(r.started_at);if(!m[r.opening]||t<m[r.opening])m[r.opening]=t;else if(m[r.opening]<t)this.mark("ops",r.account+"|"+r.opening)}
-  for(const a in os)LS.set(a+".opstart",os[a]);hi(opr,"ops");if(P)OPS=LS.get(uk("openings"),{});
+  for(const a in os)LS.set(a+".opstart",os[a]);hi(opr,"ops");if(P){OPS=LS.get(uk("openings"),{});OLC.clear()}
   // gamification: merge per field (see gMerge); push back if this device had something the server lacked
   const gm=await this.rows("gamification","account,days,badges,records,settings,reviewed,changed_at",w.gm);
   const gk=g=>JSON.stringify([g.days,g.badges,g.rec,g.rev]);
@@ -1991,7 +1995,7 @@ function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;LCO=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;OTC.clear();LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;LCO=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OLC.clear();OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;OTC.clear();LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=T("start.noGames",{tc:T("tc."+P.tc),u:P.user,site:SRC[P.source].name});$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
