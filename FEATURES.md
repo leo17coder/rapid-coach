@@ -33,12 +33,15 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 - [manual] Key moments show the better move, the swing in plain words ("you were clearly winning, then it was about equal") and the time spent; the line under the board says how the position stands in words; the previous/next arrows step between games; the board shows the played move (red) and the better move (green) as arrows; the eval bar follows the position; clicking the graph jumps to that move.
 - [manual] Reviewing a game (8 positions of an analysed game) counts towards the daily goal.
 
-## Trainer (puzzles from your own blunders)
+## Train › Puzzles (puzzles from your own blunders)
+- [auto] **A summary of the last 5 analysed games comes first** (result and one sentence per game, linked to Review; blunders, mistakes, typical time used vs the goal; the themes that cost most once games are tagged); **the board appears only after starting** a training.
+- [auto] **A session ends with a summary** (solved, missed, best run) with **Train again** and **Back to Train**.
+- [manual] "Choose your training" offers, each with a count, a time estimate and a Start button: puzzles from these 5 games, retry the ones you missed (only when there are any), your weakest theme (opens its lesson course when your games have fewer than 3 such positions), and a quick 5-puzzle warm-up. Home's "Retry" and "new puzzles" plan cards start those sessions; leaving Train mid-session and coming back resumes it.
 - [auto] **A puzzle from your own games appears** once games are analysed.
 - [auto] **A wrong move gets feedback and an engine explanation** (the Why panel names the better move).
 - [auto] **Hint and show answer** work.
 - [auto] **The right move is accepted and remembered after reload.**
-- [manual] Click-to-move, drag-and-drop and keyboard moves (arrows + Enter) all work on every board; a move "just as good" as the engine's counts as correct; missed puzzles come back first; the session counter (solved, run, best run) updates.
+- [manual] Click-to-move, drag-and-drop and keyboard moves (arrows + Enter) all work on every board; a move "just as good" as the engine's counts as correct; the session counter (solved, run, best run) updates.
 
 ## Openings
 - [auto] **Openings open** (trainer or its empty state).

@@ -10,7 +10,7 @@
 <link rel="preload" href="vendor/fonts/atkinson-next-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/literata-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;d.dataset.theme=u.v3&&u.theme?u.theme:u.theme==="light"?"light":"dark";if(u.board)d.dataset.board=u.board}catch(e){document.documentElement.dataset.theme="dark"}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-18c">
+<link rel="stylesheet" href="style.css?v=2026-11-18d">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -127,25 +127,33 @@
 
 <!-- TRAINER -->
 <section id="v-trainer" hidden>
-  <div class="grid">
-    <div class="board-col">
-      <div class="sess" id="tSess" aria-live="polite"></div>
-      <div class="board-row"><div class="evalbar" id="tEv" hidden></div><div class="boardwrap" id="tboard"></div></div>
-      <div class="ctl ctl-3"><button id="tHint" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-lightbulb"/></svg>Hint</button><button id="tShow" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-eye"/></svg>Show answer</button><button id="tNext" class="pri" type="button">Next<svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-skip-forward"/></svg></button></div>
-    </div>
-    <div>
-      <h1>Puzzles from your games</h1>
-      <p class="sub">Each one is a moment you went wrong. Find the move you missed.</p>
-      <div class="coach-card">
-        <div id="tPrompt" class="verdict v-info"><span class="skel" style="width:60%" aria-label="Loading puzzles"></span></div>
-        <div id="tFeedback"></div>
-        <div class="why" id="tWhy" aria-live="polite"></div>
-        <div class="small" id="tMeta"></div>
+  <!-- hub: how the last 5 games went, then a choice of sessions; the board appears only after starting -->
+  <div id="tHub">
+    <div class="t-sum" id="tSum"></div>
+    <h2 class="t-h" data-i18n="tr.choose">Choose your training</h2>
+    <div class="t-modes" id="tModes"></div>
+  </div>
+  <div id="tPlay" hidden>
+    <div class="rv-top"><button class="link back" type="button" id="tQuit"><svg class="ic sm" aria-hidden="true"><use href="vendor/icons.svg#i-chevron-left"/></svg><span data-i18n="tr.back">Back to Train</span></button><span class="t-prog" id="tProg" aria-live="polite"></span></div>
+    <div class="grid">
+      <div class="board-col">
+        <div class="sess" id="tSess" aria-live="polite"></div>
+        <div class="board-row"><div class="evalbar" id="tEv" hidden></div><div class="boardwrap" id="tboard"></div></div>
+        <div class="ctl ctl-3"><button id="tHint" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-lightbulb"/></svg><span data-i18n="tr.hint">Hint</span></button><button id="tShow" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-eye"/></svg><span data-i18n="tr.show">Show answer</span></button><button id="tNext" class="pri" type="button"><span id="tNextL" data-i18n="tr.next">Next</span><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-skip-forward"/></svg></button></div>
       </div>
-      <div class="kpis" id="tStats"></div>
-      <p class="small">Drag or click a piece to move. The engine's move counts, and so does any move that's just as good. Missed puzzles come back first.</p>
+      <div>
+        <h2 class="t-title" id="tTitle"></h2>
+        <div class="coach-card">
+          <div id="tPrompt" class="verdict v-info"></div>
+          <div id="tFeedback"></div>
+          <div class="why" id="tWhy" aria-live="polite"></div>
+          <div class="small" id="tMeta"></div>
+        </div>
+        <p class="small" data-i18n="tr.howto">Drag or click a piece to move. The engine's move counts, and so does any move that's just as good.</p>
+      </div>
     </div>
   </div>
+  <div id="tDone" hidden></div>
 </section>
 
 <!-- LESSONS: priority list, profile and tracks; the lesson player; teaching pages -->
@@ -370,9 +378,9 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-18c"></script>
-<script src="i18n/en.js?v=2026-11-18c"></script>
+<script src="config.js?v=2026-11-18d"></script>
+<script src="i18n/en.js?v=2026-11-18d"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-18c"></script>
+<script src="app.js?v=2026-11-18d"></script>
 </body>
 </html>

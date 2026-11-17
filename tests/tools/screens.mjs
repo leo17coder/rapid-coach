@@ -25,6 +25,13 @@ await sleep(1500);
 for (const r of routes) {
   // "game": the game view of the newest analysed game
   if (r === "game") await page.evaluate(() => { location.hash = "review"; }), await sleep(800), await page.evaluate(() => { const a = [...document.querySelectorAll(".gcard-link[data-g]")].find(a => window.rcTest.game(a.dataset.g).an); a && a.click(); });
+  // "puzzle": a session from the last 5 games; "pzdone": the summary at the end of a warm-up
+  else if (r === "puzzle" || r === "pzdone") {
+    await page.evaluate(() => { location.hash = "train/puzzles"; }); await sleep(800);
+    if (!(await page.$eval("#tPlay", e => e.hidden))) await page.click("#tQuit"), await sleep(300);
+    await page.click(`#tModes [data-mode="${r === "puzzle" ? "recent" : "warm"}"]`); await sleep(800);
+    if (r === "pzdone") for (let i = 0; i < 12 && await page.$eval("#tDone", e => e.hidden); i++) { await page.click(i % 2 ? "#tShow" : "#tHint"); await sleep(150); await page.click("#tNext"); await sleep(250); }
+  }
   else await page.evaluate(h => { location.hash = h; }, r);
   await sleep(1200);
   for (const t of ["dark", "light"]) for (const w of [390, 1440]) await shot(r, w, t);

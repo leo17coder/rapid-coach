@@ -294,7 +294,7 @@ async function queue(list,front){list=list.filter(g=>!g.an);if(!list.length)retu
   for(let i=0;i<g._f.length;i++){if(gen!==GEN)break;const c=new Chess(g._f[i]);if(c.game_over()){ev.push(c.in_checkmate()?(c.turn()==="w"?-10000:10000):0);best.push(null)}else{const r=await Engine.eval(g._f[i],DEPTH);ev.push(r.cp);best.push(r.best)}
    job("an",T("job.an",{n:AQ.done+1,all:AQ.done+AQ.list.length+1}),(i+1)/g._f.length)}
   if(gen!==GEN)break;g.an={ev,best:best.slice(0,-1),depth:DEPTH};DB.put([g]);Sync.mark("an",g.id);Fr.soon();AQ.done++;maybeBaseline();
-  if(CUR===g){renderMoves();renderKM();renderAnState();$("#gStory").textContent=gameStory(g).t;show()}buildPuzzles();if(route.sec==="review"&&!RV.game)renderReview();if(route.sec==="progress")renderProgress();if(route.sec==="trainer"&&!PI)loadPuzzle(pickPuzzle());if(route.sec==="home")renderHome()}}
+  if(CUR===g){renderMoves();renderKM();renderAnState();$("#gStory").textContent=gameStory(g).t;show()}buildPuzzles();if(route.sec==="review"&&!RV.game)renderReview();if(route.sec==="progress")renderProgress();if(route.sec==="trainer"&&!TSN)renderTHub();if(route.sec==="home")renderHome()}}
  catch(e){$("#anState").innerHTML=`<div class="verdict v-no">${ic("triangle-alert")}${esc(T("rv.noEngine"))}</div>`}
  AQ=null;job("an",null);if(P&&gen===GEN){maybeBaseline();gCheck();TG.run()}if(route.sec==="progress")renderProgress();if(route.sec==="home"&&P)renderHome();if(CUR&&!CUR.an)renderAnState()}
 function analyseRecent(n){queue(GAMES.slice().reverse().filter(g=>!g.an).slice(0,n))}
@@ -366,37 +366,74 @@ Why.prototype.reset=function(){this.cur=null;this.b.lock=false;this.b.noAnim=tru
 /* session counters (this visit only): attempts, solved, current run of correct answers */
 const TSS={n:0,ok:0,run:0,best:0},OSS={n:0,ok:0,run:0,best:0};
 function sess(S,ok,el){S.n++;if(ok){S.ok++;S.run++;S.best=Math.max(S.best,S.run)}else S.run=0;
- $(el).innerHTML=`<span class="chip">${ic("target","sm")}${S.ok}/${S.n} this session</span><span class="chip xp">${ic("flame","sm")}${S.run} in a row</span>${S.best>2?`<span class="chip gold">${ic("trophy","sm")}best ${S.best}</span>`:""}`}
+ $(el).innerHTML=`<span class="chip">${ic("target","sm")}${esc(T("sess.n",{ok:S.ok,n:S.n}))}</span><span class="chip xp">${ic("flame","sm")}${esc(T("sess.run",{n:S.run}))}</span>${S.best>2?`<span class="chip gold">${ic("trophy","sm")}${esc(T("sess.best",{n:S.best}))}</span>`:""}`}
 const TB=new Board($("#tboard"),{onMove:tryMove,label:"Puzzle board"}),TW=new Why($("#tWhy"),TB,new EvalBar($("#tEv")));let PZ=[],PI=null,HINT=0,DONE=false;
-const TST=()=>{const t=LS.get(uk("trainer"),{});return t};let TS={};
-function buildPuzzles(){PZ=[];for(const g of GAMES){if(!g.an)continue;replay(g);for(const e of serious(g))if(wp(e.before)>=30&&e.best)PZ.push({id:g.id+":"+e.i,g,e})}PZ.sort((a,b)=>b.g.ts-a.g.ts);if(route.sec==="trainer")renderTStats()}
-function pickPuzzle(){const st=id=>TS[id]||{};const failed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen);const pool=failed.length?failed:fresh.length?fresh:PZ;return pool[0]||null}
+let TS={};
+function buildPuzzles(){PZ=[];for(const g of GAMES){if(!g.an)continue;replay(g);for(const e of serious(g))if(wp(e.before)>=30&&e.best)PZ.push({id:g.id+":"+e.i,g,e})}PZ.sort((a,b)=>b.g.ts-a.g.ts);renderTStats()}
+/* Train › Puzzles: a hub (how the last 5 analysed games went, then a choice of sessions), the session (TSN), and its summary.
+   TSN = {k: mode, ids: [puzzle ids], i: current index, res: {id: 1 solved | 0 missed}, done} for this visit only. */
+let TSN=null;
+const pzSt=id=>TS[id]||{},pzById=id=>PZ.find(p=>p.id===id),unsolvedFirst=L=>L.filter(p=>!pzSt(p.id).ok).concat(L.filter(p=>pzSt(p.id).ok));
+const tagOf=p=>{const m=p.g.mt;return m&&m.v===MT_V&&m.e[p.e.i]?m.e[p.e.i].t[0]:null};
+const last5=()=>GAMES.filter(g=>g.an).slice(-5).reverse();
+function topThemes(G){const c={};for(const g of G){if(!g.mt||g.mt.v!==MT_V)continue;for(const i in g.mt.e){const t=g.mt.e[i].t[0];if(t&&t!=="positional"&&MOT[t])c[t]=(c[t]||0)+g.mt.e[i].d}}return Object.entries(c).sort((a,b)=>b[1]-a[1]).map(x=>x[0])}
+function tModes(){const L5=new Set(last5()),M=[],shuf=a=>a.map(x=>[Math.random(),x]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);
+ const rec=unsolvedFirst(PZ.filter(p=>L5.has(p.g))).slice(0,10);if(rec.length)M.push({k:"recent",i:"scan-search",ids:rec});
+ const re=PZ.filter(p=>pzSt(p.id).fail&&!pzSt(p.id).ok).slice(0,10);if(re.length)M.push({k:"retry",i:"rotate-ccw",ids:re});
+ let th=topThemes(last5())[0];if(!th){const W=wkProfile();th=Object.entries(W.T).filter(([k])=>k!=="positional"&&MOT[k]).sort((a,b)=>b[1].d-a[1].d).map(x=>x[0])[0]}
+ if(th){const tl=unsolvedFirst(PZ.filter(p=>tagOf(p)===th)).slice(0,8);M.push({k:"theme",i:"crosshair",ids:tl,th,course:tl.length<3?motTo(th):null})}
+ if(PZ.length){const fr=PZ.filter(p=>!pzSt(p.id).seen),ns=PZ.filter(p=>pzSt(p.id).seen&&!pzSt(p.id).ok),ok=PZ.filter(p=>pzSt(p.id).ok);M.push({k:"warm",i:"flame",ids:shuf(fr).concat(shuf(ns),shuf(ok)).slice(0,5)})}
+ return M}
+const setHTML=(el,h)=>{if(el._h!==h){el.innerHTML=h;el._h=h}};
+function renderTHub(){const G=last5();let h;
+ if(!G.length)h=`<div class="panel t-empty"><span class="t-ic">${ic("puzzle")}</span><div><h2>${esc(T("tr.emptyH"))}</h2><p>${esc(T(AQ?"tr.emptyWait":"tr.emptyNo"))}</p>${AQ||!GAMES.length?"":`<button class="pri" type="button" id="tAnalyse">${ic("cpu")}${esc(T("plan.analyseGo"))}</button>`}</div></div>`;
+ else{const er=G.flatMap(g=>serious(replay(g))),bl=er.filter(e=>e.kind==="blunder").length,mi=er.length-bl,th=topThemes(G).slice(0,2),tu=G.map(timeUsed).filter(x=>x!=null).sort((a,b)=>a-b),B=baseSecs(),med=tu.length?tu[tu.length>>1]:null;
+  h=`<div class="panel"><h2>${esc(TP("tr.sumH",G.length))}</h2><ul class="t-games">${G.map(g=>`<li><a href="#review/${encodeURIComponent(g.id)}" class="t-g"><span class="rchip ${g.result}">${esc(T("tr.r."+g.result))}</span><span class="t-gs">${esc(gameStory(g).t)}</span></a></li>`).join("")}</ul>
+  <div class="kpis t-facts"><div class="kpi"><b>${fmtN(bl)}</b>${esc(TP("tr.blunders",bl))}</div><div class="kpi"><b>${fmtN(mi)}</b>${esc(TP("tr.mistakes",mi))}</div>${med!=null?`<div class="kpi"><b>${mmss(med)}</b>${esc(T("tr.time"))}</div>`:""}</div>${med!=null?`<p class="t-themes">${ic("timer","sm")}<span>${esc(T(med>=B*.7?"tr.timeOk":"tr.timeGoal",{goal:mmss(B*.7)}))}</span></p>`:""}
+  ${th.length?`<p class="t-themes">${ic("crosshair","sm")}<span>${esc(T("tr.themes",{t:th.map(k=>MOT[k].n.toLowerCase()).join(T("tr.and"))}))}</span></p>`:er.length?"":`<p class="t-themes">${ic("circle-check","sm")}<span>${esc(T("tr.clean"))}</span></p>`}</div>`}
+ setHTML($("#tSum"),h);const ab=$("#tAnalyse");if(ab)ab.onclick=()=>{analyseRecent(20);renderTHub()};
+ const M=tModes(),first=M.find(m=>m.ids.length>=(m.course?3:1))||M.find(m=>m.course);
+ setHTML($("#tModes"),M.length?M.map(m=>{const n=m.ids.length,course=m.course&&n<3,f=m===first,tn=m.th?MOT[m.th].n.toLowerCase():"";
+  return `<article class="t-mode${f?" first":""}"><span class="t-ic">${ic(m.i)}</span><div class="t-mt"><h3>${esc(T("tr.m."+m.k,{n:G.length,t:tn}))}</h3><p>${esc(T("tr.m."+m.k+(course?"C":"")+"P"))}</p><p class="t-meta">${ic("timer","sm")}${esc(course?T("tr.lessonMeta"):TP("tr.meta",n,{min:Math.max(1,Math.round(n*1.2))}))}</p></div><button type="button" class="${f?"pri":""}" data-mode="${m.k}">${esc(T(course?"tr.openCourse":"tr.start"))}${ic(course?"arrow-right":"play","sm")}</button></article>`}).join(""):`<p class="empty-line">${esc(T("tr.noModes"))}</p>`)}
+$("#tModes").onclick=e=>{const b=e.target.closest("[data-mode]");if(b)tStart(b.dataset.mode)};
+/* start a session of one mode (from the hub, Home's plan or "Train again"); returns false when that mode has nothing left */
+function tStart(k){const m=tModes().find(x=>x.k===k);if(!m)return false;
+ if(m.course&&m.ids.length<3){const Tg=lsTarget(m.course,wkProfile());location.hash="train/lessons";if(Tg)openLesson(Tg.l.id);return true}
+ if(!m.ids.length)return false;TSN={k,th:m.th,ids:m.ids.map(p=>p.id),i:0,res:{}};Object.assign(TSS,{n:0,ok:0,run:0,best:0});$("#tSess").innerHTML="";
+ if(route.sec!=="trainer")location.hash="train/puzzles";tView();loadPuzzle(pzById(TSN.ids[0]));return true}
+function tView(){const s=!TSN?"hub":TSN.done?"done":"play";$("#tHub").hidden=s!=="hub";$("#tPlay").hidden=s!=="play";$("#tDone").hidden=s!=="done";if(s==="hub")renderTHub();if(s==="done")renderTDone();if(s==="play"&&!PI)loadPuzzle(pzById(TSN.ids[TSN.i]))}
+function renderTStats(){if(route.sec==="trainer"&&!TSN)renderTHub()}
+function renderTDone(){const r=Object.values(TSN.res),ok=r.filter(x=>x).length,miss=r.length-ok;
+ $("#tDone").innerHTML=`<div class="panel t-done"><span class="t-ic">${ic(miss?"dumbbell":"trophy")}</span><h2>${esc(T(miss||!ok?"tr.doneH":"tr.doneAll"))}</h2><div class="kpis"><div class="kpi"><b>${fmtN(ok)}</b>${esc(T("tr.solved"))}</div><div class="kpi"><b>${fmtN(miss)}</b>${esc(T("tr.missed"))}</div><div class="kpi"><b>${fmtN(TSS.best)}</b>${esc(T("tr.bestRun"))}</div></div><p class="t-done-p">${esc(T(miss?"tr.doneMiss":"tr.doneP"))}</p><div class="t-done-act"><button class="pri lg" type="button" id="tAgain">${ic("rotate-ccw")}${esc(T("tr.again"))}</button><button class="lg" type="button" id="tBack">${esc(T("tr.back"))}</button></div></div>`;
+ $("#tAgain").onclick=()=>{if(!tStart(TSN.k)){TSN=null;tView()}};$("#tBack").onclick=()=>{TSN=null;tView()}}
+$("#tQuit").onclick=()=>{TSN=null;PI=null;TW.clear();tView()};
 function loadPuzzle(p){PI=p;HINT=0;DONE=false;TW.clear();$("#tFeedback").innerHTML="";$("#tMeta").innerHTML="";
- $("#tPrompt").className="verdict v-info";if(!p){$("#tPrompt").textContent=AQ?"Your games are being analysed — puzzles appear here as soon as the first one is done.":"No puzzles yet. Analyse a few games first (Progress → Analyse 20 more games).";TB.flip=false;TB.set(new Chess().fen());renderTStats();return}
+ if(TSN){$("#tProg").textContent=T("tr.prog",{i:TSN.i+1,n:TSN.ids.length});$("#tTitle").textContent=T("tr.m."+TSN.k,{n:last5().length,t:TSN.th?MOT[TSN.th].n.toLowerCase():""});$("#tNextL").textContent=T(TSN.i+1>=TSN.ids.length?"tr.finish":"tr.next")}
+ $("#tPrompt").className="verdict v-info";if(!p){$("#tPrompt").textContent=T("tr.gone");TB.flip=false;TB.set(new Chess().fen());return}
  const g=p.g,e=p.e,c=new Chess(g._f[e.i]),m=g._m[e.i-1];TB.flip=c.turn()==="b";TB.set(g._f[e.i],{last:m?{from:m.from,to:m.to}:null});
- $("#tPrompt").innerHTML=`${ic("target")}<b>${c.turn()==="w"?"White":"Black"} to move.</b> Find the best move.`;$("#tPrompt").className="verdict v-move";
- $("#tMeta").innerHTML=`<span>From your game on ${esc(g.date)} vs ${esc(g.opp)} · ${esc(famOf(g.eco))} · move ${Math.floor(e.i/2)+1}</span>`;renderTStats()}
+ $("#tPrompt").innerHTML=`${ic("target")}<b>${esc(T(c.turn()==="w"?"tr.wtm":"tr.btm"))}</b> ${esc(T("tr.find"))}`;$("#tPrompt").className="verdict v-move";
+ $("#tMeta").innerHTML=`<span>${esc(T("tr.from",{opp:g.opp,when:fmtDay(g.ts),mv:Math.floor(e.i/2)+1}))}</span>`}
 const saveTS=()=>{LS.set(uk("trainer"),TS);if(PI)Sync.mark("pz",acct()+"|"+PI.id);Fr.soon()};
+const tRes=(p,ok)=>{if(TSN&&TSN.res[p.id]==null)TSN.res[p.id]=ok?1:0};
 async function tryMove(from,to){if(!PI||DONE)return;const p=PI,fen=p.g._f[p.e.i],c=new Chess(fen),mv=c.move({from,to,promotion:"q"});if(!mv)return;const u=from+to;TW.clear();
  const back=()=>TB.set(c.fen(),{last:{from,to}});
  TB.set(c.fen(),{last:{from,to}});const st=TS[p.id]||(TS[p.id]={}),was=!!st.ok;st.seen=1;let ok=u===p.e.best.slice(0,4),note="";
- if(!ok){$("#tFeedback").innerHTML='<div class="skel-wrap" role="status"><span class="sr-only">Checking your move…</span><span class="skel" style="width:55%"></span></div>';try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" Not the engine's first choice, but just as good."}catch(x){}}
+ if(!ok){$("#tFeedback").innerHTML=`<div class="skel-wrap" role="status"><span class="sr-only">${esc(T("tr.checking"))}</span><span class="skel" style="width:55%"></span></div>`;try{const r=await Engine.eval(c.fen(),12),s=fen.split(" ")[1]==="w"?1:-1;ok=wp(s*p.g.an.ev[p.e.i])-wp(s*r.cp)<8;if(ok)note=" "+T("tr.alsoGood")}catch(x){}}
  if(PI!==p)return;
- Snd.play(ok?"correct":"wrong");sess(TSS,ok,"#tSess");if(ok){DONE=true;st.ok=1;const award=!was&&!st.x;if(award)st.x=1;saveTS();if(award)gAdd(st.fail?{pz:1}:{pz:1,p1:1});const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}Correct — ${esc(mv.san)}.${note} In the game you played ${esc(p.g.moves[p.e.i])}${bs&&bs!==mv.san?`; the engine's move is ${esc(bs)}`:""}.</div><button class="link" id="tWhyBtn" type="button">Why?</button>`;
+ Snd.play(ok?"correct":"wrong");sess(TSS,ok,"#tSess");tRes(p,ok);if(ok){DONE=true;st.ok=1;const award=!was&&!st.x;if(award)st.x=1;saveTS();if(award)gAdd(st.fail?{pz:1}:{pz:1,p1:1});const bs=uciSan(fen,p.e.best);$("#tFeedback").innerHTML=`<div class="verdict v-ok">${ic("circle-check")}${esc(T("tr.ok",{mv:mv.san})+note+" "+T("tr.inGame",{mv:p.g.moves[p.e.i]})+(bs&&bs!==mv.san?" "+T("tr.engine",{mv:bs}):""))}</div><button class="link" id="tWhyBtn" type="button">${esc(T("tr.why"))}</button>`;
   $("#tWhyBtn").onclick=()=>{$("#tWhyBtn").remove();TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),ok:true,restore:back})}}
- else{st.fail=(st.fail||0)+1;st.ok=0;saveTS();$("#tFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}${esc(mv.san)} isn't it. Look again at checks, captures and threats — for both sides.</div><div class="v-actions"><button id="tRetry" type="button">${ic("rotate-ccw","sm")}Try again</button></div>`;$("#tRetry").onclick=()=>loadPuzzle(p);
-  TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),best:p.e.best,restore:back})}
- renderTStats()}
+ else{st.fail=(st.fail||0)+1;st.ok=0;saveTS();$("#tFeedback").innerHTML=`<div class="verdict v-no">${ic("circle-x")}${esc(T("tr.wrong",{mv:mv.san}))}</div><div class="v-actions"><button id="tRetry" type="button">${ic("rotate-ccw","sm")}${esc(T("tr.retry"))}</button></div>`;$("#tRetry").onclick=()=>loadPuzzle(p);
+  TW.show({fen,played:mv.from+mv.to+(mv.promotion||""),best:p.e.best,restore:back})}}
 $("#tHint").onclick=()=>{if(!PI||DONE)return;HINT++;const b=PI.e.best,c=new Chess(PI.g._f[PI.e.i]),m=c.move({from:b.slice(0,2),to:b.slice(2,4),promotion:"q"});
- const kind=m.san.includes("#")?"There's a checkmate.":m.captured?"There's material to win.":m.san.includes("+")?"Start with a check.":"Think about what your opponent is threatening.";
- if(HINT===1)$("#tFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}${kind}</div>`;else{TB.set(PI.g._f[PI.e.i],{hl:b.slice(0,2)});$("#tFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}${kind} Move the highlighted piece.</div>`}};
-$("#tShow").onclick=()=>{if(!PI)return;const p=PI,b=p.e.best,st=TS[p.id]||(TS[p.id]={});if(!DONE){st.seen=1;st.fail=(st.fail||0)+1;st.ok=0;saveTS()}DONE=true;
- const fen=p.g._f[p.e.i],bs=uciSan(fen,b),pl=p.g._m[p.e.i];TB.set(fen,{arrows:[{from:pl.from,to:pl.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"}]});
- $("#tFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}The move was <b>${esc(bs)}</b> (green). You played ${esc(p.g.moves[p.e.i])} (red), which swung the game ${evTxt(p.e.before)} → ${evTxt(p.e.after)}.</div>`;renderTStats();
- const ar=[{from:pl.from,to:pl.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"}];TW.show({fen,played:pl.from+pl.to+(pl.promotion||""),best:b,restore:()=>TB.set(fen,{arrows:ar})})};
-$("#tNext").onclick=()=>{if(PI){(TS[PI.id]||(TS[PI.id]={})).seen=1;saveTS()}const cur=PI;let p=pickPuzzle();if(p===cur&&PZ.length>1)p=PZ[(PZ.indexOf(cur)+1)%PZ.length];loadPuzzle(p)};
-function renderTStats(){const st=id=>TS[id]||{};const solved=PZ.filter(p=>st(p.id).ok).length,missed=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok).length,fresh=PZ.filter(p=>!st(p.id).seen).length;
- $("#tStats").innerHTML=`<div class="kpi"><b>${PZ.length}</b>puzzles from your games</div><div class="kpi"><b>${solved}</b>solved</div><div class="kpi goal"><b>${missed}</b>to retry</div><div class="kpi"><b>${fresh}</b>not seen yet</div>`}
+ const kind=T(m.san.includes("#")?"tr.hMate":m.captured?"tr.hWin":m.san.includes("+")?"tr.hCheck":"tr.hThreat");
+ if(HINT===1)$("#tFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}${esc(kind)}</div>`;else{TB.set(PI.g._f[PI.e.i],{hl:b.slice(0,2)});$("#tFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}${esc(kind+" "+T("tr.hPiece"))}</div>`}};
+$("#tShow").onclick=()=>{if(!PI)return;const p=PI,b=p.e.best,st=TS[p.id]||(TS[p.id]={});if(!DONE){st.seen=1;st.fail=(st.fail||0)+1;st.ok=0;saveTS()}DONE=true;tRes(p,false);
+ const fen=p.g._f[p.e.i],bs=uciSan(fen,b),pl=p.g._m[p.e.i],ar=[{from:pl.from,to:pl.to,c:"red"},{from:b.slice(0,2),to:b.slice(2,4),c:"green"}];TB.set(fen,{arrows:ar});
+ const bw=evPast(p.e.before),aw=evPast(p.e.after);
+ $("#tFeedback").innerHTML=`<div class="verdict v-info">${ic("info")}<span>${T("tr.answer",{b:`<b>${esc(bs)}</b>`,g:esc(p.g.moves[p.e.i])})} ${esc(cap1(bw===aw?T("rv.kmStill",{ev:aw}):T("rv.kmSwing",{b:bw,a:aw})))}</span></div>`;
+ TW.show({fen,played:pl.from+pl.to+(pl.promotion||""),best:b,restore:()=>TB.set(fen,{arrows:ar})})};
+$("#tNext").onclick=()=>{if(PI){(TS[PI.id]||(TS[PI.id]={})).seen=1;saveTS()}if(!TSN)return;
+ for(;;){TSN.i++;if(TSN.i>=TSN.ids.length){TSN.done=true;PI=null;TW.clear();tView();return}const p=pzById(TSN.ids[TSN.i]);if(p){loadPuzzle(p);return}}};
 
 /* ---------- OPENING TRAINER ----------
    For one colour + opening family (famOf, as in the openings table) the first 12 moves of the current account's
@@ -1532,10 +1569,10 @@ const keyPly=g=>{const e=g.an?serious(replay(g))[0]:null;return e?e.i:0};
 let HOMEtok=0;
 function planCards(){const C=[],st=id=>TS[id]||{},retry=PZ.filter(p=>st(p.id).fail&&!st(p.id).ok),fresh=PZ.filter(p=>!st(p.id).seen),un=GAMES.filter(g=>!g.an).length,now=Date.now();
  const due=Object.values(OPS).filter(x=>x.due&&x.due<=now).length,loss=GAMES.slice().reverse().find(g=>g.result==="loss"&&g.an);
- if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:TP("plan.retry",n),p:T("plan.retryP"),xp:n*GX.pz,go:"#train/puzzles",i:"rotate-ccw",cta:T("plan.retryGo")})}
+ if(retry.length){const n=Math.min(retry.length,5);C.push({imp:30+retry.length*3,t:TP("plan.retry",n),p:T("plan.retryP"),xp:n*GX.pz,i:"rotate-ccw",cta:T("plan.retryGo"),act:()=>tStart("retry")})}
  if(due){const n=Math.min(due,10);C.push({imp:26+due*2,t:TP("plan.due",n),p:T("plan.dueP"),xp:n*GX.op,go:"#train/openings",i:"book-open",cta:T("plan.dueGo")})}
  if(loss&&!GS.rev[loss.id]){const s=gameStory(loss);C.push({imp:28,t:T("plan.loss",{opp:loss.opp}),p:s.t,xp:GX.rv,i:"scan-search",cta:T("plan.lossGo"),act:()=>openReview(loss,s.p!=null?s.p:keyPly(loss))})}
- if(fresh.length){const n=Math.min(fresh.length,5);C.push({imp:20,t:TP("plan.fresh",n),p:T("plan.freshP"),xp:n*GX.pz,go:"#train/puzzles",i:"puzzle",cta:T("plan.freshGo")})}
+ if(fresh.length){const n=Math.min(fresh.length,5);C.push({imp:20,t:TP("plan.fresh",n),p:T("plan.freshP"),xp:n*GX.pz,i:"puzzle",cta:T("plan.freshGo"),act:()=>tStart("warm")})}
  if(un){const n=Math.min(un,20);C.push({imp:15+n,t:TP("plan.analyse",n),p:T("plan.analyseP"),xp:null,i:"cpu",cta:T("plan.analyseGo"),act:()=>{analyseRecent(20);renderHome()}})}
  const ost=LS.get(uk("opstart"),{}),m={};GAMES.filter(g=>g.ts>now-365*864e5).forEach(g=>{const k=g.color+"|"+famOf(g.eco);(m[k]=m[k]||[]).push(g)});
  const colN=k=>T(k[0]==="w"?"card.asWhite":"card.asBlack");
@@ -1889,12 +1926,12 @@ function route(){if(!P){show1("start");return}let h=decodeURIComponent(location.
  if(h==="train")h=LS.get("trainSec","train/puzzles");if(OLDR[h]){h=OLDR[h];history.replaceState(null,"","#"+h)}
  if(h==="progress/friends"&&!SB_ON)h="progress";if(!ROUTES[h])h="home";const t=ROUTES[h],top=h.split("/")[0];route.cur=h;route.sec=t;if(top==="train")LS.set("trainSec",h);show1(t);tabHead(top);
  document.querySelectorAll("#hdr nav a").forEach(a=>{if(a.dataset.t===top)a.setAttribute("aria-current","page");else a.removeAttribute("aria-current")});
- if(t==="progress")renderProgress();if(t==="trophies")renderTrophies();if(t==="trainer"){renderTStats();if(!PI)loadPuzzle(pickPuzzle())}if(t==="review")reviewView(rid);if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
+ if(t==="progress")renderProgress();if(t==="trophies")renderTrophies();if(t==="trainer")tView();if(t==="review")reviewView(rid);if(t==="friends")Fr.render();if(t==="openings")renderOpenings();if(t==="home")renderHome();if(t==="lessons"&&!LP)renderLessons()}
 function show1(t){document.querySelectorAll("main>section").forEach(s=>s.hidden=s.id!=="v-"+t);if(t==="start")$("#tabHead").hidden=true;$("#hdr").hidden=t==="start";document.body.classList.toggle("has-side",t!=="start");if(t==="start")demoStart();else demoStop()}
 window.addEventListener("hashchange",route);
 
 /* ---------- boot ---------- */
-async function enter(fresh){GEN++;CUR=null;PI=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
+async function enter(fresh){GEN++;CUR=null;PI=null;TSN=null;TS=LS.get(uk("trainer"),{});OPS=LS.get(uk("openings"),{});OPSEL=LS.get(uk("opsel"),null);OT=null;OD=null;LSP=LS.get(uk("lessons"),{});PZS=LS.get(uk("pzs"),{});LP=null;gLoad();SEEN0=LS.get(uk("seen"),null);LS.set(uk("seen"),Date.now());Sync.mark("la",acct()+"|"+P.tc);$("#whoName").textContent=P.user;$("#whoMeta").textContent=SRC[P.source].name+", "+T("tc."+P.tc);$("#profAv").textContent=P.user[0];refreshGames();gCheck();
  if(GAMES.length){openDefault();route()}
  const first=()=>{if(!CUR&&GAMES.length){openDefault();if(fresh)location.hash="review";route()}};
  try{const n=await sync(first);if(!GAMES.length){$("#startMsg").textContent=T("start.noGames",{tc:T("tc."+P.tc),u:P.user,site:SRC[P.source].name});$("#startBtn").disabled=false;LS.set("profile",null);P=null;route();return}
