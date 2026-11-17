@@ -29,7 +29,7 @@ No server compute and no AI calls. Everything runs and is stored in the visitor'
 - **Opening trainer** (Progress → Openings → Practise): the first 12 moves of your games in one opening, merged into a tree. Weak spots are positions where you often go wrong or your score drops. You play your side; the app plays your opponents' moves as often as they played them. The right move is your pinned repertoire move, else the engine's (within 6 points counts). Missed positions come back sooner (spaced repetition). Optionally, connecting a Lichess account fills thin spots with the Lichess opening explorer's most common moves at your rating.
 - **Insights**: fixed rules over the analysed games, such as time used, errors made when already winning, unpunished opponent blunders, missed mates, error phase, opening scores, losses on time, long games and colour gap.
 - **Storage**: IndexedDB for games and analyses, localStorage for the profile, puzzle progress and baseline.
-- **Accounts (optional)**: Supabase (free plan, EU region). Changes are saved locally first and uploaded in the background. Setup: `supabase/README.md`. Privacy: `privacy.html`.
+- **Accounts (optional)**: Supabase (free plan, EU region). A scheduled GitHub Actions workflow pings it every 3 days so the free project never pauses. Changes are saved locally first and uploaded in the background. Setup: `supabase/README.md`. Privacy: `privacy.html`.
 
 ## Run locally
 

@@ -8,7 +8,7 @@ Project: `https://ednyucirnrdcsveqlokb.supabase.co`. Make sure it's in an EU reg
 
 SQL Editor → New query → paste all of `migrations/001_sync.sql` → Run. It's safe to run again.
 
-Then do the same with `migrations/002_friends.sql` (friends and the leaderboard), then `migrations/003_openings.sql` (opening trainer progress, and "openings learned" on the leaderboard), then `migrations/004_gamification.sql` (daily goal, streaks, XP and badges, plus weekly XP and streak on the leaderboard).
+Then do the same with `migrations/002_friends.sql` (friends and the leaderboard), then `migrations/003_openings.sql` (opening trainer progress, and "openings learned" on the leaderboard), then `migrations/004_gamification.sql` (daily goal, streaks, XP and badges, plus weekly XP and streak on the leaderboard), then `migrations/005_keep_alive.sql` (the tiny function the keep-awake job calls).
 
 Then check Database → Tables: `analyses`, `baselines`, `linked_accounts`, `puzzle_progress`, `profiles`, `friendships` and `leaderboard_stats` should each show "RLS enabled".
 
@@ -41,5 +41,7 @@ Project Settings → API Keys: copy the **publishable** key (`sb_publishable_…
 
 ## Free tier notes
 
-- Free projects pause after about a week without activity. Sign-in fails until you resume the project in the dashboard; the app carries on locally meanwhile.
+- Free projects pause after about a week without activity. `.github/workflows/keep-supabase-awake.yml` prevents that: every 3 days GitHub Actions calls `public.keep_alive()` (from `migrations/005_keep_alive.sql`, which must be run once) with the publishable key read from `config.js`. No secrets or settings are needed. Run it by hand under Actions → "Keep Supabase awake" → Run workflow. A failed ping fails the run, and GitHub emails you.
+- GitHub disables scheduled workflows in a public repository after 60 days without any commits, and emails you first; re-enable it with one click on the Actions tab.
+- If the project ever does pause, sign-in fails until you resume it in the dashboard; the app carries on locally meanwhile.
 - About 1 KB per analysed game, so the 500 MB database holds hundreds of active users.

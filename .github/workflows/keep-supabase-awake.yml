@@ -1,0 +1,37 @@
+# Keeps the free Supabase project from pausing (it pauses after about a week without activity).
+# Every 3 days it calls public.keep_alive() (supabase/migrations/005_keep_alive.sql), which runs one
+# tiny query and returns the database time. The URL and publishable key are read from config.js
+# (both are public by design), so no repository secrets are needed. A failed ping fails the run,
+# and GitHub emails you about failed scheduled runs.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: "23 5 */3 * *"   # 05:23 UTC on every third day of the month
+  workflow_dispatch: {}       # "Run workflow" button for a manual check
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: config.js
+          sparse-checkout-cone-mode: false
+      - name: Call keep_alive()
+        run: |
+          url=$(sed -n 's/.*supabaseUrl:"\([^"]*\)".*/\1/p' config.js)
+          key=$(sed -n 's/.*supabaseKey:"\([^"]*\)".*/\1/p' config.js)
+          if [ -z "$url" ] || [ -z "$key" ]; then echo "Accounts are switched off in config.js; nothing to keep awake."; exit 0; fi
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o body.txt -w '%{http_code}' -X POST "$url/rest/v1/rpc/keep_alive" \
+              -H "apikey: $key" -H "Content-Type: application/json" -d '{}' || echo 000)
+            if [ "$code" = "200" ]; then echo "Supabase is awake. Database time: $(cat body.txt)"; exit 0; fi
+            echo "Attempt $attempt: HTTP $code $(cat body.txt 2>/dev/null)"; sleep 20
+          done
+          echo "::error::Supabase did not answer the keep-alive ping. If the project is paused, resume it in the Supabase dashboard. If the response says the function is missing, run supabase/migrations/005_keep_alive.sql."
+          exit 1

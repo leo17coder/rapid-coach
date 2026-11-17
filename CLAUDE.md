@@ -78,4 +78,4 @@ All code sits in one top-level `{ ... }` block (block-scoped, no modules, no glo
 
 ## Roadmap
 
-V2 (see `docs/V2-PLAN.md`): Lichess, optional Supabase accounts with sync, the friends leaderboard, the opening trainer, move explanations and the Home tab with gamification are built. Not built yet: deleting long-inactive accounts and a keep-awake job for the free Supabase project.
+V2 (see `docs/V2-PLAN.md`): Lichess, optional Supabase accounts with sync, the friends leaderboard, the opening trainer, move explanations, the Home tab with gamification and a keep-awake job for the free Supabase project (`.github/workflows/keep-supabase-awake.yml` calls `public.keep_alive()` from `005_keep_alive.sql` every 3 days, reading the URL and publishable key from `config.js`) are built. Not built yet: deleting long-inactive accounts.
