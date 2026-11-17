@@ -79,6 +79,8 @@ Needs Chrome or Chromium (set `CHROME_PATH` if it isn't found automatically). On
 - [auto] **Layouts don't overflow sideways** on a phone (390 px) or a desktop (1280 px), and navigation is visible on both.
 - [manual] Navigation: four tabs (Home, Review, Train, Progress) as a sidebar on desktop and a labelled bottom tab bar on phones; Train has Puzzles, Openings and Lessons, Progress has Overview and Friends; old links (`#trainer`, `#openings`, `#lessons`, `#friends`) open their new place; the profile menu holds Switch player, Sign in/Account and Settings.
 - [manual] Settings: theme (dark by default, light, or match the device) and language.
+- [auto] **Language: the start screen switch changes the text**, and **Settings switches the interface and it is remembered after reload** (English, French, German, Danish; the browser language by default).
+- [manual] Every interface string, data text (badges, levels, challenges, themes, toasts) and the Why panel's explanations appear in the chosen language; `node tools/check-i18n.cjs` reports no missing keys or placeholders. Lesson content (teaching pages, coach notes, course and lesson names) stays English.
 - [manual] Board colours (green, wood, slate), piece sets, sound on/off; visible keyboard focus everywhere; reduced motion respected; text readable (WCAG AA) in light and dark.
 - [manual] No script errors in the browser console while using the app (the automated run checks this for everything it touches).
 

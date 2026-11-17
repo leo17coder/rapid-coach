@@ -8,6 +8,8 @@ const out = process.argv[2] || "screens", routes = process.argv.slice(3).length 
 fs.mkdirSync(out, { recursive: true });
 const { srv, base } = await serve(), browser = await launch(), page = await newPage(browser, base, { fresh: true });
 await page.goto(`${base}/index.html?test=1`); await waitFor(page, () => !!window.rcTest);
+// KZ_LANG=fr|de|da: take the screenshots in that language
+if (process.env.KZ_LANG) { await page.evaluate(l => { const u = JSON.parse(localStorage.getItem("rc.ui") || "{}"); u.lang = l; localStorage.setItem("rc.ui", JSON.stringify(u)); }, process.env.KZ_LANG); await page.reload(); await waitFor(page, () => !!window.rcTest); }
 const shot = async (name, w, theme) => {
   await page.setViewport({ width: w, height: w < 600 ? 844 : 900, deviceScaleFactor: 1 });
   await page.evaluate(t => { const u = JSON.parse(localStorage.getItem("rc.ui") || "{}"); u.theme = t; u.v3 = 1; localStorage.setItem("rc.ui", JSON.stringify(u)); document.documentElement.dataset.theme = t; }, theme);
