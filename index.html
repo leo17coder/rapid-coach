@@ -10,7 +10,7 @@
 <link rel="preload" href="vendor/fonts/atkinson-next-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="vendor/fonts/literata-latin-var.woff2" as="font" type="font/woff2" crossorigin>
 <script>try{var u=JSON.parse(localStorage.getItem("rc.ui")||"{}"),d=document.documentElement;d.dataset.theme=u.v3&&u.theme?u.theme:u.theme==="light"?"light":"dark";if(u.board)d.dataset.board=u.board}catch(e){document.documentElement.dataset.theme="dark"}</script>
-<link rel="stylesheet" href="style.css?v=2026-11-18f">
+<link rel="stylesheet" href="style.css?v=2026-11-18g">
 </head>
 <body>
 <aside class="side" id="hdr" hidden>
@@ -214,25 +214,30 @@
 
 <!-- PROGRESS -->
 <section id="v-progress" hidden>
-  <h1 id="pTitle">Progress</h1>
-  <p class="sub" id="pSub"></p>
-  <h2>What to work on</h2>
-  <div class="insights" id="insights"></div>
+  <div class="p-bar">
+    <p class="p-sub" id="pSub"></p>
+    <div class="p-act"><button id="anMore" class="pri" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-cpu"/></svg><span data-i18n="pr.anMore">Analyse 20 more games</span></button><button id="syncBtn" type="button"><svg class="ic" aria-hidden="true"><use href="vendor/icons.svg#i-refresh-cw"/></svg><span data-i18n="pr.sync">Check for new games</span></button><button id="resetBase" class="ghost" type="button" data-i18n="pr.reset">Reset baseline</button></div>
+  </div>
+  <p class="small p-note" id="anNote" role="status"></p>
   <div class="kpis" id="pKpis"></div>
-  <div class="two">
-    <div><h2>Rating</h2><div class="fig tall" id="ratingFig"></div></div>
-    <div><h2>Time used per game <span class="small" id="timeGoal"></span></h2><div class="fig tall" id="timeFig"></div><p class="small chart-key"><span><span class="k k-win"></span>won</span><span><span class="k k-loss"></span>lost</span><span><span class="k k-avg"></span>10-game average</span><span><span class="k k-goal"></span>goal</span></p></div>
-  </div>
-  <div class="two" style="margin-top:24px">
-    <div><h2>Blunders and mistakes per game</h2><div class="fig tall" id="errFig"></div><p class="small" id="errNote"></p></div>
-    <div><h2>How your games end <span class="small">(last 12 months)</span></h2><div id="ends"></div></div>
-  </div>
-  <div style="margin-top:28px">
-    <div class="row" style="justify-content:space-between"><h2 style="margin:0">Openings <span class="small">(last 12 months)</span></h2>
-      <select id="opColor" aria-label="Openings colour"><option value="w">As White</option><option value="b">As Black</option></select></div>
-    <table class="stack" style="margin-top:8px"><thead><tr><th>Opening</th><th class="r">Games</th><th class="r">Score</th><th>W / D / L</th><th></th></tr></thead><tbody id="opBody"></tbody></table>
-  </div>
-  <div class="row" style="margin-top:24px"><button id="anMore" class="pri">Analyse 20 more games</button><button id="syncBtn">Check for new games</button><button id="resetBase">Reset baseline</button><span class="small" id="anNote"></span></div>
+  <h2 data-i18n="pr.work">What to work on</h2>
+  <div class="insights" id="insights"></div>
+  <details class="p-more" id="pMore">
+    <summary data-i18n="pr.more">See more: charts, how your games end, openings</summary>
+    <div class="two">
+      <div><h3 data-i18n="pr.rating">Rating</h3><div class="fig tall" id="ratingFig"></div></div>
+      <div><h3><span data-i18n="pr.time">Time used per game</span> <span class="small" id="timeGoal"></span></h3><div class="fig tall" id="timeFig"></div><p class="small chart-key"><span><span class="k k-win"></span><span data-i18n="pr.won">won</span></span><span><span class="k k-loss"></span><span data-i18n="pr.lost">lost</span></span><span><span class="k k-draw"></span><span data-i18n="pr.drawn">drawn</span></span><span><span class="k k-avg"></span><span data-i18n="pr.avg">average of 10</span></span><span><span class="k k-goal"></span><span data-i18n="pr.goal">goal</span></span></p></div>
+    </div>
+    <div class="two p-row">
+      <div><h3 data-i18n="pr.errs">Blunders and mistakes per game</h3><div class="fig tall" id="errFig"></div><p class="small" id="errNote"></p></div>
+      <div><h3><span data-i18n="pr.ends">How your games end</span> <span class="small" data-i18n="pr.year">(last 12 months)</span></h3><div id="ends"></div></div>
+    </div>
+    <div class="p-row">
+      <div class="p-ophead"><h3><span data-i18n="pr.openings">Openings</span> <span class="small" data-i18n="pr.year">(last 12 months)</span></h3>
+        <div class="seg seg-sm" role="radiogroup" data-i18n-attr="aria-label:op.colour" aria-label="Colour"><label><input type="radio" name="opCol" value="w" checked><span data-i18n="op.white">As White</span></label><label><input type="radio" name="opCol" value="b"><span data-i18n="op.black">As Black</span></label></div></div>
+      <table class="stack"><thead><tr><th data-i18n="pr.thOp">Opening</th><th class="r" data-i18n="pr.thGames">Games</th><th class="r" data-i18n="pr.thScore">Score</th><th data-i18n="pr.thWdl">Won, drawn, lost</th><th></th></tr></thead><tbody id="opBody"></tbody></table>
+    </div>
+  </details>
 </section>
 
 <!-- OPENING TRAINER (reached from Progress → Openings → Practise) -->
@@ -332,22 +337,22 @@
     <p class="small" id="fNote">Last 20 analysed games; “–” means fewer than 10 analysed so far. Lower blunders and mistakes are better. Rating change is shown as a difference only, because chess.com and Lichess ratings can't be compared.</p>
     <div class="two" style="margin-top:28px">
       <div class="panel">
-        <h2>Your sharing</h2>
-        <form id="fShareForm" class="fr-form">
-          <label for="fName">Name your friends see</label>
-          <input id="fName" maxlength="30" autocomplete="nickname" placeholder="e.g. Leo">
-          <label class="fr-check"><input type="checkbox" id="fShare"> Share my stats with friends</label>
-          <p class="small">Friends see your name, which site you play on and the numbers in the table, never your email or your games. Switching sharing off deletes your shared stats.</p>
-          <button class="pri" id="fSave">Save</button>
-        </form>
-      </div>
-      <div class="panel">
-        <h2>Invite friends</h2>
+        <h2 data-i18n="fr.invite">Invite friends</h2>
         <p class="small">Anyone who opens this link and signs in becomes your friend. Send it only to people you want to add.</p>
         <div class="fr-link"><input id="fLink" readonly aria-label="Your invite link"><button id="fCopy" type="button">Copy</button></div>
         <button class="link" id="fNewLink" type="button">Make a new link (the old one stops working)</button>
         <h2 style="margin-top:22px">Your friends</h2>
         <ul class="fr-list" id="fList"></ul>
+      </div>
+      <div class="panel">
+        <h2 data-i18n="fr.sharing">Your sharing</h2>
+        <form id="fShareForm" class="fr-form">
+          <label for="fName">Name your friends see</label>
+          <input id="fName" maxlength="30" autocomplete="nickname" placeholder="e.g. Leo">
+          <label class="switch"><input type="checkbox" role="switch" id="fShare"><span class="sw" aria-hidden="true"></span><span data-i18n="fr.share">Share my stats with friends</span></label>
+          <p class="small">Friends see your name, which site you play on and the numbers in the table, never your email or your games. Switching sharing off deletes your shared stats.</p>
+          <button class="pri" id="fSave">Save</button>
+        </form>
       </div>
     </div>
   </div>
@@ -413,9 +418,9 @@
   <div class="status" id="acctMsg" role="status"></div>
 </dialog>
 
-<script src="config.js?v=2026-11-18f"></script>
-<script src="i18n/en.js?v=2026-11-18f"></script>
+<script src="config.js?v=2026-11-18g"></script>
+<script src="i18n/en.js?v=2026-11-18g"></script>
 <script src="vendor/chess.js"></script>
-<script src="app.js?v=2026-11-18f"></script>
+<script src="app.js?v=2026-11-18g"></script>
 </body>
 </html>

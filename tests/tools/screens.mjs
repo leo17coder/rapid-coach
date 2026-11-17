@@ -41,6 +41,8 @@ for (const r of routes) {
   }
   // "course": the page of the second tactics course
   else if (r === "course") { await page.evaluate(() => { location.hash = "train/lessons"; }); await sleep(800); await page.click('.lcard[data-co]:nth-of-type(2)'); }
+  // "progressmore": Progress with "See more" open
+  else if (r === "progressmore") { await page.evaluate(() => { location.hash = "progress"; }); await sleep(600); await page.$eval("#pMore", e => { e.open = true; }); }
   else await page.evaluate(h => { location.hash = h; }, r);
   await sleep(1200);
   for (const t of ["dark", "light"]) for (const w of [390, 1440]) await shot(r, w, t);
