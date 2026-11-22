@@ -38,7 +38,7 @@
  "home.late":"Späte Runde, {name}","home.morning":"Guten Morgen, {name}","home.afternoon":"Guten Tag, {name}","home.evening":"Guten Abend, {name}",
  "home.focus":"Heute im Fokus","home.focusGo":"Das trainieren","home.plan":"Dein Plan für heute","home.latest":"Letzte Partie",
  "home.streakLbl.one":"Tag in Folge","home.streakLbl.other":"Tage in Folge","home.goal":"{n} von {goal} heute","home.trophies":"Trophäen",
- "home.newGames.one":"1 neue Partie seit deinem letzten Besuch","home.newGames.other":"{n} neue Partien seit deinem letzten Besuch","home.allGames":"Alle Partien","home.noGames":"Noch keine Partien.",
+ "home.newGames.one":"1 neue Partie seit deinem letzten Besuch","home.newGames.other":"{n} neue Partien seit deinem letzten Besuch","home.allGames":"Alle Partien","home.noGames":"Noch keine Partien. Spiel eine Partie, dann erscheint sie hier zum Ansehen.",
  "home.streakStart":"Trainiere heute einmal, um eine Serie zu starten","tro.allBadges":"Alle {n} Abzeichen ansehen",
  "home.streakDays.one":"{n} Tag","home.streakDays.other":"{n} Tage",
  "tro.hiddenNote":"Serien, XP und Abzeichen sind auf der Startseite ausgeblendet. In den Einstellungen kannst du sie wieder einblenden.","tro.goalSize":"Tagesziel",
@@ -169,4 +169,17 @@
 "why.l.lose.t":"verliert {a}","why.l.lose.y":"du hast {a} verloren","why.l.loseFor.t":"verliert {a} für {b}","why.l.loseFor.y":"du hast {a} für {b} verloren","why.l.win.t":"gewinnt {a}","why.l.win.y":"du gewinnst {a}","why.l.winFor.t":"gewinnt {a} für {b}","why.l.winFor.y":"du gewinnst {a} für {b}",
 "why.l.keep.t":"behält {x}","why.l.keep.y":"du behältst {x}","why.x1":"einen Mehrbauern","why.x2":"zwei Mehrbauern","why.x3":"eine Mehrfigur","why.x5":"einen Mehrturm","why.xM":"einen Materialvorteil",
 "why.l.eqB.t":"gleiches Material, bessere Stellung","why.l.eqB.y":"du stehst bei gleichem Material besser","why.l.eqW.t":"gleiches Material, schlechtere Stellung","why.l.eqW.y":"du stehst bei gleichem Material schlechter",
+ /* opening drill coach, lesson courses */
+"od.your":"Du bist am Zug.","od.seen.one":"In 1 deiner Partien vorgekommen.","od.seen.other":"In {n} deiner Partien vorgekommen.","od.lines":"Aus deinen Lektionsvarianten.","od.lichess":"Aus Lichess-Partien auf deinem Niveau.","od.weak":"Schwachstelle","od.rep":"Repertoire",
+"od.wait":"Dein Gegner wählt einen Zug…","od.playable":"{mv} ist spielbar, aber dein Repertoirezug hier ist {b}. Spiel ihn.","od.alsoGood":"Die erste Wahl der Engine ist {b}, aber deiner ist genauso gut.",
+"od.pin":"{mv} als meinen Zug hier festlegen","od.unpin":"{mv} lösen","od.pinned":"{mv} als deinen Repertoirezug festgelegt.","od.unpinned":"Gelöst.","od.notH":"Diesmal nicht.","od.notP":"Spiel die Variante noch einmal, damit sie sitzt.",
+"od.wrong":"{mv} ist es nicht. Der Zug hier ist {b} (grün).","od.wrongPin":"{mv} ist es nicht. Dein Repertoirezug hier ist {b} (grün).","od.replay":"Variante wiederholen",
+"od.doneH":"Variante geschafft.","od.endH":"Weiter gehen deine Partien hier nicht.","od.doneMiss":"Du hast einen Zug verpasst: Spiel die Variante noch einmal, damit sie sitzt.","od.doneOk":"Weiter mit der nächsten Variante.",
+"ls.trainer":"Eröffnungstrainer","ls.again":"Noch einmal üben","ls.contL":"Weiter","ls.startL":"Loslegen","ls.clock":"Deine Zeitnutzung ansehen","ls.review":"Deine Partien ansehen","ls.here":"Hier anfangen","ls.lessons":"Lektionen",
+"ls.skipPz":"Überspringen: Test mit {n} Aufgaben","ls.skipMv":"Schon bekannt? Test mit {n} Zügen","ls.skipPos":"Überspringen: Test mit {n} Stellungen","ls.lvlHere":"Dein Niveau hier: etwa {n}","ls.more":"Mehr erfahren","ls.passed":"Test bestanden","ls.rec":"Empfohlen",
+"ls.egPz":"Endspielaufgaben aus echten Partien","ls.pzRange":"Aufgaben von 400 bis {n}","ls.upTo":"bis {n}","ls.yourCh":"Dein Kapitel: {ch}",
+ /* lesson player */
+"lp.src":"Aufgabe mit Wertung {r}, aus einer echten Partie:","lp.srcLink":"Lichess-Aufgabe {id}","lp.mem":"Aus dem Gedächtnis: Schritt {i} von {n}","lp.guided":"Angeleitet: Schritt {i} von {n}","lp.play":"Ausspielen: Schritt {i} von {n}",
+"lp.goalWin":"Ziel: gewinnen. Zug {m} von {max}; Stockfish spielt mit Tiefe {d}.","lp.goalDraw":"Ziel: das Remis halten. Zug {m} von {max}; Stockfish spielt mit Tiefe {d}.","fr.board":"Rangliste: {tc}",
+"eb.label":"Bewertung {t}","eb.wait":"Bewertung: wird berechnet",
 };

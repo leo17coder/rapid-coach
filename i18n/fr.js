@@ -38,7 +38,7 @@
  "home.late":"Séance tardive, {name}","home.morning":"Bonjour, {name}","home.afternoon":"Bon après-midi, {name}","home.evening":"Bonsoir, {name}",
  "home.focus":"L'objectif du jour","home.focusGo":"Travailler ça","home.plan":"Le plan du jour","home.latest":"Dernière partie",
  "home.streakLbl.one":"jour de série","home.streakLbl.other":"jours de série","home.goal":"{n} sur {goal} aujourd'hui","home.trophies":"Trophées",
- "home.newGames.one":"1 nouvelle partie depuis ta dernière visite","home.newGames.other":"{n} nouvelles parties depuis ta dernière visite","home.allGames":"Toutes les parties","home.noGames":"Pas encore de parties.",
+ "home.newGames.one":"1 nouvelle partie depuis ta dernière visite","home.newGames.other":"{n} nouvelles parties depuis ta dernière visite","home.allGames":"Toutes les parties","home.noGames":"Pas encore de parties ici. Joue une partie et elle apparaîtra ici, prête à être revue.",
  "home.streakStart":"Entraîne-toi une fois aujourd'hui pour lancer une série","tro.allBadges":"Voir les {n} badges",
  "home.streakDays.one":"{n} jour","home.streakDays.other":"{n} jours",
  "tro.hiddenNote":"Séries, XP et badges sont masqués sur l'accueil. Tu peux les réafficher dans les réglages.","tro.goalSize":"Objectif quotidien",
@@ -169,4 +169,17 @@
 "why.l.lose.t":"perd {a}","why.l.lose.y":"tu as perdu {a}","why.l.loseFor.t":"perd {a} contre {b}","why.l.loseFor.y":"tu as perdu {a} contre {b}","why.l.win.t":"gagne {a}","why.l.win.y":"tu gagnes {a}","why.l.winFor.t":"gagne {a} contre {b}","why.l.winFor.y":"tu gagnes {a} contre {b}",
 "why.l.keep.t":"garde {x}","why.l.keep.y":"tu gardes {x}","why.x1":"un pion de plus","why.x2":"deux pions de plus","why.x3":"une pièce de plus","why.x5":"une tour de plus","why.xM":"un avantage matériel",
 "why.l.eqB.t":"matériel égal, meilleure position","why.l.eqB.y":"tu es mieux à matériel égal","why.l.eqW.t":"matériel égal, moins bonne position","why.l.eqW.y":"tu es moins bien à matériel égal",
+ /* opening drill coach, lesson courses */
+"od.your":"À toi de jouer.","od.seen.one":"Vu dans 1 de tes parties.","od.seen.other":"Vu dans {n} de tes parties.","od.lines":"Tiré de tes lignes de leçon.","od.lichess":"Tiré de parties Lichess à ton niveau.","od.weak":"point faible","od.rep":"répertoire",
+"od.wait":"Ton adversaire choisit son coup…","od.playable":"{mv} est jouable, mais le coup de ton répertoire ici est {b}. Joue-le.","od.alsoGood":"Le premier choix du moteur est {b}, mais le tien est tout aussi bon.",
+"od.pin":"Épingler {mv} comme mon coup ici","od.unpin":"Désépingler {mv}","od.pinned":"{mv} est épinglé comme coup de ton répertoire.","od.unpinned":"Désépinglé.","od.notH":"Pas cette fois.","od.notP":"Rejoue la ligne pour la fixer.",
+"od.wrong":"{mv}, ce n'est pas ça. Le coup ici est {b} (en vert).","od.wrongPin":"{mv}, ce n'est pas ça. Le coup de ton répertoire ici est {b} (en vert).","od.replay":"Rejouer la ligne",
+"od.doneH":"Ligne terminée.","od.endH":"Tes parties ne vont pas plus loin ici.","od.doneMiss":"Tu as raté un coup : rejoue la ligne pour la fixer.","od.doneOk":"Passons à la ligne suivante.",
+"ls.trainer":"Entraîneur d'ouvertures","ls.again":"Refaire","ls.contL":"Continuer","ls.startL":"Commencer","ls.clock":"Voir ton usage de la pendule","ls.review":"Revoir tes parties","ls.here":"Commence ici","ls.lessons":"leçons",
+"ls.skipPz":"Sauter : test de {n} exercices","ls.skipMv":"Tu connais ? Test de {n} coups","ls.skipPos":"Sauter : test de {n} positions","ls.lvlHere":"Ton niveau ici : environ {n}","ls.more":"En savoir plus","ls.passed":"Test réussi","ls.rec":"Recommandé",
+"ls.egPz":"Exercices de finale tirés de vraies parties","ls.pzRange":"Exercices de 400 à {n}","ls.upTo":"jusqu'à {n}","ls.yourCh":"Ton chapitre : {ch}",
+ /* lesson player */
+"lp.src":"Exercice classé {r}, tiré d'une vraie partie :","lp.srcLink":"exercice Lichess {id}","lp.mem":"De mémoire : étape {i} sur {n}","lp.guided":"Guidé : étape {i} sur {n}","lp.play":"À jouer jusqu'au bout : étape {i} sur {n}",
+"lp.goalWin":"Objectif : gagner. Coup {m} sur {max} ; Stockfish joue à la profondeur {d}.","lp.goalDraw":"Objectif : tenir la nulle. Coup {m} sur {max} ; Stockfish joue à la profondeur {d}.","fr.board":"Classement : {tc}",
+"eb.label":"Évaluation {t}","eb.wait":"Évaluation : calcul en cours",
 };
